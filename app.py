@@ -5,7 +5,14 @@ import hashlib
 import requests
 import json
 from pathlib import Path
-from datetime import date, datetime
+from datetime import date, datetime, timezone, timedelta
+
+# Zona horaria Colombia (UTC-5)
+COL_TZ = timezone(timedelta(hours=-5))
+def hoy():
+    return datetime.now(COL_TZ).strftime("%Y-%m-%d")
+def ahora():
+    return datetime.now(COL_TZ).strftime("%H:%M")
 
 st.set_page_config(
     page_title="Productos La Delicia",
@@ -91,17 +98,17 @@ def leer_inventario():
     return pd.DataFrame(data) if data else pd.DataFrame(columns=["sabor","stock","precio"])
 
 def leer_produccion_hoy():
-    hoy = str(date.today())
+    hoy = hoy()
     data = sb_get("produccion", f"select=*&fecha=eq.{hoy}&order=hora.desc")
     return pd.DataFrame(data) if data else pd.DataFrame()
 
 def leer_ventas_hoy():
-    hoy = str(date.today())
+    hoy = hoy()
     data = sb_get("ventas", f"select=*&fecha=eq.{hoy}&order=hora.desc")
     return pd.DataFrame(data) if data else pd.DataFrame()
 
 def leer_cargue_activo():
-    hoy = str(date.today())
+    hoy = hoy()
     cargues = sb_get("cargues", f"select=sabor,cantidad&fecha=eq.{hoy}")
     ventas  = sb_get("ventas",  f"select=sabor,cantidad&fecha=eq.{hoy}&canal=eq.Carro")
     if not cargues:
@@ -139,8 +146,8 @@ def set_stock(sabor, cantidad):
 
 def guardar_produccion(empleado, sabor, cantidad):
     sb_post("produccion", {
-        "fecha": str(date.today()),
-        "hora": datetime.now().strftime("%H:%M"),
+        "fecha": hoy(),
+        "hora": ahora(),
         "empleado": empleado,
         "sabor": sabor,
         "cantidad": cantidad
@@ -149,8 +156,8 @@ def guardar_produccion(empleado, sabor, cantidad):
 
 def guardar_cargue(sabor, cantidad):
     sb_post("cargues", {
-        "fecha": str(date.today()),
-        "hora": datetime.now().strftime("%H:%M"),
+        "fecha": hoy(),
+        "hora": ahora(),
         "sabor": sabor,
         "cantidad": cantidad
     })
@@ -160,8 +167,8 @@ def guardar_venta(canal, vendedor, sabor, cantidad):
     precio = PRODUCTOS[sabor]
     total  = precio * cantidad
     sb_post("ventas", {
-        "fecha": str(date.today()),
-        "hora": datetime.now().strftime("%H:%M"),
+        "fecha": hoy(),
+        "hora": ahora(),
         "canal": canal,
         "vendedor": vendedor,
         "sabor": sabor,
@@ -173,7 +180,7 @@ def guardar_venta(canal, vendedor, sabor, cantidad):
 
 def guardar_devolucion(sabor, cantidad):
     sb_post("devoluciones", {
-        "fecha": str(date.today()),
+        "fecha": hoy(),
         "sabor": sabor,
         "cantidad": cantidad
     })
@@ -181,7 +188,7 @@ def guardar_devolucion(sabor, cantidad):
 
 def limpiar_datos_viejos():
     from datetime import timedelta
-    limite = (date.today() - timedelta(days=180)).isoformat()
+    limite = (datetime.now(COL_TZ) - timedelta(days=180)).strftime("%Y-%m-%d")
     sb_delete("produccion",   f"fecha=lt.{limite}")
     sb_delete("ventas",       f"fecha=lt.{limite}")
     sb_delete("cargues",      f"fecha=lt.{limite}")
@@ -539,8 +546,8 @@ if tab4 is not None:
         with sub_r2:
             st.markdown('<div class="section-label">Consultar por fechas</div>', unsafe_allow_html=True)
             col_a, col_b = st.columns(2)
-            f_ini = col_a.date_input("Desde", value=date.today().replace(day=1), key="f_ini")
-            f_fin = col_b.date_input("Hasta", value=date.today(), key="f_fin")
+            f_ini = col_a.date_input("Desde", value=date(datetime.now(COL_TZ).year, datetime.now(COL_TZ).month, 1), key="f_ini")
+            f_fin = col_b.date_input("Hasta", value=datetime.now(COL_TZ).date(), key="f_fin")
             df_rango = leer_ventas_rango(f_ini, f_fin)
 
             if df_rango.empty:
