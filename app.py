@@ -1,8 +1,9 @@
 import streamlit as st
 import pandas as pd
-import sqlite3
 import base64
 import hashlib
+import requests
+import json
 from pathlib import Path
 from datetime import date, datetime
 
@@ -12,6 +13,35 @@ st.set_page_config(
     layout="centered",
     initial_sidebar_state="collapsed",
 )
+
+# ══════════════════════════════════════════════════════════════════════════════
+# SUPABASE CONFIG
+# ══════════════════════════════════════════════════════════════════════════════
+
+SUPABASE_URL = "https://duhsskisgksyozjdrusl.supabase.co"
+SUPABASE_KEY = "sb_secret_QKOcoVci5A8z5DTFccYJuQ_kLl8-Ur5"
+HEADERS = {
+    "apikey": SUPABASE_KEY,
+    "Authorization": f"Bearer {SUPABASE_KEY}",
+    "Content-Type": "application/json",
+    "Prefer": "return=representation"
+}
+
+def sb_get(tabla, params=""):
+    r = requests.get(f"{SUPABASE_URL}/rest/v1/{tabla}?{params}", headers=HEADERS)
+    return r.json() if r.ok else []
+
+def sb_post(tabla, data):
+    r = requests.post(f"{SUPABASE_URL}/rest/v1/{tabla}", headers=HEADERS, json=data)
+    return r.ok
+
+def sb_patch(tabla, filtro, data):
+    r = requests.patch(f"{SUPABASE_URL}/rest/v1/{tabla}?{filtro}", headers=HEADERS, json=data)
+    return r.ok
+
+def sb_delete(tabla, filtro):
+    r = requests.delete(f"{SUPABASE_URL}/rest/v1/{tabla}?{filtro}", headers=HEADERS)
+    return r.ok
 
 # ══════════════════════════════════════════════════════════════════════════════
 # DATOS MAESTROS
@@ -43,165 +73,119 @@ VENDEDORES_FABRICA   = ["Sofía", "Andrea"]
 VENDEDORES_CARRO     = "Javier & Edison"
 
 def fmt(n):
-    return f"${n:,.0f}".replace(",", ".")
+    return f"${int(n):,.0f}".replace(",", ".")
 
 # ══════════════════════════════════════════════════════════════════════════════
-# BASE DE DATOS
+# FUNCIONES DE BASE DE DATOS
 # ══════════════════════════════════════════════════════════════════════════════
 
-DB = "delicia.db"
-
-def conn():
-    return sqlite3.connect(DB, check_same_thread=False)
-
-def init_db():
-    c = conn()
-    c.executescript("""
-        CREATE TABLE IF NOT EXISTS inventario (
-            sabor  TEXT PRIMARY KEY,
-            stock  INTEGER NOT NULL DEFAULT 0,
-            precio INTEGER NOT NULL
-        );
-
-        CREATE TABLE IF NOT EXISTS produccion (
-            id       INTEGER PRIMARY KEY AUTOINCREMENT,
-            fecha    TEXT NOT NULL,
-            hora     TEXT NOT NULL,
-            empleado TEXT NOT NULL,
-            sabor    TEXT NOT NULL,
-            cantidad INTEGER NOT NULL
-        );
-
-        CREATE TABLE IF NOT EXISTS cargues (
-            id       INTEGER PRIMARY KEY AUTOINCREMENT,
-            fecha    TEXT NOT NULL,
-            hora     TEXT NOT NULL,
-            sabor    TEXT NOT NULL,
-            cantidad INTEGER NOT NULL
-        );
-
-        CREATE TABLE IF NOT EXISTS ventas (
-            id        INTEGER PRIMARY KEY AUTOINCREMENT,
-            fecha     TEXT NOT NULL,
-            hora      TEXT NOT NULL,
-            canal     TEXT NOT NULL,
-            vendedor  TEXT NOT NULL,
-            sabor     TEXT NOT NULL,
-            cantidad  INTEGER NOT NULL,
-            total     INTEGER NOT NULL
-        );
-
-        CREATE TABLE IF NOT EXISTS devoluciones (
-            id       INTEGER PRIMARY KEY AUTOINCREMENT,
-            fecha    TEXT NOT NULL,
-            sabor    TEXT NOT NULL,
-            cantidad INTEGER NOT NULL
-        );
-    """)
-    # Insertar productos si inventario está vacío
-    cur = c.cursor()
-    cur.execute("SELECT COUNT(*) FROM inventario")
-    if cur.fetchone()[0] == 0:
+def init_inventario():
+    """Inserta productos si el inventario está vacío."""
+    data = sb_get("inventario", "select=sabor")
+    if not data:
         for sabor, precio in PRODUCTOS.items():
-            cur.execute("INSERT INTO inventario VALUES (?,?,?)", (sabor, 0, precio))
-    c.commit()
-    c.close()
-
-init_db()
-
-# ── Helpers DB ───────────────────────────────────────────────────────────────
+            sb_post("inventario", {"sabor": sabor, "stock": 0, "precio": precio})
 
 def leer_inventario():
-    c = conn()
-    df = pd.read_sql("SELECT * FROM inventario ORDER BY sabor", c)
-    c.close()
-    return df
+    data = sb_get("inventario", "select=*&order=sabor")
+    return pd.DataFrame(data) if data else pd.DataFrame(columns=["sabor","stock","precio"])
 
 def leer_produccion_hoy():
-    c = conn()
-    df = pd.read_sql(
-        "SELECT * FROM produccion WHERE fecha=? ORDER BY hora DESC",
-        c, params=(str(date.today()),))
-    c.close()
-    return df
+    hoy = str(date.today())
+    data = sb_get("produccion", f"select=*&fecha=eq.{hoy}&order=hora.desc")
+    return pd.DataFrame(data) if data else pd.DataFrame()
 
 def leer_ventas_hoy():
-    c = conn()
-    df = pd.read_sql(
-        "SELECT * FROM ventas WHERE fecha=? ORDER BY hora DESC",
-        c, params=(str(date.today()),))
-    c.close()
-    return df
+    hoy = str(date.today())
+    data = sb_get("ventas", f"select=*&fecha=eq.{hoy}&order=hora.desc")
+    return pd.DataFrame(data) if data else pd.DataFrame()
 
 def leer_cargue_activo():
-    """Suma de cargues del día menos devoluciones de hoy — lo que lleva el carro ahora."""
-    c = conn()
-    df_c = pd.read_sql(
-        "SELECT sabor, SUM(cantidad) as cargado FROM cargues WHERE fecha=? GROUP BY sabor",
-        c, params=(str(date.today()),))
-    df_v = pd.read_sql(
-        "SELECT sabor, SUM(cantidad) as vendido FROM ventas WHERE fecha=? AND canal='Carro' GROUP BY sabor",
-        c, params=(str(date.today()),))
-    c.close()
-    if df_c.empty:
+    hoy = str(date.today())
+    cargues = sb_get("cargues", f"select=sabor,cantidad&fecha=eq.{hoy}")
+    ventas  = sb_get("ventas",  f"select=sabor,cantidad&fecha=eq.{hoy}&canal=eq.Carro")
+    if not cargues:
         return pd.DataFrame(columns=["sabor","pendiente"])
-    df = df_c.merge(df_v, on="sabor", how="left").fillna(0)
+    df_c = pd.DataFrame(cargues).groupby("sabor")["cantidad"].sum().reset_index()
+    df_c.columns = ["sabor","cargado"]
+    if ventas:
+        df_v = pd.DataFrame(ventas).groupby("sabor")["cantidad"].sum().reset_index()
+        df_v.columns = ["sabor","vendido"]
+        df = df_c.merge(df_v, on="sabor", how="left").fillna(0)
+    else:
+        df = df_c.copy()
+        df["vendido"] = 0
     df["pendiente"] = df["cargado"] - df["vendido"]
     return df[df["pendiente"] > 0][["sabor","pendiente"]]
 
 def leer_ventas_rango(f_ini, f_fin):
-    c = conn()
-    df = pd.read_sql(
-        "SELECT * FROM ventas WHERE fecha BETWEEN ? AND ?",
-        c, params=(str(f_ini), str(f_fin)))
-    c.close()
-    return df
+    data = sb_get("ventas", f"select=*&fecha=gte.{f_ini}&fecha=lte.{f_fin}")
+    return pd.DataFrame(data) if data else pd.DataFrame()
 
 def agregar_stock(sabor, cantidad):
-    c = conn()
-    c.execute("UPDATE inventario SET stock=stock+? WHERE sabor=?", (cantidad, sabor))
-    c.commit(); c.close()
+    inv = sb_get("inventario", f"select=stock&sabor=eq.{requests.utils.quote(sabor)}")
+    if inv:
+        nuevo = inv[0]["stock"] + cantidad
+        sb_patch("inventario", f"sabor=eq.{requests.utils.quote(sabor)}", {"stock": nuevo})
 
 def restar_stock(sabor, cantidad):
-    c = conn()
-    c.execute("UPDATE inventario SET stock=MAX(0,stock-?) WHERE sabor=?", (cantidad, sabor))
-    c.commit(); c.close()
+    inv = sb_get("inventario", f"select=stock&sabor=eq.{requests.utils.quote(sabor)}")
+    if inv:
+        nuevo = max(0, inv[0]["stock"] - cantidad)
+        sb_patch("inventario", f"sabor=eq.{requests.utils.quote(sabor)}", {"stock": nuevo})
 
 def set_stock(sabor, cantidad):
-    c = conn()
-    c.execute("UPDATE inventario SET stock=? WHERE sabor=?", (cantidad, sabor))
-    c.commit(); c.close()
+    sb_patch("inventario", f"sabor=eq.{requests.utils.quote(sabor)}", {"stock": cantidad})
 
 def guardar_produccion(empleado, sabor, cantidad):
-    c = conn()
-    c.execute("INSERT INTO produccion (fecha,hora,empleado,sabor,cantidad) VALUES (?,?,?,?,?)",
-              (str(date.today()), datetime.now().strftime("%H:%M"), empleado, sabor, cantidad))
-    c.commit(); c.close()
+    sb_post("produccion", {
+        "fecha": str(date.today()),
+        "hora": datetime.now().strftime("%H:%M"),
+        "empleado": empleado,
+        "sabor": sabor,
+        "cantidad": cantidad
+    })
     agregar_stock(sabor, cantidad)
 
 def guardar_cargue(sabor, cantidad):
-    c = conn()
-    c.execute("INSERT INTO cargues (fecha,hora,sabor,cantidad) VALUES (?,?,?,?)",
-              (str(date.today()), datetime.now().strftime("%H:%M"), sabor, cantidad))
-    c.commit(); c.close()
+    sb_post("cargues", {
+        "fecha": str(date.today()),
+        "hora": datetime.now().strftime("%H:%M"),
+        "sabor": sabor,
+        "cantidad": cantidad
+    })
     restar_stock(sabor, cantidad)
 
 def guardar_venta(canal, vendedor, sabor, cantidad):
     precio = PRODUCTOS[sabor]
     total  = precio * cantidad
-    c = conn()
-    c.execute("INSERT INTO ventas (fecha,hora,canal,vendedor,sabor,cantidad,total) VALUES (?,?,?,?,?,?,?)",
-              (str(date.today()), datetime.now().strftime("%H:%M"), canal, vendedor, sabor, cantidad, total))
-    c.commit(); c.close()
+    sb_post("ventas", {
+        "fecha": str(date.today()),
+        "hora": datetime.now().strftime("%H:%M"),
+        "canal": canal,
+        "vendedor": vendedor,
+        "sabor": sabor,
+        "cantidad": cantidad,
+        "total": total
+    })
     if canal == "Fábrica":
         restar_stock(sabor, cantidad)
 
 def guardar_devolucion(sabor, cantidad):
-    c = conn()
-    c.execute("INSERT INTO devoluciones (fecha,sabor,cantidad) VALUES (?,?,?)",
-              (str(date.today()), sabor, cantidad))
-    c.commit(); c.close()
+    sb_post("devoluciones", {
+        "fecha": str(date.today()),
+        "sabor": sabor,
+        "cantidad": cantidad
+    })
     agregar_stock(sabor, cantidad)
+
+def limpiar_datos_viejos():
+    from datetime import timedelta
+    limite = (date.today() - timedelta(days=180)).isoformat()
+    sb_delete("produccion",   f"fecha=lt.{limite}")
+    sb_delete("ventas",       f"fecha=lt.{limite}")
+    sb_delete("cargues",      f"fecha=lt.{limite}")
+    sb_delete("devoluciones", f"fecha=lt.{limite}")
 
 # ══════════════════════════════════════════════════════════════════════════════
 # LOGO
@@ -268,12 +252,30 @@ label,.stSelectbox label,.stNumberInput label,.stDateInput label{color:#F48FB1 !
 """, unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
-# SESSION STATE
+# INICIALIZAR
 # ══════════════════════════════════════════════════════════════════════════════
 
-for k in ["ok_prod","ok_cargue","ok_venta_fab","ok_venta_carro","ok_dev","ok_stock"]:
+if "iniciado" not in st.session_state:
+    init_inventario()
+    st.session_state.iniciado = True
+
+if "limpieza" not in st.session_state:
+    limpiar_datos_viejos()
+    st.session_state.limpieza = True
+
+for k in ["ok_prod","ok_cargue","ok_venta_fab","ok_venta_carro","ok_dev","ok_stock","es_admin"]:
     if k not in st.session_state:
         st.session_state[k] = False
+
+# ══════════════════════════════════════════════════════════════════════════════
+# LOGIN
+# ══════════════════════════════════════════════════════════════════════════════
+
+ADMIN_USER = "jorge"
+ADMIN_HASH = "096f6432e029084963ccb57b61a5b46dd3188f9d4fe73333d7be8289ffeb7057"
+
+def check_password(pw):
+    return hashlib.sha256(pw.encode()).hexdigest() == ADMIN_HASH
 
 # ══════════════════════════════════════════════════════════════════════════════
 # ENCABEZADO
@@ -287,17 +289,16 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
-# MÉTRICAS RÁPIDAS
+# MÉTRICAS
 # ══════════════════════════════════════════════════════════════════════════════
 
 df_inv      = leer_inventario()
 df_ventas   = leer_ventas_hoy()
 df_prod_hoy = leer_produccion_hoy()
 
-total_bolsas_inv  = int(df_inv["stock"].sum())
-total_prod_hoy    = int(df_prod_hoy["cantidad"].sum()) if not df_prod_hoy.empty else 0
-total_ventas_hoy  = int(df_ventas["total"].sum())      if not df_ventas.empty  else 0
-bolsas_vendidas   = int(df_ventas["cantidad"].sum())   if not df_ventas.empty  else 0
+total_bolsas_inv = int(df_inv["stock"].sum()) if not df_inv.empty else 0
+total_prod_hoy   = int(df_prod_hoy["cantidad"].sum()) if not df_prod_hoy.empty else 0
+total_ventas_hoy = int(df_ventas["total"].sum()) if not df_ventas.empty else 0
 
 st.markdown(f"""
 <div class="metric-row">
@@ -317,44 +318,31 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TABS
+# LOGIN PANEL
 # ══════════════════════════════════════════════════════════════════════════════
 
-# ══════════════════════════════════════════════════════════════════════════════
-# LOGIN ADMINISTRADOR
-# ══════════════════════════════════════════════════════════════════════════════
-
-ADMIN_USER = "jorge"
-ADMIN_HASH = "096f6432e029084963ccb57b61a5b46dd3188f9d4fe73333d7be8289ffeb7057"  # ladelicia
-
-def check_password(password):
-    return hashlib.sha256(password.encode()).hexdigest() == ADMIN_HASH
-
-if "es_admin" not in st.session_state:
-    st.session_state.es_admin = False
-
-# Panel de login — solo visible si no ha iniciado sesión
 if not st.session_state.es_admin:
     with st.expander("🔐 Acceso administrador", expanded=False):
         st.markdown('<div class="section-label">Solo para Jorge</div>', unsafe_allow_html=True)
         col_u, col_p = st.columns(2)
-        usuario_input  = col_u.text_input("Usuario", placeholder="jorge", key="login_user", label_visibility="collapsed")
-        password_input = col_p.text_input("Contraseña", type="password", placeholder="••••••••", key="login_pass", label_visibility="collapsed")
+        u = col_u.text_input("Usuario", placeholder="jorge", key="lu", label_visibility="collapsed")
+        p = col_p.text_input("Contraseña", type="password", placeholder="••••••••", key="lp", label_visibility="collapsed")
         if st.button("Entrar", key="btn_login"):
-            if usuario_input.lower() == ADMIN_USER and check_password(password_input):
+            if u.lower() == ADMIN_USER and check_password(p):
                 st.session_state.es_admin = True
                 st.rerun()
             else:
                 st.markdown('<div class="alert-low">⚠️ Usuario o contraseña incorrectos.</div>', unsafe_allow_html=True)
 else:
-    st.markdown(
-        '<div class="info-box">✅ Sesión activa — <b>Jorge (Administrador)</b></div>',
-        unsafe_allow_html=True)
+    st.markdown('<div class="info-box">✅ Sesión activa — <b>Jorge (Administrador)</b></div>', unsafe_allow_html=True)
     if st.button("🔒 Cerrar sesión", key="btn_logout"):
         st.session_state.es_admin = False
         st.rerun()
 
-# Tabs según rol
+# ══════════════════════════════════════════════════════════════════════════════
+# TABS
+# ══════════════════════════════════════════════════════════════════════════════
+
 if st.session_state.es_admin:
     tab1, tab2, tab3, tab4 = st.tabs(["📦 Producción", "🚗 Carro", "🏭 Fábrica", "📊 Resumen"])
 else:
@@ -367,15 +355,12 @@ else:
 with tab1:
     st.markdown('<div class="section-label">Registrar producción</div>', unsafe_allow_html=True)
 
-    empleado  = st.selectbox("¿Quién registra?", EMPLEADOS_PRODUCCION, key="emp")
-    sabor_p   = st.selectbox("Sabor producido", list(PRODUCTOS.keys()), key="sabor_p")
+    empleado   = st.selectbox("¿Quién registra?", EMPLEADOS_PRODUCCION, key="emp")
+    sabor_p    = st.selectbox("Sabor producido", list(PRODUCTOS.keys()), key="sabor_p")
     cantidad_p = st.number_input("Bolsas producidas", min_value=1, max_value=5000, value=50, step=10, key="cant_p")
 
-    stock_actual = int(df_inv[df_inv["sabor"]==sabor_p]["stock"].values[0])
-    st.markdown(
-        f'<div class="info-box">📦 Stock actual de <b>{sabor_p}</b>: {stock_actual} bolsas → '
-        f'quedará en <b>{stock_actual + cantidad_p}</b> bolsas</div>',
-        unsafe_allow_html=True)
+    stock_act = int(df_inv[df_inv["sabor"]==sabor_p]["stock"].values[0]) if not df_inv.empty and sabor_p in df_inv["sabor"].values else 0
+    st.markdown(f'<div class="info-box">📦 Stock actual de <b>{sabor_p}</b>: {stock_act} bolsas → quedará en <b>{stock_act + cantidad_p}</b></div>', unsafe_allow_html=True)
 
     if st.button("✅ Registrar producción", key="btn_prod"):
         guardar_produccion(empleado, sabor_p, cantidad_p)
@@ -386,31 +371,25 @@ with tab1:
         st.markdown('<div class="success-toast">✅ ¡Producción registrada!</div>', unsafe_allow_html=True)
         st.session_state.ok_prod = False
 
-    # Historial del día
     df_ph = leer_produccion_hoy()
     if not df_ph.empty:
         st.markdown('<div class="section-label">Producción de hoy</div>', unsafe_allow_html=True)
         vista = df_ph[["hora","empleado","sabor","cantidad"]].copy()
         vista.columns = ["Hora","Empleado","Sabor","Bolsas"]
         st.dataframe(vista, use_container_width=True, hide_index=True)
-        st.markdown(f'<div class="info-box">Total producido hoy: <b>{int(df_ph["cantidad"].sum())} bolsas</b></div>',
-                    unsafe_allow_html=True)
 
-    # Inventario completo
     st.markdown('<div class="section-label">Inventario actual</div>', unsafe_allow_html=True)
     df_inv2 = leer_inventario()
-    df_inv2["Precio"] = df_inv2["precio"].apply(fmt)
-    df_inv2["Estado"] = df_inv2["stock"].apply(lambda x: "🔴 Agotado" if x == 0 else ("🟡 Poco" if x < 10 else "🟢 OK"))
-    st.dataframe(
-        df_inv2[["sabor","stock","Precio","Estado"]].rename(columns={"sabor":"Sabor","stock":"Bolsas"}),
-        use_container_width=True, hide_index=True)
+    if not df_inv2.empty:
+        df_inv2["Precio"] = df_inv2["precio"].apply(fmt)
+        df_inv2["Estado"] = df_inv2["stock"].apply(lambda x: "🔴 Agotado" if x==0 else ("🟡 Poco" if x<10 else "🟢 OK"))
+        st.dataframe(df_inv2[["sabor","stock","Precio","Estado"]].rename(columns={"sabor":"Sabor","stock":"Bolsas"}), use_container_width=True, hide_index=True)
 
-    # Ajuste manual de stock
     st.markdown('<div class="section-label">Ajustar stock manualmente</div>', unsafe_allow_html=True)
     st.caption("Úsalo si necesitas corregir algún conteo.")
     sabor_adj = st.selectbox("Sabor a ajustar", list(PRODUCTOS.keys()), key="sabor_adj")
-    stock_adj_actual = int(df_inv2[df_inv2["sabor"]==sabor_adj]["stock"].values[0])
-    nuevo_stock = st.number_input("Stock real (bolsas)", min_value=0, value=stock_adj_actual, step=1, key="nuevo_s")
+    stock_adj = int(df_inv2[df_inv2["sabor"]==sabor_adj]["stock"].values[0]) if not df_inv2.empty and sabor_adj in df_inv2["sabor"].values else 0
+    nuevo_stock = st.number_input("Stock real (bolsas)", min_value=0, value=stock_adj, step=1, key="nuevo_s")
     if st.button("💾 Guardar ajuste", key="btn_adj"):
         set_stock(sabor_adj, nuevo_stock)
         st.session_state.ok_stock = True
@@ -420,27 +399,22 @@ with tab1:
         st.session_state.ok_stock = False
 
 # ─────────────────────────────────────────────────────────────────────────────
-# TAB 2 · CARRO (Javier & Edison)
+# TAB 2 · CARRO
 # ─────────────────────────────────────────────────────────────────────────────
 with tab2:
     sub_c1, sub_c2, sub_c3 = st.tabs(["Nuevo cargue", "Registrar venta", "Devolución semanal"])
 
-    # ── CARGUE ───────────────────────────────────────────────────────────────
     with sub_c1:
         st.markdown('<div class="section-label">Cargue del carro 🚗</div>', unsafe_allow_html=True)
         st.caption("Registra lo que llevan Javier y Edison en este viaje.")
-
-        sabor_cg  = st.selectbox("Sabor", list(PRODUCTOS.keys()), key="sabor_cg")
-        cant_cg   = st.number_input("Bolsas a cargar", min_value=1, max_value=500, value=10, step=5, key="cant_cg")
-
-        stock_disp = int(leer_inventario()[leer_inventario()["sabor"]==sabor_cg]["stock"].values[0])
+        sabor_cg = st.selectbox("Sabor", list(PRODUCTOS.keys()), key="sabor_cg")
+        cant_cg  = st.number_input("Bolsas a cargar", min_value=1, max_value=500, value=10, step=5, key="cant_cg")
+        stock_disp = int(df_inv[df_inv["sabor"]==sabor_cg]["stock"].values[0]) if not df_inv.empty and sabor_cg in df_inv["sabor"].values else 0
 
         if stock_disp < cant_cg:
-            st.markdown(f'<div class="alert-low">⚠️ Solo hay {stock_disp} bolsas de {sabor_cg} en inventario.</div>',
-                        unsafe_allow_html=True)
+            st.markdown(f'<div class="alert-low">⚠️ Solo hay {stock_disp} bolsas de {sabor_cg}.</div>', unsafe_allow_html=True)
         else:
-            st.markdown(f'<div class="info-box">📦 Disponible: <b>{stock_disp}</b> bolsas · '
-                        f'Quedarán: <b>{stock_disp - cant_cg}</b></div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="info-box">📦 Disponible: <b>{stock_disp}</b> · Quedarán: <b>{stock_disp - cant_cg}</b></div>', unsafe_allow_html=True)
 
         if st.button("🚗 Registrar cargue", key="btn_cg", disabled=(stock_disp < cant_cg)):
             guardar_cargue(sabor_cg, cant_cg)
@@ -451,24 +425,17 @@ with tab2:
             st.markdown('<div class="success-toast">✅ Cargue registrado. ¡Buen viaje!</div>', unsafe_allow_html=True)
             st.session_state.ok_cargue = False
 
-        # Cargue activo
         df_ca = leer_cargue_activo()
         if not df_ca.empty:
             st.markdown('<div class="section-label">Lo que lleva el carro ahora</div>', unsafe_allow_html=True)
             df_ca.columns = ["Sabor","Bolsas pendientes"]
             st.dataframe(df_ca, use_container_width=True, hide_index=True)
 
-    # ── VENTA CARRO ───────────────────────────────────────────────────────────
     with sub_c2:
         st.markdown('<div class="section-label">Venta del carro 💵</div>', unsafe_allow_html=True)
-        st.caption("Registra lo que vendieron Javier y Edison al regresar.")
-
-        sabor_vc  = st.selectbox("Sabor vendido", list(PRODUCTOS.keys()), key="sabor_vc")
-        cant_vc   = st.number_input("Bolsas vendidas", min_value=1, max_value=500, value=10, step=1, key="cant_vc")
-        precio_vc = PRODUCTOS[sabor_vc]
-
-        st.markdown(f'<div class="info-box">💰 Total: <b>{fmt(precio_vc * cant_vc)}</b> '
-                    f'({cant_vc} × {fmt(precio_vc)})</div>', unsafe_allow_html=True)
+        sabor_vc = st.selectbox("Sabor vendido", list(PRODUCTOS.keys()), key="sabor_vc")
+        cant_vc  = st.number_input("Bolsas vendidas", min_value=1, max_value=500, value=10, step=1, key="cant_vc")
+        st.markdown(f'<div class="info-box">💰 Total: <b>{fmt(PRODUCTOS[sabor_vc] * cant_vc)}</b></div>', unsafe_allow_html=True)
 
         if st.button("💵 Registrar venta", key="btn_vc"):
             guardar_venta("Carro", VENDEDORES_CARRO, sabor_vc, cant_vc)
@@ -479,26 +446,19 @@ with tab2:
             st.markdown('<div class="success-toast">✅ Venta del carro registrada.</div>', unsafe_allow_html=True)
             st.session_state.ok_venta_carro = False
 
-        # Ventas del carro hoy
         df_vh = leer_ventas_hoy()
-        df_vc = df_vh[df_vh["canal"]=="Carro"] if not df_vh.empty else pd.DataFrame()
-        if not df_vc.empty:
-            st.markdown('<div class="section-label">Ventas del carro hoy</div>', unsafe_allow_html=True)
-            vista_vc = df_vc[["hora","sabor","cantidad","total"]].copy()
-            vista_vc["total"] = vista_vc["total"].apply(fmt)
-            vista_vc.columns = ["Hora","Sabor","Bolsas","Total $"]
-            st.dataframe(vista_vc, use_container_width=True, hide_index=True)
-            st.markdown(f'<div class="info-box">Total ventas carro hoy: <b>{fmt(df_vc["total"].sum())}</b></div>',
-                        unsafe_allow_html=True)
+        if not df_vh.empty:
+            df_vc = df_vh[df_vh["canal"]=="Carro"]
+            if not df_vc.empty:
+                st.markdown('<div class="section-label">Ventas del carro hoy</div>', unsafe_allow_html=True)
+                vista_vc = df_vc[["hora","sabor","cantidad","total"]].copy()
+                vista_vc["total"] = vista_vc["total"].apply(fmt)
+                vista_vc.columns = ["Hora","Sabor","Bolsas","Total $"]
+                st.dataframe(vista_vc, use_container_width=True, hide_index=True)
 
-    # ── DEVOLUCIÓN SEMANAL ────────────────────────────────────────────────────
     with sub_c3:
         st.markdown('<div class="section-label">Devolución semanal 🔄</div>', unsafe_allow_html=True)
-        st.caption("Registra las bolsas que devuelven Javier y Edison al inventario.")
-
-        st.markdown('<div class="warn-box">⚠️ Solo usar al final de la semana (viernes o sábado).</div>',
-                    unsafe_allow_html=True)
-
+        st.markdown('<div class="warn-box">⚠️ Solo usar al final de la semana (viernes o sábado).</div>', unsafe_allow_html=True)
         sabor_dev = st.selectbox("Sabor a devolver", list(PRODUCTOS.keys()), key="sabor_dev")
         cant_dev  = st.number_input("Bolsas devueltas", min_value=1, max_value=500, value=1, step=1, key="cant_dev")
 
@@ -508,28 +468,23 @@ with tab2:
             st.rerun()
 
         if st.session_state.ok_dev:
-            st.markdown('<div class="success-toast">✅ Devolución registrada. Stock actualizado.</div>',
-                        unsafe_allow_html=True)
+            st.markdown('<div class="success-toast">✅ Devolución registrada.</div>', unsafe_allow_html=True)
             st.session_state.ok_dev = False
 
 # ─────────────────────────────────────────────────────────────────────────────
-# TAB 3 · FÁBRICA (Sofía & Andrea)
+# TAB 3 · FÁBRICA
 # ─────────────────────────────────────────────────────────────────────────────
 with tab3:
     st.markdown('<div class="section-label">Venta en fábrica 🏭</div>', unsafe_allow_html=True)
-
     vendedor_f = st.selectbox("Vendedor", VENDEDORES_FABRICA, key="vend_f")
     sabor_vf   = st.selectbox("Sabor vendido", list(PRODUCTOS.keys()), key="sabor_vf")
     cant_vf    = st.number_input("Bolsas vendidas", min_value=1, max_value=500, value=1, step=1, key="cant_vf")
-    precio_vf  = PRODUCTOS[sabor_vf]
-    stock_vf   = int(leer_inventario()[leer_inventario()["sabor"]==sabor_vf]["stock"].values[0])
+    stock_vf   = int(df_inv[df_inv["sabor"]==sabor_vf]["stock"].values[0]) if not df_inv.empty and sabor_vf in df_inv["sabor"].values else 0
 
     if stock_vf < cant_vf:
-        st.markdown(f'<div class="alert-low">⚠️ Solo hay {stock_vf} bolsas de {sabor_vf}.</div>',
-                    unsafe_allow_html=True)
+        st.markdown(f'<div class="alert-low">⚠️ Solo hay {stock_vf} bolsas de {sabor_vf}.</div>', unsafe_allow_html=True)
     else:
-        st.markdown(f'<div class="info-box">💰 Total: <b>{fmt(precio_vf * cant_vf)}</b> · '
-                    f'Stock restante: <b>{stock_vf - cant_vf}</b> bolsas</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="info-box">💰 Total: <b>{fmt(PRODUCTOS[sabor_vf] * cant_vf)}</b> · Stock restante: <b>{stock_vf - cant_vf}</b></div>', unsafe_allow_html=True)
 
     if st.button("💵 Registrar venta fábrica", key="btn_vf", disabled=(stock_vf < cant_vf)):
         guardar_venta("Fábrica", vendedor_f, sabor_vf, cant_vf)
@@ -540,22 +495,18 @@ with tab3:
         st.markdown('<div class="success-toast">✅ Venta registrada.</div>', unsafe_allow_html=True)
         st.session_state.ok_venta_fab = False
 
-    # Ventas fábrica hoy
     df_vh2 = leer_ventas_hoy()
-    df_vf  = df_vh2[df_vh2["canal"]=="Fábrica"] if not df_vh2.empty else pd.DataFrame()
-    if not df_vf.empty:
-        st.markdown('<div class="section-label">Ventas fábrica hoy</div>', unsafe_allow_html=True)
-        vista_vf = df_vf[["hora","vendedor","sabor","cantidad","total"]].copy()
-        vista_vf["total"] = vista_vf["total"].apply(fmt)
-        vista_vf.columns = ["Hora","Vendedor","Sabor","Bolsas","Total $"]
-        st.dataframe(vista_vf, use_container_width=True, hide_index=True)
-
-        col1, col2 = st.columns(2)
-        col1.metric("Total fábrica hoy", fmt(df_vf["total"].sum()))
-        col2.metric("Bolsas vendidas",   int(df_vf["cantidad"].sum()))
+    if not df_vh2.empty:
+        df_vf = df_vh2[df_vh2["canal"]=="Fábrica"]
+        if not df_vf.empty:
+            st.markdown('<div class="section-label">Ventas fábrica hoy</div>', unsafe_allow_html=True)
+            vista_vf = df_vf[["hora","vendedor","sabor","cantidad","total"]].copy()
+            vista_vf["total"] = vista_vf["total"].apply(fmt)
+            vista_vf.columns = ["Hora","Vendedor","Sabor","Bolsas","Total $"]
+            st.dataframe(vista_vf, use_container_width=True, hide_index=True)
 
 # ─────────────────────────────────────────────────────────────────────────────
-# TAB 4 · RESUMEN (solo administrador)
+# TAB 4 · RESUMEN (solo admin)
 # ─────────────────────────────────────────────────────────────────────────────
 if tab4 is not None:
     with tab4:
@@ -563,34 +514,23 @@ if tab4 is not None:
 
         with sub_r1:
             st.markdown('<div class="section-label">Resumen del día</div>', unsafe_allow_html=True)
-
             df_vt = leer_ventas_hoy()
             if df_vt.empty:
                 st.info("Aún no hay ventas registradas hoy.")
             else:
-                total_fab   = int(df_vt[df_vt["canal"]=="Fábrica"]["total"].sum()) if not df_vt[df_vt["canal"]=="Fábrica"].empty else 0
-                total_carro = int(df_vt[df_vt["canal"]=="Carro"]["total"].sum())   if not df_vt[df_vt["canal"]=="Carro"].empty  else 0
+                total_fab   = int(df_vt[df_vt["canal"]=="Fábrica"]["total"].sum()) if "canal" in df_vt.columns else 0
+                total_carro = int(df_vt[df_vt["canal"]=="Carro"]["total"].sum())   if "canal" in df_vt.columns else 0
                 gran_total  = total_fab + total_carro
 
                 st.markdown(f"""
                 <div class="metric-row">
-                    <div class="metric-box metric-pink">
-                        <div class="val">{fmt(total_fab)}</div>
-                        <div class="lbl">Fábrica</div>
-                    </div>
-                    <div class="metric-box metric-yellow">
-                        <div class="val">{fmt(total_carro)}</div>
-                        <div class="lbl">Carro</div>
-                    </div>
-                    <div class="metric-box metric-green">
-                        <div class="val">{fmt(gran_total)}</div>
-                        <div class="lbl">Total día</div>
-                    </div>
+                    <div class="metric-box metric-pink"><div class="val">{fmt(total_fab)}</div><div class="lbl">Fábrica</div></div>
+                    <div class="metric-box metric-yellow"><div class="val">{fmt(total_carro)}</div><div class="lbl">Carro</div></div>
+                    <div class="metric-box metric-green"><div class="val">{fmt(gran_total)}</div><div class="lbl">Total día</div></div>
                 </div>""", unsafe_allow_html=True)
 
-                st.markdown('<div class="section-label">Ventas por sabor hoy</div>', unsafe_allow_html=True)
-                por_sabor = df_vt.groupby("sabor").agg(
-                    bolsas=("cantidad","sum"), total=("total","sum")).reset_index()
+                st.markdown('<div class="section-label">Por sabor</div>', unsafe_allow_html=True)
+                por_sabor = df_vt.groupby("sabor").agg(bolsas=("cantidad","sum"), total=("total","sum")).reset_index()
                 por_sabor = por_sabor.sort_values("total", ascending=False)
                 por_sabor["total"] = por_sabor["total"].apply(fmt)
                 por_sabor.columns = ["Sabor","Bolsas","Total $"]
@@ -598,46 +538,33 @@ if tab4 is not None:
 
         with sub_r2:
             st.markdown('<div class="section-label">Consultar por fechas</div>', unsafe_allow_html=True)
-
             col_a, col_b = st.columns(2)
             f_ini = col_a.date_input("Desde", value=date.today().replace(day=1), key="f_ini")
             f_fin = col_b.date_input("Hasta", value=date.today(), key="f_fin")
-
             df_rango = leer_ventas_rango(f_ini, f_fin)
 
             if df_rango.empty:
                 st.info("No hay ventas en ese rango.")
             else:
-                total_r     = int(df_rango["total"].sum())
-                bolsas_r    = int(df_rango["cantidad"].sum())
-                dias_r      = df_rango["fecha"].nunique()
+                total_r  = int(df_rango["total"].sum())
+                bolsas_r = int(df_rango["cantidad"].sum())
+                dias_r   = df_rango["fecha"].nunique()
 
                 st.markdown(f"""
                 <div class="metric-row">
-                    <div class="metric-box metric-green">
-                        <div class="val">{fmt(total_r)}</div>
-                        <div class="lbl">Ingresos</div>
-                    </div>
-                    <div class="metric-box metric-pink">
-                        <div class="val">{bolsas_r}</div>
-                        <div class="lbl">Bolsas vendidas</div>
-                    </div>
-                    <div class="metric-box metric-yellow">
-                        <div class="val">{dias_r}</div>
-                        <div class="lbl">Días</div>
-                    </div>
+                    <div class="metric-box metric-green"><div class="val">{fmt(total_r)}</div><div class="lbl">Ingresos</div></div>
+                    <div class="metric-box metric-pink"><div class="val">{bolsas_r}</div><div class="lbl">Bolsas</div></div>
+                    <div class="metric-box metric-yellow"><div class="val">{dias_r}</div><div class="lbl">Días</div></div>
                 </div>""", unsafe_allow_html=True)
 
                 st.markdown('<div class="section-label">Por día</div>', unsafe_allow_html=True)
-                por_dia = df_rango.groupby("fecha").agg(
-                    bolsas=("cantidad","sum"), total=("total","sum")).reset_index()
+                por_dia = df_rango.groupby("fecha").agg(bolsas=("cantidad","sum"), total=("total","sum")).reset_index()
                 por_dia["total"] = por_dia["total"].apply(fmt)
                 por_dia.columns  = ["Fecha","Bolsas","Total $"]
                 st.dataframe(por_dia, use_container_width=True, hide_index=True)
 
                 st.markdown('<div class="section-label">Por canal</div>', unsafe_allow_html=True)
-                por_canal = df_rango.groupby("canal").agg(
-                    bolsas=("cantidad","sum"), total=("total","sum")).reset_index()
+                por_canal = df_rango.groupby("canal").agg(bolsas=("cantidad","sum"), total=("total","sum")).reset_index()
                 por_canal["total"] = por_canal["total"].apply(fmt)
                 por_canal.columns  = ["Canal","Bolsas","Total $"]
                 st.dataframe(por_canal, use_container_width=True, hide_index=True)
