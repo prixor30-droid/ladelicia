@@ -4,6 +4,7 @@ import base64
 import hashlib
 import requests
 import json
+import time
 from pathlib import Path
 from datetime import date, datetime, timezone, timedelta
 
@@ -408,6 +409,7 @@ with tab1:
     if st.button("💾 Guardar ajuste", key="btn_adj"):
         set_stock(sabor_adj, nuevo_stock)
         st.session_state.ok_stock = True
+        time.sleep(1)
         st.rerun()
     if st.session_state.ok_stock:
         st.markdown('<div class="success-toast">✅ Stock ajustado.</div>', unsafe_allow_html=True)
@@ -434,6 +436,7 @@ with tab2:
         if st.button("🚗 Registrar cargue", key="btn_cg", disabled=(stock_disp < cant_cg)):
             guardar_cargue(sabor_cg, cant_cg)
             st.session_state.ok_cargue = True
+            time.sleep(1)
             st.rerun()
 
         if st.session_state.ok_cargue:
@@ -455,6 +458,7 @@ with tab2:
         if st.button("💵 Registrar venta", key="btn_vc"):
             guardar_venta("Carro", VENDEDORES_CARRO, sabor_vc, cant_vc)
             st.session_state.ok_venta_carro = True
+            time.sleep(1)
             st.rerun()
 
         if st.session_state.ok_venta_carro:
@@ -480,6 +484,7 @@ with tab2:
         if st.button("🔄 Registrar devolución", key="btn_dev"):
             guardar_devolucion(sabor_dev, cant_dev)
             st.session_state.ok_dev = True
+            time.sleep(1)
             st.rerun()
 
         if st.session_state.ok_dev:
@@ -504,6 +509,7 @@ with tab3:
     if st.button("💵 Registrar venta fábrica", key="btn_vf", disabled=(stock_vf < cant_vf)):
         guardar_venta("Fábrica", vendedor_f, sabor_vf, cant_vf)
         st.session_state.ok_venta_fab = True
+        time.sleep(1)
         st.rerun()
 
     if st.session_state.ok_venta_fab:
