@@ -9,7 +9,7 @@ from datetime import date, datetime, timezone, timedelta
 
 # Zona horaria Colombia (UTC-5)
 COL_TZ = timezone(timedelta(hours=-5))
-def hoy():
+def fecha_hoy():
     return datetime.now(COL_TZ).strftime("%Y-%m-%d")
 def ahora():
     return datetime.now(COL_TZ).strftime("%H:%M")
@@ -98,17 +98,17 @@ def leer_inventario():
     return pd.DataFrame(data) if data else pd.DataFrame(columns=["sabor","stock","precio"])
 
 def leer_produccion_hoy():
-    hoy = hoy()
+    hoy = fecha_hoy()
     data = sb_get("produccion", f"select=*&fecha=eq.{hoy}&order=hora.desc")
     return pd.DataFrame(data) if data else pd.DataFrame()
 
 def leer_ventas_hoy():
-    hoy = hoy()
+    hoy = fecha_hoy()
     data = sb_get("ventas", f"select=*&fecha=eq.{hoy}&order=hora.desc")
     return pd.DataFrame(data) if data else pd.DataFrame()
 
 def leer_cargue_activo():
-    hoy = hoy()
+    hoy = fecha_hoy()
     cargues = sb_get("cargues", f"select=sabor,cantidad&fecha=eq.{hoy}")
     ventas  = sb_get("ventas",  f"select=sabor,cantidad&fecha=eq.{hoy}&canal=eq.Carro")
     if not cargues:
@@ -146,7 +146,7 @@ def set_stock(sabor, cantidad):
 
 def guardar_produccion(empleado, sabor, cantidad):
     sb_post("produccion", {
-        "fecha": hoy(),
+        "fecha": fecha_hoy(),
         "hora": ahora(),
         "empleado": empleado,
         "sabor": sabor,
@@ -156,7 +156,7 @@ def guardar_produccion(empleado, sabor, cantidad):
 
 def guardar_cargue(sabor, cantidad):
     sb_post("cargues", {
-        "fecha": hoy(),
+        "fecha": fecha_hoy(),
         "hora": ahora(),
         "sabor": sabor,
         "cantidad": cantidad
@@ -167,7 +167,7 @@ def guardar_venta(canal, vendedor, sabor, cantidad):
     precio = PRODUCTOS[sabor]
     total  = precio * cantidad
     sb_post("ventas", {
-        "fecha": hoy(),
+        "fecha": fecha_hoy(),
         "hora": ahora(),
         "canal": canal,
         "vendedor": vendedor,
@@ -180,7 +180,7 @@ def guardar_venta(canal, vendedor, sabor, cantidad):
 
 def guardar_devolucion(sabor, cantidad):
     sb_post("devoluciones", {
-        "fecha": hoy(),
+        "fecha": fecha_hoy(),
         "sabor": sabor,
         "cantidad": cantidad
     })
