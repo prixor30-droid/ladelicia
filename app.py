@@ -35,8 +35,16 @@ HEADERS = {
 }
 
 def sb_get(tabla, params=""):
-    r = requests.get(f"{SUPABASE_URL}/rest/v1/{tabla}?{params}", headers=HEADERS)
-    return r.json() if r.ok else []
+    url = f"{SUPABASE_URL}/rest/v1/{tabla}"
+    if params:
+        url += f"?{params}"
+    try:
+        r = requests.get(url, headers=HEADERS, timeout=10)
+        if r.ok:
+            return r.json()
+        return []
+    except:
+        return []
 
 def sb_post(tabla, data):
     r = requests.post(f"{SUPABASE_URL}/rest/v1/{tabla}", headers=HEADERS, json=data)
@@ -94,12 +102,12 @@ def init_inventario():
             sb_post("inventario", {"sabor": sabor, "stock": 0, "precio": precio})
 
 def leer_inventario():
-    data = sb_get("inventario", "select=*&order=sabor")
+    data = sb_get("inventario", "select=*&order=sabor.asc")
     return pd.DataFrame(data) if data else pd.DataFrame(columns=["sabor","stock","precio"])
 
 def leer_produccion_hoy():
     hoy = fecha_hoy()
-    data = sb_get("produccion", f"select=*&fecha=eq.{hoy}&order=hora.desc")
+    data = sb_get("produccion", f"select=id,hora,empleado,sabor,cantidad&fecha=eq.{hoy}&order=hora.desc")
     return pd.DataFrame(data) if data else pd.DataFrame()
 
 def leer_ventas_hoy():
