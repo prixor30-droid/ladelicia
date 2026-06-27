@@ -308,13 +308,14 @@ st.markdown(f"""
 # MÉTRICAS
 # ══════════════════════════════════════════════════════════════════════════════
 
-df_inv      = leer_inventario()
-df_ventas   = leer_ventas_hoy()
-df_prod_hoy = leer_produccion_hoy()
+# Métricas — consultas rápidas
+_inv_data   = sb_get("inventario", "select=stock")
+_prod_data  = sb_get("produccion", f"select=cantidad&fecha=eq.{fecha_hoy()}")
+_venta_data = sb_get("ventas",     f"select=total&fecha=eq.{fecha_hoy()}")
 
-total_bolsas_inv = int(df_inv["stock"].sum()) if not df_inv.empty else 0
-total_prod_hoy   = int(df_prod_hoy["cantidad"].sum()) if not df_prod_hoy.empty else 0
-total_ventas_hoy = int(df_ventas["total"].sum()) if not df_ventas.empty else 0
+total_bolsas_inv = sum(r["stock"] for r in _inv_data)      if _inv_data  else 0
+total_prod_hoy   = sum(r["cantidad"] for r in _prod_data)  if _prod_data else 0
+total_ventas_hoy = sum(r["total"] for r in _venta_data)    if _venta_data else 0
 
 st.markdown(f"""
 <div class="metric-row">
@@ -375,7 +376,8 @@ with tab1:
     sabor_p    = st.selectbox("Sabor producido", list(PRODUCTOS.keys()), key="sabor_p")
     cantidad_p = st.number_input("Bolsas producidas", min_value=1, max_value=5000, value=50, step=10, key="cant_p")
 
-    stock_act = int(df_inv[df_inv["sabor"]==sabor_p]["stock"].values[0]) if not df_inv.empty and sabor_p in df_inv["sabor"].values else 0
+    _st = sb_get("inventario", f"select=stock&sabor=eq.{requests.utils.quote(sabor_p)}")
+    stock_act = int(_st[0]["stock"]) if _st else 0
     st.markdown(f'<div class="info-box">📦 Stock actual de <b>{sabor_p}</b>: {stock_act} bolsas → quedará en <b>{stock_act + cantidad_p}</b></div>', unsafe_allow_html=True)
 
     if st.button("✅ Registrar producción", key="btn_prod"):
@@ -387,24 +389,31 @@ with tab1:
         st.markdown('<div class="success-toast">✅ ¡Producción registrada!</div>', unsafe_allow_html=True)
         st.session_state.ok_prod = False
 
+    # Leer datos frescos siempre
     df_ph = leer_produccion_hoy()
-    if not df_ph.empty:
-        st.markdown('<div class="section-label">Producción de hoy</div>', unsafe_allow_html=True)
-        vista = df_ph[["hora","empleado","sabor","cantidad"]].copy()
-        vista.columns = ["Hora","Empleado","Sabor","Bolsas"]
+    st.markdown('<div class="section-label">Producción de hoy</div>', unsafe_allow_html=True)
+    if not df_ph.empty and len(df_ph) > 0:
+        cols = [c for c in ["hora","empleado","sabor","cantidad"] if c in df_ph.columns]
+        vista = df_ph[cols].copy()
+        vista.columns = ["Hora","Empleado","Sabor","Bolsas"][:len(cols)]
         st.dataframe(vista, use_container_width=True, hide_index=True)
+    else:
+        st.caption("Aún no hay producción registrada hoy.")
 
     st.markdown('<div class="section-label">Inventario actual</div>', unsafe_allow_html=True)
     df_inv2 = leer_inventario()
-    if not df_inv2.empty:
+    if not df_inv2.empty and len(df_inv2) > 0:
         df_inv2["Precio"] = df_inv2["precio"].apply(fmt)
         df_inv2["Estado"] = df_inv2["stock"].apply(lambda x: "🔴 Agotado" if x==0 else ("🟡 Poco" if x<10 else "🟢 OK"))
         st.dataframe(df_inv2[["sabor","stock","Precio","Estado"]].rename(columns={"sabor":"Sabor","stock":"Bolsas"}), use_container_width=True, hide_index=True)
+    else:
+        st.caption("Cargando inventario...")
 
     st.markdown('<div class="section-label">Ajustar stock manualmente</div>', unsafe_allow_html=True)
     st.caption("Úsalo si necesitas corregir algún conteo.")
     sabor_adj = st.selectbox("Sabor a ajustar", list(PRODUCTOS.keys()), key="sabor_adj")
-    stock_adj = int(df_inv2[df_inv2["sabor"]==sabor_adj]["stock"].values[0]) if not df_inv2.empty and sabor_adj in df_inv2["sabor"].values else 0
+    _st_adj = sb_get("inventario", f"select=stock&sabor=eq.{requests.utils.quote(sabor_adj)}")
+    stock_adj = int(_st_adj[0]["stock"]) if _st_adj else 0
     nuevo_stock = st.number_input("Stock real (bolsas)", min_value=0, value=stock_adj, step=1, key="nuevo_s")
     if st.button("💾 Guardar ajuste", key="btn_adj"):
         set_stock(sabor_adj, nuevo_stock)
@@ -426,7 +435,8 @@ with tab2:
         st.caption("Registra lo que llevan Javier y Edison en este viaje.")
         sabor_cg = st.selectbox("Sabor", list(PRODUCTOS.keys()), key="sabor_cg")
         cant_cg  = st.number_input("Bolsas a cargar", min_value=1, max_value=500, value=10, step=5, key="cant_cg")
-        stock_disp = int(df_inv[df_inv["sabor"]==sabor_cg]["stock"].values[0]) if not df_inv.empty and sabor_cg in df_inv["sabor"].values else 0
+        _st2 = sb_get("inventario", f"select=stock&sabor=eq.{requests.utils.quote(sabor_cg)}")
+        stock_disp = int(_st2[0]["stock"]) if _st2 else 0
 
         if stock_disp < cant_cg:
             st.markdown(f'<div class="alert-low">⚠️ Solo hay {stock_disp} bolsas de {sabor_cg}.</div>', unsafe_allow_html=True)
@@ -499,7 +509,8 @@ with tab3:
     vendedor_f = st.selectbox("Vendedor", VENDEDORES_FABRICA, key="vend_f")
     sabor_vf   = st.selectbox("Sabor vendido", list(PRODUCTOS.keys()), key="sabor_vf")
     cant_vf    = st.number_input("Bolsas vendidas", min_value=1, max_value=500, value=1, step=1, key="cant_vf")
-    stock_vf   = int(df_inv[df_inv["sabor"]==sabor_vf]["stock"].values[0]) if not df_inv.empty and sabor_vf in df_inv["sabor"].values else 0
+    _st3 = sb_get("inventario", f"select=stock&sabor=eq.{requests.utils.quote(sabor_vf)}")
+    stock_vf = int(_st3[0]["stock"]) if _st3 else 0
 
     if stock_vf < cant_vf:
         st.markdown(f'<div class="alert-low">⚠️ Solo hay {stock_vf} bolsas de {sabor_vf}.</div>', unsafe_allow_html=True)
