@@ -27,7 +27,7 @@ st.set_page_config(
 # ══════════════════════════════════════════════════════════════════════════════
 
 SUPABASE_URL = "https://duhsskisgksyozjdrusl.supabase.co"
-SUPABASE_KEY = "sb_secret_QKOcoVci5A8z5DTFccYJuQ_kLl8-Ur5"
+SUPABASE_KEY = "sb_publishable_ChRLE6JchVDz1lW6ExRCDA_ibizrTGU"
 HEADERS = {
     "apikey": SUPABASE_KEY,
     "Authorization": f"Bearer {SUPABASE_KEY}",
