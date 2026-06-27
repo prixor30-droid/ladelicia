@@ -261,7 +261,6 @@ label,.stSelectbox label,.stNumberInput label,.stDateInput label{color:#F48FB1 !
 [data-testid="stMetricLabel"] p{color:rgba(255,255,255,0.45) !important;}
 [data-testid="stMetricValue"]{color:#F5E6EE !important;}
 .stDataFrame{border-radius:12px;overflow:hidden;font-size:0.83rem;border:1px solid #4A1535 !important;}
-[data-testid="stDataFrame"] *{background-color:#2A1020 !important;color:#F5E6EE !important;border-color:#4A1535 !important;}
 .stCaption,small{color:rgba(255,255,255,0.4) !important;}
 .stAlert{background:#2A1020 !important;color:#F5E6EE !important;border-color:#4A1535 !important;}
 </style>
