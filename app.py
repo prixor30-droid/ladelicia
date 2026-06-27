@@ -187,6 +187,28 @@ def guardar_venta(canal, vendedor, sabor, cantidad):
     if canal == "Fábrica":
         restar_stock(sabor, cantidad)
 
+def guardar_venta_fabrica(cliente, vendedor, items):
+    """Guarda todos los items de una venta como una sola factura."""
+    import uuid
+    factura_id = str(uuid.uuid4())[:8].upper()
+    for sabor, cantidad in items.items():
+        if cantidad > 0:
+            precio = PRODUCTOS[sabor]
+            total  = precio * cantidad
+            sb_post("ventas", {
+                "fecha":      fecha_hoy(),
+                "hora":       ahora(),
+                "canal":      "Fábrica",
+                "vendedor":   vendedor,
+                "sabor":      sabor,
+                "cantidad":   cantidad,
+                "total":      total,
+                "cliente":    cliente,
+                "factura_id": factura_id
+            })
+            restar_stock(sabor, cantidad)
+    return factura_id
+
 def guardar_devolucion(sabor, cantidad):
     sb_post("devoluciones", {
         "fecha": fecha_hoy(),
@@ -213,7 +235,7 @@ def get_logo_b64():
 
 logo_b64 = get_logo_b64()
 logo_html = (
-    f'<img src="data:image/png;base64,{logo_b64}" style="height:350px;object-fit:contain;margin-bottom:6px;">'
+    f'<img src="data:image/png;base64,{logo_b64}" style="height:90px;object-fit:contain;margin-bottom:6px;">'
     if logo_b64 else "🍟"
 )
 
@@ -281,6 +303,11 @@ if "limpieza" not in st.session_state:
 for k in ["ok_prod","ok_cargue","ok_venta_fab","ok_venta_carro","ok_dev","ok_stock","es_admin"]:
     if k not in st.session_state:
         st.session_state[k] = False
+
+if "carrito" not in st.session_state:
+    st.session_state.carrito = {}  # {sabor: cantidad}
+if "factura_guardada" not in st.session_state:
+    st.session_state.factura_guardada = None
 
 # ══════════════════════════════════════════════════════════════════════════════
 # LOGIN
@@ -503,37 +530,81 @@ with tab2:
 # TAB 3 · FÁBRICA
 # ─────────────────────────────────────────────────────────────────────────────
 with tab3:
-    st.markdown('<div class="section-label">Venta en fábrica 🏭</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-label">Nueva venta 🏭</div>', unsafe_allow_html=True)
+
     vendedor_f = st.selectbox("Vendedor", VENDEDORES_FABRICA, key="vend_f")
-    sabor_vf   = st.selectbox("Sabor vendido", list(PRODUCTOS.keys()), key="sabor_vf")
-    cant_vf    = st.number_input("Bolsas vendidas", min_value=1, max_value=500, value=1, step=1, key="cant_vf")
+    cliente_f  = st.text_input("Nombre del cliente", placeholder="Ej: Tienda Don Carlos", key="cliente_f")
+
+    st.markdown('<div class="section-label">Agregar productos al carrito</div>', unsafe_allow_html=True)
+
+    col_s, col_c = st.columns([2,1])
+    sabor_vf = col_s.selectbox("Sabor", list(PRODUCTOS.keys()), key="sabor_vf")
+    cant_vf  = col_c.number_input("Bolsas", min_value=1, max_value=500, value=1, step=1, key="cant_vf")
+
     _st3 = sb_get("inventario", f"select=stock&sabor=eq.{requests.utils.quote(sabor_vf)}")
     stock_vf = int(_st3[0]["stock"]) if _st3 else 0
 
     if stock_vf < cant_vf:
         st.markdown(f'<div class="alert-low">⚠️ Solo hay {stock_vf} bolsas de {sabor_vf}.</div>', unsafe_allow_html=True)
-    else:
-        st.markdown(f'<div class="info-box">💰 Total: <b>{fmt(PRODUCTOS[sabor_vf] * cant_vf)}</b> · Stock restante: <b>{stock_vf - cant_vf}</b></div>', unsafe_allow_html=True)
 
-    if st.button("💵 Registrar venta fábrica", key="btn_vf", disabled=(stock_vf < cant_vf)):
-        guardar_venta("Fábrica", vendedor_f, sabor_vf, cant_vf)
-        st.session_state.ok_venta_fab = True
-        time.sleep(1)
+    col_add, col_clear = st.columns(2)
+    if col_add.button("➕ Agregar al carrito", key="btn_add", disabled=(stock_vf < cant_vf)):
+        st.session_state.carrito[sabor_vf] = st.session_state.carrito.get(sabor_vf, 0) + cant_vf
         st.rerun()
 
-    if st.session_state.ok_venta_fab:
-        st.markdown('<div class="success-toast">✅ Venta registrada.</div>', unsafe_allow_html=True)
+    if col_clear.button("🗑️ Vaciar carrito", key="btn_clear"):
+        st.session_state.carrito = {}
+        st.rerun()
+
+    # Mostrar carrito
+    if st.session_state.carrito:
+        st.markdown('<div class="section-label">Carrito actual</div>', unsafe_allow_html=True)
+        total_factura = 0
+        filas = []
+        for s, c in st.session_state.carrito.items():
+            subtotal = PRODUCTOS[s] * c
+            total_factura += subtotal
+            filas.append({"Sabor": s, "Bolsas": c, "Precio unit.": fmt(PRODUCTOS[s]), "Subtotal": fmt(subtotal)})
+        st.dataframe(pd.DataFrame(filas), use_container_width=True, hide_index=True)
+        st.markdown(f'<div class="info-box">💰 <b>Total a cobrar: {fmt(total_factura)}</b></div>', unsafe_allow_html=True)
+
+        if st.button("✅ Confirmar venta", key="btn_vf"):
+            if not cliente_f.strip():
+                st.markdown('<div class="alert-low">⚠️ Escribe el nombre del cliente antes de confirmar.</div>', unsafe_allow_html=True)
+            else:
+                fid = guardar_venta_fabrica(cliente_f.strip(), vendedor_f, st.session_state.carrito)
+                st.session_state.factura_guardada = {
+                    "id": fid,
+                    "cliente": cliente_f.strip(),
+                    "vendedor": vendedor_f,
+                    "items": dict(st.session_state.carrito),
+                    "total": total_factura
+                }
+                st.session_state.carrito = {}
+                st.session_state.ok_venta_fab = True
+                time.sleep(1)
+                st.rerun()
+
+    # Mostrar factura
+    if st.session_state.ok_venta_fab and st.session_state.factura_guardada:
+        fac = st.session_state.factura_guardada
+        st.markdown(f"""
+        <div class="success-toast">
+            ✅ Venta registrada — Factura <b>#{fac['id']}</b><br>
+            Cliente: <b>{fac['cliente']}</b> · Vendedor: <b>{fac['vendedor']}</b><br>
+            Total: <b>{fmt(fac['total'])}</b>
+        </div>
+        """, unsafe_allow_html=True)
         st.session_state.ok_venta_fab = False
 
-    df_vh2 = leer_ventas_hoy()
-    if not df_vh2.empty:
-        df_vf = df_vh2[df_vh2["canal"]=="Fábrica"]
-        if not df_vf.empty:
-            st.markdown('<div class="section-label">Ventas fábrica hoy</div>', unsafe_allow_html=True)
-            vista_vf = df_vf[["hora","vendedor","sabor","cantidad","total"]].copy()
-            vista_vf["total"] = vista_vf["total"].apply(fmt)
-            vista_vf.columns = ["Hora","Vendedor","Sabor","Bolsas","Total $"]
-            st.dataframe(vista_vf, use_container_width=True, hide_index=True)
+    # Historial del día
+    raw_vf = sb_get("ventas", f"select=hora,cliente,vendedor,sabor,cantidad,total,factura_id&fecha=eq.{fecha_hoy()}&canal=eq.Fábrica&order=hora.desc")
+    if raw_vf:
+        st.markdown('<div class="section-label">Ventas fábrica hoy</div>', unsafe_allow_html=True)
+        df_vf = pd.DataFrame(raw_vf)
+        df_vf["total"] = df_vf["total"].apply(fmt)
+        df_vf.columns = ["Hora","Cliente","Vendedor","Sabor","Bolsas","Total $","Factura"]
+        st.dataframe(df_vf, use_container_width=True, hide_index=True)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # TAB 4 · RESUMEN (solo admin)
