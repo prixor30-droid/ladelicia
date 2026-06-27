@@ -389,23 +389,22 @@ with tab1:
         st.markdown('<div class="success-toast">✅ ¡Producción registrada!</div>', unsafe_allow_html=True)
         st.session_state.ok_prod = False
 
-    # Leer datos frescos siempre
-    df_ph = leer_produccion_hoy()
+    # Leer datos frescos directamente desde Supabase
+    raw_prod = sb_get("produccion", f"select=hora,empleado,sabor,cantidad&fecha=eq.{fecha_hoy()}&order=hora.desc")
     st.markdown('<div class="section-label">Producción de hoy</div>', unsafe_allow_html=True)
-    if not df_ph.empty and len(df_ph) > 0:
-        cols = [c for c in ["hora","empleado","sabor","cantidad"] if c in df_ph.columns]
-        vista = df_ph[cols].copy()
-        vista.columns = ["Hora","Empleado","Sabor","Bolsas"][:len(cols)]
-        st.dataframe(vista, use_container_width=True, hide_index=True)
+    if raw_prod:
+        st.dataframe(pd.DataFrame(raw_prod), use_container_width=True, hide_index=True)
     else:
         st.caption("Aún no hay producción registrada hoy.")
 
+    raw_inv = sb_get("inventario", "select=sabor,stock,precio&order=sabor.asc")
     st.markdown('<div class="section-label">Inventario actual</div>', unsafe_allow_html=True)
-    df_inv2 = leer_inventario()
-    if not df_inv2.empty and len(df_inv2) > 0:
-        df_inv2["Precio"] = df_inv2["precio"].apply(fmt)
-        df_inv2["Estado"] = df_inv2["stock"].apply(lambda x: "🔴 Agotado" if x==0 else ("🟡 Poco" if x<10 else "🟢 OK"))
-        st.dataframe(df_inv2[["sabor","stock","Precio","Estado"]].rename(columns={"sabor":"Sabor","stock":"Bolsas"}), use_container_width=True, hide_index=True)
+    if raw_inv:
+        df_show = pd.DataFrame(raw_inv)
+        df_show["precio"] = df_show["precio"].apply(fmt)
+        df_show["estado"] = df_show["stock"].apply(lambda x: "🔴 Agotado" if x==0 else ("🟡 Poco" if x<10 else "🟢 OK"))
+        df_show.columns = ["Sabor","Bolsas","Precio","Estado"]
+        st.dataframe(df_show, use_container_width=True, hide_index=True)
     else:
         st.caption("Cargando inventario...")
 
