@@ -613,7 +613,7 @@ with tab3:
 # ─────────────────────────────────────────────────────────────────────────────
 if tab4 is not None:
     with tab4:
-        sub_r1, sub_r2 = st.tabs(["Hoy", "Por fechas"])
+        sub_r1, sub_r2, sub_r3 = st.tabs(["Hoy", "Por fechas", "💾 Exportar"])
 
         with sub_r1:
             st.markdown('<div class="section-label">Resumen del día</div>', unsafe_allow_html=True)
@@ -671,3 +671,58 @@ if tab4 is not None:
                 por_canal["total"] = por_canal["total"].apply(fmt)
                 por_canal.columns  = ["Canal","Bolsas","Total $"]
                 st.dataframe(por_canal, use_container_width=True, hide_index=True)
+
+        with sub_r3:
+            st.markdown('<div class="section-label">Exportar datos</div>', unsafe_allow_html=True)
+            st.caption("Descarga los datos para guardar como respaldo en tu PC o Google Drive.")
+
+            col_e1, col_e2 = st.columns(2)
+            f_exp_ini = col_e1.date_input("Desde", value=date(datetime.now(COL_TZ).year, datetime.now(COL_TZ).month, 1), key="f_exp_ini")
+            f_exp_fin = col_e2.date_input("Hasta", value=datetime.now(COL_TZ).date(), key="f_exp_fin")
+
+            if st.button("📥 Descargar ventas (CSV)", key="btn_exp_ventas"):
+                raw_exp = sb_get("ventas", f"select=*&fecha=gte.{f_exp_ini}&fecha=lte.{f_exp_fin}&order=fecha.asc,hora.asc")
+                if raw_exp:
+                    df_exp = pd.DataFrame(raw_exp)
+                    csv = df_exp.to_csv(index=False).encode("utf-8")
+                    st.download_button(
+                        label="⬇️ Guardar archivo de ventas",
+                        data=csv,
+                        file_name=f"ventas_{f_exp_ini}_{f_exp_fin}.csv",
+                        mime="text/csv",
+                        key="dl_ventas"
+                    )
+                else:
+                    st.info("No hay ventas en ese rango.")
+
+            if st.button("📥 Descargar producción (CSV)", key="btn_exp_prod"):
+                raw_exp2 = sb_get("produccion", f"select=*&fecha=gte.{f_exp_ini}&fecha=lte.{f_exp_fin}&order=fecha.asc,hora.asc")
+                if raw_exp2:
+                    df_exp2 = pd.DataFrame(raw_exp2)
+                    csv2 = df_exp2.to_csv(index=False).encode("utf-8")
+                    st.download_button(
+                        label="⬇️ Guardar archivo de producción",
+                        data=csv2,
+                        file_name=f"produccion_{f_exp_ini}_{f_exp_fin}.csv",
+                        mime="text/csv",
+                        key="dl_prod"
+                    )
+                else:
+                    st.info("No hay producción en ese rango.")
+
+            if st.button("📥 Descargar inventario actual (CSV)", key="btn_exp_inv"):
+                raw_exp3 = sb_get("inventario", "select=*&order=sabor.asc")
+                if raw_exp3:
+                    df_exp3 = pd.DataFrame(raw_exp3)
+                    csv3 = df_exp3.to_csv(index=False).encode("utf-8")
+                    st.download_button(
+                        label="⬇️ Guardar inventario",
+                        data=csv3,
+                        file_name=f"inventario_{fecha_hoy()}.csv",
+                        mime="text/csv",
+                        key="dl_inv"
+                    )
+                else:
+                    st.info("Inventario vacío.")
+
+            st.markdown('<div class="warn-box">💡 Guarda estos archivos en Google Drive o en tu PC como respaldo semanal.</div>', unsafe_allow_html=True)
