@@ -213,7 +213,7 @@ def get_logo_b64():
 
 logo_b64 = get_logo_b64()
 logo_html = (
-    f'<img src="data:image/png;base64,{logo_b64}" style="height:150px;object-fit:contain;margin-bottom:6px;">'
+    f'<img src="data:image/png;base64,{logo_b64}" style="height:350px;object-fit:contain;margin-bottom:6px;">'
     if logo_b64 else "🍟"
 )
 
