@@ -392,13 +392,15 @@ with tab1:
     # Leer datos frescos directamente desde Supabase
     raw_prod = sb_get("produccion", f"select=hora,empleado,sabor,cantidad&fecha=eq.{fecha_hoy()}&order=hora.desc")
     st.markdown('<div class="section-label">Producción de hoy</div>', unsafe_allow_html=True)
+    st.caption(f"DEBUG fecha: {fecha_hoy()} — registros: {len(raw_prod) if raw_prod else 0}")
     if raw_prod:
         st.dataframe(pd.DataFrame(raw_prod), use_container_width=True, hide_index=True)
     else:
-        st.caption("Aún no hay producción registrada hoy.")
+        st.caption(f"Sin datos — respuesta: {raw_prod}")
 
     raw_inv = sb_get("inventario", "select=sabor,stock,precio&order=sabor.asc")
     st.markdown('<div class="section-label">Inventario actual</div>', unsafe_allow_html=True)
+    st.caption(f"DEBUG: {len(raw_inv) if raw_inv else 0} registros recibidos")
     if raw_inv:
         df_show = pd.DataFrame(raw_inv)
         df_show["precio"] = df_show["precio"].apply(fmt)
@@ -406,7 +408,7 @@ with tab1:
         df_show.columns = ["Sabor","Bolsas","Precio","Estado"]
         st.dataframe(df_show, use_container_width=True, hide_index=True)
     else:
-        st.caption("Cargando inventario...")
+        st.caption(f"Sin datos — respuesta: {raw_inv}")
 
     st.markdown('<div class="section-label">Ajustar stock manualmente</div>', unsafe_allow_html=True)
     st.caption("Úsalo si necesitas corregir algún conteo.")
