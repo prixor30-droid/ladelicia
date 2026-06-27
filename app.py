@@ -543,12 +543,14 @@ with tab3:
 
     _st3 = sb_get("inventario", f"select=stock&sabor=eq.{requests.utils.quote(sabor_vf)}")
     stock_vf = int(_st3[0]["stock"]) if _st3 else 0
+    en_carrito = st.session_state.carrito.get(sabor_vf, 0)
+    disponible = stock_vf - en_carrito
 
-    if stock_vf < cant_vf:
-        st.markdown(f'<div class="alert-low">⚠️ Solo hay {stock_vf} bolsas de {sabor_vf}.</div>', unsafe_allow_html=True)
+    if disponible < cant_vf:
+        st.markdown(f'<div class="alert-low">⚠️ Solo hay {disponible} bolsas disponibles de {sabor_vf} ({en_carrito} ya en carrito).</div>', unsafe_allow_html=True)
 
     col_add, col_clear = st.columns(2)
-    if col_add.button("➕ Agregar al carrito", key="btn_add", disabled=(stock_vf < cant_vf)):
+    if col_add.button("➕ Agregar al carrito", key="btn_add", disabled=(disponible < cant_vf)):
         st.session_state.carrito[sabor_vf] = st.session_state.carrito.get(sabor_vf, 0) + cant_vf
         st.rerun()
 
