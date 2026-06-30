@@ -309,27 +309,42 @@ def init_inventario():
         for sabor, precio in PRODUCTOS.items():
             sb_post("inventario", {"sabor": sabor, "stock": 0, "precio": precio})
 
+@st.cache_data(ttl=15)
+def get_inventario_completo():
+    """Trae todo el inventario de una sola vez, cacheado 15 segundos."""
+    data = sb_get("inventario", "select=sabor,stock,precio")
+    return {r["sabor"]: r["stock"] for r in data} if data else {}
+
 def get_stock(sabor):
+    inv = get_inventario_completo()
+    if sabor in inv:
+        return inv[sabor]
     q = requests.utils.quote(sabor)
     r = sb_get("inventario", f"select=stock&sabor=eq.{q}")
     return int(r[0]["stock"]) if r else 0
 
 def agregar_stock(sabor, cantidad):
     q = requests.utils.quote(sabor)
-    stock = get_stock(sabor)
+    r = sb_get("inventario", f"select=stock&sabor=eq.{q}")
+    stock = int(r[0]["stock"]) if r else 0
     sb_patch("inventario", f"sabor=eq.{q}", {"stock": stock + cantidad})
+    get_inventario_completo.clear()
 
 def restar_stock(sabor, cantidad):
     q = requests.utils.quote(sabor)
-    stock = get_stock(sabor)
+    r = sb_get("inventario", f"select=stock&sabor=eq.{q}")
+    stock = int(r[0]["stock"]) if r else 0
     sb_patch("inventario", f"sabor=eq.{q}", {"stock": max(0, stock - cantidad)})
+    get_inventario_completo.clear()
 
 def set_stock(sabor, cantidad):
     q = requests.utils.quote(sabor)
     sb_patch("inventario", f"sabor=eq.{q}", {"stock": cantidad})
+    get_inventario_completo.clear()
 
+@st.cache_data(ttl=60)
 def sabores_por_frecuencia(canal=None):
-    """Devuelve la lista de sabores ordenada: los más vendidos en los últimos 30 días primero."""
+    """Devuelve la lista de sabores ordenada: los más vendidos en los últimos 30 días primero. Cacheado 60s."""
     limite = (datetime.now(COL_TZ) - timedelta(days=30)).strftime("%Y-%m-%d")
     params = f"select=sabor,cantidad&fecha=gte.{limite}"
     if canal:
@@ -344,8 +359,9 @@ def sabores_por_frecuencia(canal=None):
     resto = [s for s in SABORES_LISTA if s not in conteo]
     return usados + resto
 
+@st.cache_data(ttl=60)
 def sabores_produccion_frecuente():
-    """Sabores ordenados por frecuencia de producción en los últimos 30 días."""
+    """Sabores ordenados por frecuencia de producción en los últimos 30 días. Cacheado 60s."""
     limite = (datetime.now(COL_TZ) - timedelta(days=30)).strftime("%Y-%m-%d")
     raw = sb_get("produccion", f"select=sabor,cantidad&fecha=gte.{limite}")
     if not raw:
@@ -579,9 +595,14 @@ st.markdown(f"""
 # ══════════════════════════════════════════════════════════════════════════════
 # MÉTRICAS
 # ══════════════════════════════════════════════════════════════════════════════
-_inv   = sb_get("inventario", "select=stock")
-_prod  = sb_get("produccion", f"select=cantidad&fecha=eq.{fecha_hoy()}")
-_venta = sb_get("ventas",     f"select=total&fecha=eq.{fecha_hoy()}")
+@st.cache_data(ttl=10)
+def get_metricas_globales(fecha):
+    _inv   = sb_get("inventario", "select=sabor,stock")
+    _prod  = sb_get("produccion", f"select=cantidad&fecha=eq.{fecha}")
+    _venta = sb_get("ventas",     f"select=total&fecha=eq.{fecha}")
+    return _inv, _prod, _venta
+
+_inv, _prod, _venta = get_metricas_globales(fecha_hoy())
 total_inv  = sum(r["stock"]    for r in _inv)   if _inv   else 0
 total_prod = sum(r["cantidad"] for r in _prod)  if _prod  else 0
 total_vta  = sum(r["total"]    for r in _venta) if _venta else 0
@@ -602,7 +623,7 @@ st.markdown(f"""
 # ══════════════════════════════════════════════════════════════════════════════
 # ALERTA GLOBAL DE STOCK BAJO — visible en TODAS las vistas
 # ══════════════════════════════════════════════════════════════════════════════
-raw_inv_global = sb_get("inventario", "select=sabor,stock")
+raw_inv_global = _inv
 if raw_inv_global:
     agotados = [r for r in raw_inv_global if r["stock"] == 0]
     bajos_global = [r for r in raw_inv_global if 0 < r["stock"] < STOCK_MINIMO]
@@ -713,8 +734,9 @@ elif st.session_state.vista == "produccion":
             "empleado": empleado, "sabor": sabor_p, "cantidad": cantidad_p
         })
         agregar_stock(sabor_p, cantidad_p)
+        get_metricas_globales.clear()
         st.session_state.ok_prod = True
-        time.sleep(1)
+        time.sleep(0.3)
         st.rerun()
 
     if st.session_state.ok_prod:
@@ -785,7 +807,7 @@ elif st.session_state.vista == "produccion":
 
                 if cambios:
                     sb_patch("produccion", f"id=eq.{orig['id']}", cambios)
-            time.sleep(1)
+            time.sleep(0.3)
             st.rerun()
 
         # Eliminar fila seleccionada
@@ -795,7 +817,7 @@ elif st.session_state.vista == "produccion":
             reg_del = ids_prod[sel_del]
             sb_delete("produccion", f"id=eq.{reg_del['id']}")
             restar_stock(reg_del["sabor"], reg_del["cantidad"])
-            time.sleep(1)
+            time.sleep(0.3)
             st.rerun()
     else:
         st.info(f"No hay producción registrada el {fecha_consulta_str}.")
@@ -818,7 +840,7 @@ elif st.session_state.vista == "produccion":
     if st.button("💾 Guardar ajuste", key="btn_adj"):
         set_stock(sabor_adj, nuevo_stock)
         st.session_state.ok_stock = True
-        time.sleep(1)
+        time.sleep(0.3)
         st.rerun()
     if st.session_state.ok_stock:
         st.markdown('<div class="success-toast">✅ Stock ajustado.</div>', unsafe_allow_html=True)
@@ -846,8 +868,9 @@ elif st.session_state.vista == "carro":
         if st.button("🚗 Registrar cargue", key="btn_cg", disabled=(stock_cg < cant_cg)):
             sb_post("cargues", {"fecha": fecha_hoy(), "hora": ahora(), "sabor": sabor_cg, "cantidad": cant_cg})
             restar_stock(sabor_cg, cant_cg)
+            get_metricas_globales.clear()
             st.session_state.ok_cargue = True
-            time.sleep(1)
+            time.sleep(0.3)
             st.rerun()
 
         if st.session_state.ok_cargue:
@@ -952,7 +975,8 @@ elif st.session_state.vista == "carro":
                 st.session_state.carrito_carro = {}
                 st.session_state.precios_carro = {}
                 st.session_state.ok_cargue = True
-                time.sleep(1)
+                get_metricas_globales.clear()
+                time.sleep(0.3)
                 st.rerun()
 
         if st.session_state.ok_cargue:
@@ -979,8 +1003,9 @@ elif st.session_state.vista == "carro":
         if st.button("🔄 Registrar devolución", key="btn_dev"):
             sb_post("devoluciones", {"fecha": str(fecha_dev), "sabor": sabor_dev, "cantidad": cant_dev})
             agregar_stock(sabor_dev, cant_dev)
+            get_metricas_globales.clear()
             st.session_state.ok_dev = True
-            time.sleep(1)
+            time.sleep(0.3)
             st.rerun()
 
         if st.session_state.ok_dev:
@@ -1107,7 +1132,8 @@ elif st.session_state.vista == "fabrica":
                 }
                 st.session_state.carrito = {}
                 st.session_state.precios_carrito = {}
-                time.sleep(1)
+                get_metricas_globales.clear()
+                time.sleep(0.3)
                 st.rerun()
 
     # Mostrar factura confirmada
@@ -1154,7 +1180,7 @@ elif st.session_state.vista == "fabrica":
             })
             restar_stock(sabor_in, cant_cambio)
             st.markdown(f'<div class="success-toast">✅ Cambio registrado: {cant_cambio} {sabor_out} → {cant_cambio} {sabor_in}</div>', unsafe_allow_html=True)
-            time.sleep(1)
+            time.sleep(0.3)
             st.rerun()
 
         if st.button("🧾 Nueva venta", key="btn_nueva"):
