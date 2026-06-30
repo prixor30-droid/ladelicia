@@ -13,7 +13,7 @@ COL_TZ = timezone(timedelta(hours=-5))
 def fecha_hoy():
     return datetime.now(COL_TZ).strftime("%Y-%m-%d")
 def ahora():
-    return datetime.now(COL_TZ).strftime("%H:%M")
+    return datetime.now(COL_TZ).strftime("%I:%M %p").lstrip("0")
 
 st.set_page_config(
     page_title="Productos La Delicia",
@@ -373,22 +373,25 @@ elif st.session_state.vista == "produccion":
         st.markdown('<div class="success-toast">✅ ¡Producción registrada!</div>', unsafe_allow_html=True)
         st.session_state.ok_prod = False
 
-    # Producción de hoy — tabla editable
-    raw_prod = sb_get("produccion", f"select=id,hora,empleado,sabor,cantidad&fecha=eq.{fecha_hoy()}&order=hora.desc")
+    # Producción de hoy — tabla totalmente editable
+    raw_prod = sb_get("produccion", f"select=id,fecha,hora,empleado,sabor,cantidad&fecha=eq.{fecha_hoy()}&order=hora.desc")
     if raw_prod:
         st.markdown('<div class="section-label">Producción de hoy</div>', unsafe_allow_html=True)
-        st.caption("Toca una celda de Bolsas para editar directamente.")
+        st.caption("Toca cualquier celda para editar. Luego presiona Guardar cambios.")
         df_prod = pd.DataFrame(raw_prod)
-        df_edit = df_prod[["hora","empleado","sabor","cantidad"]].copy()
-        df_edit.columns = ["Hora","Empleado","Sabor","Bolsas"]
+        df_edit = df_prod[["fecha","hora","empleado","sabor","cantidad"]].copy()
+        df_edit.columns = ["Fecha","Hora","Empleado","Sabor","Bolsas"]
 
         edited = st.data_editor(
             df_edit,
             use_container_width=True,
             hide_index=True,
-            disabled=["Hora","Empleado","Sabor"],
             column_config={
-                "Bolsas": st.column_config.NumberColumn("Bolsas", min_value=0, step=1)
+                "Fecha":    st.column_config.TextColumn("Fecha"),
+                "Hora":     st.column_config.TextColumn("Hora"),
+                "Empleado": st.column_config.SelectboxColumn("Empleado", options=EMPLEADOS),
+                "Sabor":    st.column_config.SelectboxColumn("Sabor", options=SABORES_LISTA),
+                "Bolsas":   st.column_config.NumberColumn("Bolsas", min_value=0, step=1),
             },
             key="prod_editor"
         )
@@ -398,19 +401,37 @@ elif st.session_state.vista == "produccion":
         if col_g.button("💾 Guardar cambios", key="btn_save_prod"):
             for i, row in edited.iterrows():
                 orig = df_prod.iloc[i]
-                nueva_cant = int(row["Bolsas"])
-                if nueva_cant != orig["cantidad"]:
-                    diff = nueva_cant - orig["cantidad"]
-                    sb_patch("produccion", f"id=eq.{orig['id']}", {"cantidad": nueva_cant})
+                cambios = {}
+                diff_stock = 0
+                sabor_para_stock = orig["sabor"]
+
+                if row["Fecha"] != orig["fecha"]:
+                    cambios["fecha"] = row["Fecha"]
+                if row["Hora"] != orig["hora"]:
+                    cambios["hora"] = row["Hora"]
+                if row["Empleado"] != orig["empleado"]:
+                    cambios["empleado"] = row["Empleado"]
+                if row["Sabor"] != orig["sabor"]:
+                    # Cambió el sabor: revertir stock del sabor viejo, aplicar al nuevo
+                    restar_stock(orig["sabor"], orig["cantidad"])
+                    agregar_stock(row["Sabor"], int(row["Bolsas"]))
+                    cambios["sabor"] = row["Sabor"]
+                    cambios["cantidad"] = int(row["Bolsas"])
+                elif int(row["Bolsas"]) != orig["cantidad"]:
+                    diff = int(row["Bolsas"]) - orig["cantidad"]
                     if diff > 0:
                         agregar_stock(orig["sabor"], diff)
                     elif diff < 0:
                         restar_stock(orig["sabor"], abs(diff))
+                    cambios["cantidad"] = int(row["Bolsas"])
+
+                if cambios:
+                    sb_patch("produccion", f"id=eq.{orig['id']}", cambios)
             time.sleep(1)
             st.rerun()
 
         # Eliminar fila seleccionada
-        ids_prod = {f"{r['hora']} — {r['sabor']} ({r['cantidad']} bolsas)": r for r in raw_prod}
+        ids_prod = {f"{r['fecha']} {r['hora']} — {r['sabor']} ({r['cantidad']} bolsas)": r for r in raw_prod}
         sel_del = st.selectbox("Eliminar registro", ["— Selecciona —"] + list(ids_prod.keys()), key="sel_del_prod")
         if sel_del != "— Selecciona —" and col_e.button("🗑️ Eliminar", key="btn_del_prod"):
             reg_del = ids_prod[sel_del]
