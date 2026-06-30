@@ -164,10 +164,10 @@ label,.stSelectbox label,.stNumberInput label,.stDateInput label,.stTextInput la
 .stTabs [data-baseweb="tab-list"]{background:#FAF0F5;border-radius:12px;padding:4px;gap:2px;border:1px solid #E5C5D5;margin-bottom:16px;}
 .stTabs [data-baseweb="tab"]{border-radius:10px;font-size:0.78rem;font-weight:600;padding:8px 4px;color:#7A2050 !important;flex:1;justify-content:center;background:transparent !important;}
 .stTabs [aria-selected="true"]{background-color:#D81B7A !important;color:white !important;}
-.brand-header{background:#FFFFFF;border:1.5px solid #E5C5D5;border-radius:20px;padding:22px 20px 16px;margin-bottom:16px;text-align:center;box-shadow:0 2px 12px rgba(216,27,122,0.08);}
+.brand-header{background:#FFFFFF;border-bottom:3px solid #D81B7A;border-radius:0;padding:18px 20px 16px;margin-bottom:16px;text-align:center;}
 .brand-header p{color:#9C4270;font-size:0.78rem;margin:0;}
 .metric-row{display:flex;gap:9px;margin-bottom:16px;}
-.metric-box{flex:1;background:#FAF0F5;border-radius:14px;padding:14px 8px;text-align:center;border:1px solid #E5C5D5;}
+.metric-box{flex:1;background:#FAF0F5;border-radius:10px;padding:14px 8px;text-align:center;border-left:3px solid #D81B7A;}
 .metric-box .val{font-size:1.2rem;font-weight:700;line-height:1.1;}
 .metric-box .lbl{font-size:0.65rem;color:#9C4270;margin-top:3px;}
 .metric-pink .val{color:#D81B7A;}.metric-green .val{color:#1B9E5A;}.metric-red .val{color:#D32F2F;}.metric-yellow .val{color:#E68900;}
@@ -178,7 +178,8 @@ label,.stSelectbox label,.stNumberInput label,.stDateInput label,.stTextInput la
 .section-label{font-size:0.69rem;font-weight:700;text-transform:uppercase;letter-spacing:0.7px;color:#B0185F;margin:16px 0 6px;}
 .stButton>button{width:100%;background:#D81B7A !important;color:white !important;-webkit-text-fill-color:white !important;border:none !important;border-radius:12px !important;padding:14px !important;font-size:1rem !important;font-weight:700 !important;cursor:pointer;margin-top:4px;box-shadow:0 4px 16px rgba(216,27,122,0.25);white-space:pre-line !important;line-height:1.4 !important;}
 .stButton>button:hover{opacity:0.88;}
-.menu-btn-wrap .stButton>button{min-height:84px !important;display:flex !important;flex-direction:column !important;justify-content:center !important;align-items:center !important;text-align:center !important;}
+.menu-btn-wrap .stButton>button{min-height:84px !important;display:flex !important;flex-direction:column !important;justify-content:center !important;align-items:center !important;text-align:center !important;background:#FAF0F5 !important;color:#1A0A12 !important;-webkit-text-fill-color:#1A0A12 !important;border-left:4px solid #D81B7A !important;border-radius:10px !important;box-shadow:none !important;}
+.menu-btn-wrap .stButton>button:hover{background:#F4DCE8 !important;opacity:1 !important;}
 [data-testid="stMetricLabel"] p{color:#9C4270 !important;}
 [data-testid="stMetricValue"]{color:#1A0A12 !important;}
 .stDataFrame{border-radius:12px;overflow:hidden;font-size:0.83rem;border:1px solid #E5C5D5;}
