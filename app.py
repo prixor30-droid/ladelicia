@@ -149,6 +149,8 @@ html,body,[class*="css"],.stApp{font-family:'Inter',sans-serif !important;backgr
 [data-testid="stNumberInputStepDown"],[data-testid="stNumberInputStepUp"]{background-color:#FCE4EC !important;color:#D81B7A !important;border:none !important;border-radius:7px !important;}
 [data-testid="stNumberInputStepDown"]:hover,[data-testid="stNumberInputStepUp"]:hover{background-color:#D81B7A !important;color:white !important;}
 [data-baseweb="select"]>div,[data-baseweb="base-input"]{border-radius:10px !important;border:1.5px solid #E5C5D5 !important;}
+[data-baseweb="select"] input{caret-color:transparent !important;cursor:pointer !important;}
+[data-baseweb="select"] input:focus{caret-color:transparent !important;}
 [data-baseweb="select"]>div:focus-within,[data-baseweb="base-input"]:focus-within{border-color:#D81B7A !important;box-shadow:0 0 0 3px rgba(216,27,122,0.15) !important;}
 [data-baseweb="popover"],[data-baseweb="popover"] *,[data-baseweb="menu"],[data-baseweb="menu"] *,ul[data-testid="stSelectboxVirtualDropdown"],ul[data-testid="stSelectboxVirtualDropdown"] *{background-color:#FFFFFF !important;color:#1A0A12 !important;}
 [data-baseweb="menu"] li:hover,[role="option"]:hover,[aria-selected="true"][role="option"]{background-color:#FCE4EC !important;color:#D81B7A !important;}
@@ -192,6 +194,21 @@ label,.stSelectbox label,.stNumberInput label,.stDateInput label,.stTextInput la
 .main-btn-text{font-size:1.1rem;font-weight:700;color:#1A0A12;}
 .main-btn-sub{font-size:0.78rem;color:#9C4270;}
 </style>
+""", unsafe_allow_html=True)
+
+# Bloquear teclado virtual en los selectbox (solo permite tocar y elegir)
+st.markdown("""
+<script>
+function bloquearTecladoSelects() {
+    document.querySelectorAll('[data-baseweb="select"] input').forEach(function(inp) {
+        inp.setAttribute('inputmode', 'none');
+        inp.setAttribute('readonly', 'true');
+    });
+}
+const obs = new MutationObserver(bloquearTecladoSelects);
+obs.observe(document.body, {childList: true, subtree: true});
+bloquearTecladoSelects();
+</script>
 """, unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
