@@ -459,14 +459,31 @@ label,.stSelectbox label,.stNumberInput label,.stDateInput label,.stTextInput la
 .section-label{font-size:0.69rem;font-weight:700;text-transform:uppercase;letter-spacing:0.7px;color:#B0185F;margin:16px 0 6px;}
 .stButton>button{width:100%;background:#D81B7A !important;color:white !important;-webkit-text-fill-color:white !important;border:none !important;border-radius:12px !important;padding:14px !important;font-size:1rem !important;font-weight:700 !important;cursor:pointer;margin-top:4px;box-shadow:0 4px 16px rgba(216,27,122,0.25);white-space:pre-line !important;line-height:1.4 !important;}
 .stButton>button:hover{opacity:0.88;}
-.menu-links-wrap{margin:0 -1rem;}
-.menu-link-btn{display:block;position:relative;overflow:hidden;background:linear-gradient(135deg,#FFFFFF,#FCEEF4);text-decoration:none;border-radius:18px;box-shadow:0 3px 12px rgba(216,27,122,0.18);padding:18px 20px;margin:0 1rem 12px 1rem;min-height:84px;box-sizing:border-box;}
-.menu-link-btn:hover{box-shadow:0 5px 16px rgba(216,27,122,0.25);}
-.menu-link-deco{position:absolute;top:-14px;right:-14px;width:64px;height:64px;background:rgba(216,27,122,0.08);border-radius:50%;}
-.menu-link-icon{font-size:1.7rem;display:block;margin-bottom:4px;}
-.menu-link-text{display:flex;flex-direction:column;text-align:left;position:relative;z-index:1;}
-.menu-link-titulo{font-size:1.05rem;font-weight:700;color:#1A0A12;}
-.menu-link-sub{font-size:0.8rem;color:#9C4270;margin-top:2px;}
+[data-testid="stButton-btn_produccion"] button,
+[data-testid="stButton-btn_carro"] button,
+[data-testid="stButton-btn_fabrica"] button,
+[data-testid="stButton-btn_resumen"] button{
+  background:linear-gradient(135deg,#FFFFFF,#FCEEF4) !important;
+  color:#1A0A12 !important;
+  -webkit-text-fill-color:#1A0A12 !important;
+  border:none !important;
+  border-radius:18px !important;
+  box-shadow:0 3px 12px rgba(216,27,122,0.18) !important;
+  min-height:90px !important;
+  padding:18px 20px !important;
+  font-size:1rem !important;
+  font-weight:700 !important;
+  white-space:pre-line !important;
+  line-height:1.5 !important;
+  text-align:left !important;
+}
+[data-testid="stButton-btn_produccion"] button:hover,
+[data-testid="stButton-btn_carro"] button:hover,
+[data-testid="stButton-btn_fabrica"] button:hover,
+[data-testid="stButton-btn_resumen"] button:hover{
+  box-shadow:0 5px 16px rgba(216,27,122,0.25) !important;
+  opacity:1 !important;
+}
 
 [data-testid="stMetricLabel"] p{color:#9C4270 !important;}
 [data-testid="stMetricValue"]{color:#1A0A12 !important;}
@@ -700,25 +717,11 @@ if st.session_state.vista == "menu":
     if st.session_state.es_admin:
         opciones.append(("resumen", "📊", "Resumen", "Ventas, facturas y exportar"))
 
-    # Detectar clic vía query param
-    qp = st.query_params
-    if "ir" in qp and qp["ir"] in [o[0] for o in opciones]:
-        st.session_state.vista = qp["ir"]
-        st.query_params.clear()
-        st.rerun()
-
-    botones_html = "".join(
-        f'<a href="?ir={vista}" target="_self" class="menu-link-btn">'
-        f'<span class="menu-link-deco"></span>'
-        f'<span class="menu-link-icon">{icon}</span>'
-        f'<span class="menu-link-text">'
-        f'<span class="menu-link-titulo">{titulo}</span>'
-        f'<span class="menu-link-sub">{sub}</span>'
-        f'</span></a>'
-        for vista, icon, titulo, sub in opciones
-    )
-
-    st.markdown(f'<div class="menu-links-wrap">{botones_html}</div>', unsafe_allow_html=True)
+    for vista, icon, titulo, sub in opciones:
+        with st.container():
+            if st.button(f"{icon}  {titulo}\n{sub}", key=f"btn_{vista}", use_container_width=True):
+                st.session_state.vista = vista
+                st.rerun()
 
 # ══════════════════════════════════════════════════════════════════════════════
 # VISTA: PRODUCCIÓN
