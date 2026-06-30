@@ -554,6 +554,7 @@ defaults = {
     "carrito_carro": {},
     "precios_carro": {},
     "factura_guardada": None,
+    "factura_carro_guardada": None,
     "ok_prod": False,
     "ok_cargue": False,
     "ok_dev": False,
@@ -958,7 +959,11 @@ elif st.session_state.vista == "carro":
                 st.rerun()
 
     with sub2:
-        st.markdown('<div class="section-label">Venta del carro</div>', unsafe_allow_html=True)
+        st.markdown('<div class="section-label">Nueva venta 🚗</div>', unsafe_allow_html=True)
+
+        cliente_vc = st.text_input("Nombre del cliente", placeholder="Ej: Tienda Don Carlos", key="cliente_vc")
+
+        st.markdown('<div class="section-label">Agregar al carrito</div>', unsafe_allow_html=True)
 
         col_s, col_c = st.columns([2, 1])
         sabor_vc = col_s.selectbox("Sabor", sabores_por_frecuencia("Carro"), key="sabor_vc")
@@ -1016,7 +1021,18 @@ elif st.session_state.vista == "carro":
                 st.rerun()
 
             total_cc = float((edited_cc["Cantidad"] * edited_cc["Precio"]).sum())
-            st.markdown(f'<div class="info-box">💰 Total: <b>{fmt(total_cc)}</b></div>', unsafe_allow_html=True)
+
+            # Billete y vuelto
+            st.markdown('<div class="section-label">Pago del cliente</div>', unsafe_allow_html=True)
+            billete_vc = st.number_input("Billete del cliente ($)", min_value=0, value=0,
+                                         step=1000, key="billete_vc")
+            if billete_vc > 0:
+                if billete_vc >= total_cc:
+                    st.markdown(f'<div class="info-box">💰 Total: <b>{fmt(total_cc)}</b> · Devolver: <b>{fmt(billete_vc - total_cc)}</b></div>', unsafe_allow_html=True)
+                else:
+                    st.markdown(f'<div class="alert-low">⚠️ Total: {fmt(total_cc)} · Falta: {fmt(total_cc - billete_vc)}</div>', unsafe_allow_html=True)
+            else:
+                st.markdown(f'<div class="info-box">💰 Total a cobrar: <b>{fmt(total_cc)}</b></div>', unsafe_allow_html=True)
 
             col_clr2, col_conf = st.columns(2)
             if col_clr2.button("🗑️ Vaciar carrito", key="btn_clr_cc"):
@@ -1025,34 +1041,61 @@ elif st.session_state.vista == "carro":
                 st.rerun()
 
             if col_conf.button("✅ Confirmar venta", key="btn_vc"):
-                for s, c in st.session_state.carrito_carro.items():
-                    precio_final = st.session_state.precios_carro.get(s, PRODUCTOS[s])
-                    sb_post("ventas", {
-                        "fecha": fecha_hoy(), "hora": ahora(), "canal": "Carro",
-                        "vendedor": "Javier & Edison", "sabor": s,
-                        "cantidad": c, "total": precio_final * c,
-                        "cliente": "", "factura_id": ""
-                    })
-                st.session_state.carrito_carro = {}
-                st.session_state.precios_carro = {}
-                st.session_state.ok_cargue = True
-                get_metricas_globales.clear()
-                time.sleep(0.3)
-                st.rerun()
+                if not cliente_vc.strip():
+                    st.markdown('<div class="alert-low">⚠️ Escribe el nombre del cliente.</div>', unsafe_allow_html=True)
+                else:
+                    fid_vc = str(uuid.uuid4())[:8].upper()
+                    for s, c in st.session_state.carrito_carro.items():
+                        precio_final = st.session_state.precios_carro.get(s, PRODUCTOS[s])
+                        sb_post("ventas", {
+                            "fecha": fecha_hoy(), "hora": ahora(), "canal": "Carro",
+                            "vendedor": "Javier & Edison", "sabor": s,
+                            "cantidad": c, "total": precio_final * c,
+                            "cliente": cliente_vc.strip(), "factura_id": fid_vc
+                        })
+                    st.session_state.factura_carro_guardada = {
+                        "id": fid_vc, "cliente": cliente_vc.strip(),
+                        "vendedor": "Javier & Edison",
+                        "items": dict(st.session_state.carrito_carro),
+                        "precios": dict(st.session_state.precios_carro),
+                        "total": total_cc,
+                        "billete": billete_vc
+                    }
+                    st.session_state.carrito_carro = {}
+                    st.session_state.precios_carro = {}
+                    get_metricas_globales.clear()
+                    time.sleep(0.3)
+                    st.rerun()
 
-        if st.session_state.ok_cargue:
-            st.markdown('<div class="success-toast">✅ Venta del carro registrada.</div>', unsafe_allow_html=True)
-            st.session_state.ok_cargue = False
+        # Mostrar factura confirmada
+        if st.session_state.factura_carro_guardada:
+            fac_vc = st.session_state.factura_carro_guardada
+            st.markdown(f"""
+            <div class="factura-box">
+                <div class="factura-header">🧾 Factura #{fac_vc['id']} — {fac_vc['cliente']}</div>
+                <div style="font-size:0.78rem;color:#9C4270;margin-bottom:8px;">Vendedor: {fac_vc['vendedor']} · {fecha_hoy()}</div>
+            """, unsafe_allow_html=True)
+            for s, c in fac_vc["items"].items():
+                precio = fac_vc["precios"].get(s, PRODUCTOS[s])
+                st.markdown(f'<div class="factura-row"><span>{s} × {c}</span><span>{fmt(precio*c)}</span></div>', unsafe_allow_html=True)
+            vuelto_vc = fac_vc["billete"] - fac_vc["total"] if fac_vc["billete"] > 0 else 0
+            st.markdown(f'<div class="factura-total"><span>TOTAL</span><span>{fmt(fac_vc["total"])}</span></div>', unsafe_allow_html=True)
+            if vuelto_vc > 0:
+                st.markdown(f'<div class="factura-cambio">💵 Devolver al cliente: <b>{fmt(vuelto_vc)}</b></div>', unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
+
+            if st.button("🧾 Nueva venta", key="btn_nueva_vc"):
+                st.session_state.factura_carro_guardada = None
+                st.rerun()
 
         # Solo admin ve ventas del carro
         if st.session_state.es_admin:
-            raw_vcv = sb_get("ventas", f"select=hora,sabor,cantidad,total&fecha=eq.{fecha_hoy()}&canal=eq.Carro&order=hora.desc")
-            if raw_vcv:
-                st.markdown('<div class="section-label">Ventas del carro hoy</div>', unsafe_allow_html=True)
-                df_vcv = pd.DataFrame(raw_vcv)
-                df_vcv["total"] = df_vcv["total"].apply(fmt)
-                df_vcv.columns = ["Hora","Sabor","Bolsas","Total $"]
-                st.dataframe(df_vcv, use_container_width=True, hide_index=True)
+            df_vt_carro = sb_get("ventas", f"select=hora,cliente,vendedor,sabor,cantidad,total,factura_id&fecha=eq.{fecha_hoy()}&canal=eq.Carro&order=hora.desc")
+            if df_vt_carro:
+                df_carro_v = pd.DataFrame(df_vt_carro)
+                st.markdown('<div class="section-label">Facturas del carro hoy</div>', unsafe_allow_html=True)
+                st.caption("Toca una fila para ver el recibo completo.")
+                mostrar_facturas_seleccionables(df_carro_v, "carro_hoy")
 
     with sub3:
         st.markdown('<div class="section-label">Devolución al inventario 🔄</div>', unsafe_allow_html=True)
@@ -1317,6 +1360,12 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
             if not df_fab.empty:
                 mostrar_facturas_seleccionables(df_fab, "hoy")
 
+            st.markdown('<div class="section-label">Facturas carro</div>', unsafe_allow_html=True)
+            st.caption("Toca una fila para ver el recibo completo.")
+            df_carro_resumen = df_vt[df_vt["canal"]=="Carro"]
+            if not df_carro_resumen.empty:
+                mostrar_facturas_seleccionables(df_carro_resumen, "hoy_carro")
+
     with sub_r2:
         st.markdown('<div class="section-label">Consultar por fechas</div>', unsafe_allow_html=True)
         col_a, col_b = st.columns(2)
@@ -1353,9 +1402,15 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
             # Facturas individuales del rango, en formato tabla
             df_fab_r = df_r[df_r["canal"]=="Fábrica"]
             if not df_fab_r.empty:
-                st.markdown('<div class="section-label">Facturas del rango</div>', unsafe_allow_html=True)
+                st.markdown('<div class="section-label">Facturas fábrica del rango</div>', unsafe_allow_html=True)
                 st.caption("Toca una fila para ver el recibo completo.")
                 mostrar_facturas_seleccionables(df_fab_r, "rango")
+
+            df_carro_r = df_r[df_r["canal"]=="Carro"]
+            if not df_carro_r.empty:
+                st.markdown('<div class="section-label">Facturas carro del rango</div>', unsafe_allow_html=True)
+                st.caption("Toca una fila para ver el recibo completo.")
+                mostrar_facturas_seleccionables(df_carro_r, "rango_carro")
 
     with sub_r3:
         st.markdown('<div class="section-label">Reporte del mes actual</div>', unsafe_allow_html=True)
