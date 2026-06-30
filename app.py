@@ -3,12 +3,11 @@ import pandas as pd
 import base64
 import hashlib
 import requests
-import json
 import time
+import uuid
 from pathlib import Path
 from datetime import date, datetime, timezone, timedelta
 
-# Zona horaria Colombia (UTC-5)
 COL_TZ = timezone(timedelta(hours=-5))
 def fecha_hoy():
     return datetime.now(COL_TZ).strftime("%Y-%m-%d")
@@ -23,9 +22,8 @@ st.set_page_config(
 )
 
 # ══════════════════════════════════════════════════════════════════════════════
-# SUPABASE CONFIG
+# SUPABASE
 # ══════════════════════════════════════════════════════════════════════════════
-
 SUPABASE_URL = "https://duhsskisgksyozjdrusl.supabase.co"
 SUPABASE_KEY = "sb_publishable_ChRLE6JchVDz1lW6ExRCDA_ibizrTGU"
 HEADERS = {
@@ -41,288 +39,200 @@ def sb_get(tabla, params=""):
         url += f"?{params}"
     try:
         r = requests.get(url, headers=HEADERS, timeout=10)
-        if r.ok:
-            return r.json()
-        return []
+        return r.json() if r.ok else []
     except:
         return []
 
 def sb_post(tabla, data):
-    r = requests.post(f"{SUPABASE_URL}/rest/v1/{tabla}", headers=HEADERS, json=data)
-    return r.ok
+    try:
+        r = requests.post(f"{SUPABASE_URL}/rest/v1/{tabla}", headers=HEADERS, json=data)
+        return r.ok
+    except:
+        return False
 
 def sb_patch(tabla, filtro, data):
-    r = requests.patch(f"{SUPABASE_URL}/rest/v1/{tabla}?{filtro}", headers=HEADERS, json=data)
-    return r.ok
+    try:
+        r = requests.patch(f"{SUPABASE_URL}/rest/v1/{tabla}?{filtro}", headers=HEADERS, json=data)
+        return r.ok
+    except:
+        return False
 
 def sb_delete(tabla, filtro):
-    r = requests.delete(f"{SUPABASE_URL}/rest/v1/{tabla}?{filtro}", headers=HEADERS)
-    return r.ok
+    try:
+        r = requests.delete(f"{SUPABASE_URL}/rest/v1/{tabla}?{filtro}", headers=HEADERS)
+        return r.ok
+    except:
+        return False
 
 # ══════════════════════════════════════════════════════════════════════════════
 # DATOS MAESTROS
 # ══════════════════════════════════════════════════════════════════════════════
-
 PRODUCTOS = {
-    "BBQ":                  9_000,
-    "Limón":                9_000,
-    "Carita Feliz":         9_000,
-    "Pollo":                9_000,
-    "Parrillada":           9_000,
-    "Chorizo Limón":        9_000,
-    "Mayonesa":             9_000,
-    "Queso":                9_000,
-    "Picante":              9_000,
-    "Almuerzo Pollo":       9_000,
-    "Almuerzo Limón":       9_000,
-    "Almuerzo Picante":     9_000,
-    "Mega":                 1_700,
-    "Megaton":              5_000,
-    "Fósforo 70g (x10)":   14_500,
-    "Fósforo 140g":         3_500,
-    "Fósforo 250g":         7_000,
-    "Fósforo 500g":        14_000,
+    "BBQ": 9000, "Limón": 9000, "Carita Feliz": 9000, "Pollo": 9000,
+    "Parrillada": 9000, "Chorizo Limón": 9000, "Mayonesa": 9000,
+    "Queso": 9000, "Picante": 9000, "Almuerzo Pollo": 9000,
+    "Almuerzo Limón": 9000, "Almuerzo Picante": 9000,
+    "Mega": 1700, "Megaton": 5000,
+    "Fósforo 70g (x10)": 14500, "Fósforo 140g": 3500,
+    "Fósforo 250g": 7000, "Fósforo 500g": 14000,
 }
-
-EMPLEADOS_PRODUCCION = ["Andrea", "Sofía", "Javier", "Edison", "Otro"]
-VENDEDORES_FABRICA   = ["Sofía", "Andrea"]
-VENDEDORES_CARRO     = "Javier & Edison"
+SABORES_LISTA = list(PRODUCTOS.keys())
+EMPLEADOS = ["Andrea", "Sofía", "Javier", "Edison", "Otro"]
+VENDEDORES_FABRICA = ["Sofía", "Andrea"]
 
 def fmt(n):
     return f"${int(n):,.0f}".replace(",", ".")
 
 # ══════════════════════════════════════════════════════════════════════════════
-# FUNCIONES DE BASE DE DATOS
+# DB HELPERS
 # ══════════════════════════════════════════════════════════════════════════════
-
 def init_inventario():
-    """Inserta productos si el inventario está vacío."""
     data = sb_get("inventario", "select=sabor")
     if not data:
         for sabor, precio in PRODUCTOS.items():
             sb_post("inventario", {"sabor": sabor, "stock": 0, "precio": precio})
 
-def leer_inventario():
-    data = sb_get("inventario", "select=*&order=sabor.asc")
-    return pd.DataFrame(data) if data else pd.DataFrame(columns=["sabor","stock","precio"])
-
-def leer_produccion_hoy():
-    hoy = fecha_hoy()
-    data = sb_get("produccion", f"select=id,hora,empleado,sabor,cantidad&fecha=eq.{hoy}&order=hora.desc")
-    return pd.DataFrame(data) if data else pd.DataFrame()
-
-def leer_ventas_hoy():
-    hoy = fecha_hoy()
-    data = sb_get("ventas", f"select=*&fecha=eq.{hoy}&order=hora.desc")
-    return pd.DataFrame(data) if data else pd.DataFrame()
-
-def leer_cargue_activo():
-    hoy = fecha_hoy()
-    cargues = sb_get("cargues", f"select=sabor,cantidad&fecha=eq.{hoy}")
-    ventas  = sb_get("ventas",  f"select=sabor,cantidad&fecha=eq.{hoy}&canal=eq.Carro")
-    if not cargues:
-        return pd.DataFrame(columns=["sabor","pendiente"])
-    df_c = pd.DataFrame(cargues).groupby("sabor")["cantidad"].sum().reset_index()
-    df_c.columns = ["sabor","cargado"]
-    if ventas:
-        df_v = pd.DataFrame(ventas).groupby("sabor")["cantidad"].sum().reset_index()
-        df_v.columns = ["sabor","vendido"]
-        df = df_c.merge(df_v, on="sabor", how="left").fillna(0)
-    else:
-        df = df_c.copy()
-        df["vendido"] = 0
-    df["pendiente"] = df["cargado"] - df["vendido"]
-    return df[df["pendiente"] > 0][["sabor","pendiente"]]
-
-def leer_ventas_rango(f_ini, f_fin):
-    data = sb_get("ventas", f"select=*&fecha=gte.{f_ini}&fecha=lte.{f_fin}")
-    return pd.DataFrame(data) if data else pd.DataFrame()
+def get_stock(sabor):
+    q = requests.utils.quote(sabor)
+    r = sb_get("inventario", f"select=stock&sabor=eq.{q}")
+    return int(r[0]["stock"]) if r else 0
 
 def agregar_stock(sabor, cantidad):
-    inv = sb_get("inventario", f"select=stock&sabor=eq.{requests.utils.quote(sabor)}")
-    if inv:
-        nuevo = inv[0]["stock"] + cantidad
-        sb_patch("inventario", f"sabor=eq.{requests.utils.quote(sabor)}", {"stock": nuevo})
+    q = requests.utils.quote(sabor)
+    stock = get_stock(sabor)
+    sb_patch("inventario", f"sabor=eq.{q}", {"stock": stock + cantidad})
 
 def restar_stock(sabor, cantidad):
-    inv = sb_get("inventario", f"select=stock&sabor=eq.{requests.utils.quote(sabor)}")
-    if inv:
-        nuevo = max(0, inv[0]["stock"] - cantidad)
-        sb_patch("inventario", f"sabor=eq.{requests.utils.quote(sabor)}", {"stock": nuevo})
+    q = requests.utils.quote(sabor)
+    stock = get_stock(sabor)
+    sb_patch("inventario", f"sabor=eq.{q}", {"stock": max(0, stock - cantidad)})
 
 def set_stock(sabor, cantidad):
-    sb_patch("inventario", f"sabor=eq.{requests.utils.quote(sabor)}", {"stock": cantidad})
-
-def guardar_produccion(empleado, sabor, cantidad):
-    sb_post("produccion", {
-        "fecha": fecha_hoy(),
-        "hora": ahora(),
-        "empleado": empleado,
-        "sabor": sabor,
-        "cantidad": cantidad
-    })
-    agregar_stock(sabor, cantidad)
-
-def guardar_cargue(sabor, cantidad):
-    sb_post("cargues", {
-        "fecha": fecha_hoy(),
-        "hora": ahora(),
-        "sabor": sabor,
-        "cantidad": cantidad
-    })
-    restar_stock(sabor, cantidad)
-
-def guardar_venta(canal, vendedor, sabor, cantidad):
-    precio = PRODUCTOS[sabor]
-    total  = precio * cantidad
-    sb_post("ventas", {
-        "fecha": fecha_hoy(),
-        "hora": ahora(),
-        "canal": canal,
-        "vendedor": vendedor,
-        "sabor": sabor,
-        "cantidad": cantidad,
-        "total": total
-    })
-    if canal == "Fábrica":
-        restar_stock(sabor, cantidad)
-
-def guardar_venta_fabrica(cliente, vendedor, items):
-    """Guarda todos los items de una venta como una sola factura."""
-    import uuid
-    factura_id = str(uuid.uuid4())[:8].upper()
-    for sabor, cantidad in items.items():
-        if cantidad > 0:
-            precio = PRODUCTOS[sabor]
-            total  = precio * cantidad
-            sb_post("ventas", {
-                "fecha":      fecha_hoy(),
-                "hora":       ahora(),
-                "canal":      "Fábrica",
-                "vendedor":   vendedor,
-                "sabor":      sabor,
-                "cantidad":   cantidad,
-                "total":      total,
-                "cliente":    cliente,
-                "factura_id": factura_id
-            })
-            restar_stock(sabor, cantidad)
-    return factura_id
-
-def guardar_devolucion(sabor, cantidad):
-    sb_post("devoluciones", {
-        "fecha": fecha_hoy(),
-        "sabor": sabor,
-        "cantidad": cantidad
-    })
-    agregar_stock(sabor, cantidad)
+    q = requests.utils.quote(sabor)
+    sb_patch("inventario", f"sabor=eq.{q}", {"stock": cantidad})
 
 def limpiar_datos_viejos():
-    from datetime import timedelta
     limite = (datetime.now(COL_TZ) - timedelta(days=180)).strftime("%Y-%m-%d")
-    sb_delete("produccion",   f"fecha=lt.{limite}")
-    sb_delete("ventas",       f"fecha=lt.{limite}")
-    sb_delete("cargues",      f"fecha=lt.{limite}")
-    sb_delete("devoluciones", f"fecha=lt.{limite}")
+    for tabla in ["produccion", "ventas", "cargues", "devoluciones"]:
+        sb_delete(tabla, f"fecha=lt.{limite}")
 
 # ══════════════════════════════════════════════════════════════════════════════
 # LOGO
 # ══════════════════════════════════════════════════════════════════════════════
-
 def get_logo_b64():
     p = Path("Logo.png")
     return base64.b64encode(p.read_bytes()).decode() if p.exists() else None
 
 logo_b64 = get_logo_b64()
 logo_html = (
-    f'<img src="data:image/png;base64,{logo_b64}" style="height:90px;object-fit:contain;margin-bottom:6px;">'
+    f'<img src="data:image/png;base64,{logo_b64}" style="height:120px;object-fit:contain;margin-bottom:6px;">'
     if logo_b64 else "🍟"
 )
 
 # ══════════════════════════════════════════════════════════════════════════════
-# CSS MODO OSCURO
+# CSS
 # ══════════════════════════════════════════════════════════════════════════════
-
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-html,body,[class*="css"],.stApp{font-family:'Inter',sans-serif !important;background-color:#1A0A12 !important;color:#F5E6EE !important;}
+html,body,[class*="css"],.stApp{font-family:'Inter',sans-serif !important;background-color:#FFFFFF !important;color:#1A0A12 !important;}
 #MainMenu,footer,header{visibility:hidden;}
 .block-container{padding-top:1rem;padding-bottom:3rem;max-width:500px;margin:0 auto;}
-[data-baseweb="base-input"],[data-baseweb="base-input"] *,[data-baseweb="select"],[data-baseweb="select"]>div,[data-baseweb="select"]>div>div{background-color:#2A1020 !important;color:#F5E6EE !important;border-color:#4A1535 !important;}
-[data-baseweb="base-input"] input,[data-baseweb="base-input"] textarea,input[type="number"],input[type="text"],input[type="date"]{background-color:#2A1020 !important;color:#F5E6EE !important;-webkit-text-fill-color:#F5E6EE !important;}
-[data-testid="stNumberInputStepDown"],[data-testid="stNumberInputStepUp"]{background-color:#3D1528 !important;color:#F06292 !important;border:none !important;border-radius:7px !important;}
+@media (min-width: 768px){
+  .block-container{max-width:680px;}
+}
+@media (min-width: 1100px){
+  .block-container{max-width:760px;}
+}
+[data-baseweb="base-input"],[data-baseweb="base-input"] *,[data-baseweb="select"],[data-baseweb="select"]>div,[data-baseweb="select"]>div>div{background-color:#FFFFFF !important;color:#1A0A12 !important;border-color:#E5C5D5 !important;}
+[data-baseweb="base-input"] input,[data-baseweb="base-input"] textarea,input[type="number"],input[type="text"],input[type="date"]{background-color:#FFFFFF !important;color:#1A0A12 !important;-webkit-text-fill-color:#1A0A12 !important;}
+[data-testid="stNumberInputStepDown"],[data-testid="stNumberInputStepUp"]{background-color:#FCE4EC !important;color:#D81B7A !important;border:none !important;border-radius:7px !important;}
 [data-testid="stNumberInputStepDown"]:hover,[data-testid="stNumberInputStepUp"]:hover{background-color:#D81B7A !important;color:white !important;}
-[data-baseweb="select"]>div,[data-baseweb="base-input"]{border-radius:10px !important;border:1px solid #4A1535 !important;}
-[data-baseweb="select"]>div:focus-within,[data-baseweb="base-input"]:focus-within{border-color:#D81B7A !important;box-shadow:0 0 0 3px rgba(216,27,122,0.18) !important;}
-[data-baseweb="popover"],[data-baseweb="popover"] *,[data-baseweb="menu"],[data-baseweb="menu"] *,ul[data-testid="stSelectboxVirtualDropdown"],ul[data-testid="stSelectboxVirtualDropdown"] *{background-color:#2A1020 !important;color:#F5E6EE !important;}
-[data-baseweb="menu"] li:hover,[role="option"]:hover,[aria-selected="true"][role="option"]{background-color:#3D1528 !important;color:#F06292 !important;}
-[data-baseweb="calendar"],[data-baseweb="calendar"] *,[data-baseweb="datepicker"],[data-baseweb="datepicker"] *{background-color:#2A1020 !important;color:#F5E6EE !important;}
-[data-baseweb="calendar"] button{color:#F5E6EE !important;background-color:transparent !important;}
-[data-baseweb="calendar"] button:hover{background-color:#3D1528 !important;color:#F06292 !important;}
+[data-baseweb="select"]>div,[data-baseweb="base-input"]{border-radius:10px !important;border:1.5px solid #E5C5D5 !important;}
+[data-baseweb="select"]>div:focus-within,[data-baseweb="base-input"]:focus-within{border-color:#D81B7A !important;box-shadow:0 0 0 3px rgba(216,27,122,0.15) !important;}
+[data-baseweb="popover"],[data-baseweb="popover"] *,[data-baseweb="menu"],[data-baseweb="menu"] *,ul[data-testid="stSelectboxVirtualDropdown"],ul[data-testid="stSelectboxVirtualDropdown"] *{background-color:#FFFFFF !important;color:#1A0A12 !important;}
+[data-baseweb="menu"] li:hover,[role="option"]:hover,[aria-selected="true"][role="option"]{background-color:#FCE4EC !important;color:#D81B7A !important;}
+[data-baseweb="calendar"],[data-baseweb="calendar"] *{background-color:#FFFFFF !important;color:#1A0A12 !important;}
+[data-baseweb="calendar"] button{color:#1A0A12 !important;background-color:transparent !important;}
+[data-baseweb="calendar"] button:hover{background-color:#FCE4EC !important;color:#D81B7A !important;}
 [data-baseweb="calendar"] [aria-selected="true"]{background-color:#D81B7A !important;color:white !important;}
-[data-baseweb="calendar"] tbody tr:last-child td{background-color:#2A1020 !important;}
-label,.stSelectbox label,.stNumberInput label,.stDateInput label{color:#F48FB1 !important;font-weight:500 !important;font-size:0.85rem !important;}
-.stTabs [data-baseweb="tab-list"]{background:#2A1020;border-radius:12px;padding:4px;gap:2px;border:1px solid #4A1535;margin-bottom:16px;}
-.stTabs [data-baseweb="tab"]{border-radius:10px;font-size:0.78rem;font-weight:600;padding:8px 4px;color:rgba(255,255,255,0.4) !important;flex:1;justify-content:center;background:transparent !important;}
+[data-baseweb="calendar"] tbody tr:last-child td{background-color:#FFFFFF !important;}
+label,.stSelectbox label,.stNumberInput label,.stDateInput label,.stTextInput label{color:#D81B7A !important;font-weight:600 !important;font-size:0.85rem !important;}
+.stTabs [data-baseweb="tab-list"]{background:#FAF0F5;border-radius:12px;padding:4px;gap:2px;border:1px solid #E5C5D5;margin-bottom:16px;}
+.stTabs [data-baseweb="tab"]{border-radius:10px;font-size:0.78rem;font-weight:600;padding:8px 4px;color:#7A2050 !important;flex:1;justify-content:center;background:transparent !important;}
 .stTabs [aria-selected="true"]{background-color:#D81B7A !important;color:white !important;}
-.brand-header{background:#1A0A12;border:1px solid #4A1535;border-radius:20px;padding:22px 20px 16px;margin-bottom:16px;text-align:center;}
-.brand-header p{color:rgba(255,255,255,0.45);font-size:0.78rem;margin:0;}
+.brand-header{background:#FFFFFF;border:1.5px solid #E5C5D5;border-radius:20px;padding:22px 20px 16px;margin-bottom:16px;text-align:center;box-shadow:0 2px 12px rgba(216,27,122,0.08);}
+.brand-header p{color:#9C4270;font-size:0.78rem;margin:0;}
 .metric-row{display:flex;gap:9px;margin-bottom:16px;}
-.metric-box{flex:1;background:#2A1020;border-radius:14px;padding:14px 8px;text-align:center;border:1px solid #4A1535;}
+.metric-box{flex:1;background:#FAF0F5;border-radius:14px;padding:14px 8px;text-align:center;border:1px solid #E5C5D5;}
 .metric-box .val{font-size:1.2rem;font-weight:700;line-height:1.1;}
-.metric-box .lbl{font-size:0.65rem;color:rgba(255,255,255,0.4);margin-top:3px;}
-.metric-pink .val{color:#F06292;}.metric-green .val{color:#4CAF8F;}.metric-red .val{color:#EF5350;}.metric-yellow .val{color:#FFB74D;}
-.alert-low{background:rgba(239,83,80,0.12);border-left:3px solid #EF5350;border-radius:0 10px 10px 0;padding:10px 14px;margin-bottom:9px;font-size:0.83rem;color:#EF9A9A;}
-.info-box{background:rgba(76,175,143,0.10);border:1px solid rgba(76,175,143,0.25);border-radius:12px;padding:12px 14px;margin:8px 0 14px;font-size:0.82rem;color:#80CBC4;}
-.warn-box{background:rgba(255,183,77,0.10);border:1px solid rgba(255,183,77,0.25);border-radius:12px;padding:12px 14px;margin:8px 0 14px;font-size:0.82rem;color:#FFB74D;}
-.success-toast{background:rgba(76,175,143,0.12);border:1px solid rgba(76,175,143,0.30);border-radius:12px;padding:14px 16px;text-align:center;font-weight:600;color:#80CBC4;font-size:0.95rem;margin-top:10px;}
-.section-label{font-size:0.69rem;font-weight:700;text-transform:uppercase;letter-spacing:0.7px;color:#F06292;margin:16px 0 6px;}
-.stButton>button{width:100%;background:#D81B7A !important;color:white !important;-webkit-text-fill-color:white !important;border:none !important;border-radius:12px !important;padding:14px !important;font-size:1rem !important;font-weight:700 !important;cursor:pointer;margin-top:4px;box-shadow:0 4px 20px rgba(216,27,122,0.35);}
+.metric-box .lbl{font-size:0.65rem;color:#9C4270;margin-top:3px;}
+.metric-pink .val{color:#D81B7A;}.metric-green .val{color:#1B9E5A;}.metric-red .val{color:#D32F2F;}.metric-yellow .val{color:#E68900;}
+.alert-low{background:#FFEBEE;border-left:3px solid #D32F2F;border-radius:0 10px 10px 0;padding:10px 14px;margin-bottom:9px;font-size:0.83rem;color:#B71C1C;}
+.info-box{background:#E8F5E9;border:1px solid #A5D6A7;border-radius:12px;padding:12px 14px;margin:8px 0 14px;font-size:0.82rem;color:#1B5E20;}
+.warn-box{background:#FFF8E1;border:1px solid #FFD54F;border-radius:12px;padding:12px 14px;margin:8px 0 14px;font-size:0.82rem;color:#8D6E00;}
+.success-toast{background:#E8F5E9;border:1px solid #A5D6A7;border-radius:12px;padding:14px 16px;text-align:center;font-weight:600;color:#1B5E20;font-size:0.95rem;margin-top:10px;}
+.section-label{font-size:0.69rem;font-weight:700;text-transform:uppercase;letter-spacing:0.7px;color:#B0185F;margin:16px 0 6px;}
+.stButton>button{width:100%;background:#D81B7A !important;color:white !important;-webkit-text-fill-color:white !important;border:none !important;border-radius:12px !important;padding:14px !important;font-size:1rem !important;font-weight:700 !important;cursor:pointer;margin-top:4px;box-shadow:0 4px 16px rgba(216,27,122,0.25);white-space:pre-line !important;line-height:1.4 !important;}
 .stButton>button:hover{opacity:0.88;}
-[data-testid="stMetricLabel"] p{color:rgba(255,255,255,0.45) !important;}
-[data-testid="stMetricValue"]{color:#F5E6EE !important;}
-.stDataFrame{border-radius:12px;overflow:hidden;font-size:0.83rem;border:1px solid #4A1535 !important;}
-.stCaption,small{color:rgba(255,255,255,0.4) !important;}
-.stAlert{background:#2A1020 !important;color:#F5E6EE !important;border-color:#4A1535 !important;}
+.menu-btn-wrap .stButton>button{min-height:84px !important;display:flex !important;flex-direction:column !important;justify-content:center !important;align-items:center !important;text-align:center !important;}
+[data-testid="stMetricLabel"] p{color:#9C4270 !important;}
+[data-testid="stMetricValue"]{color:#1A0A12 !important;}
+.stDataFrame{border-radius:12px;overflow:hidden;font-size:0.83rem;border:1px solid #E5C5D5;}
+.stCaption,small{color:#9C4270 !important;}
+.stAlert{background:#FAF0F5 !important;color:#1A0A12 !important;border-color:#E5C5D5 !important;}
+.factura-box{background:#FAF0F5;border:1px solid #E5C5D5;border-radius:14px;padding:16px;margin-bottom:14px;}
+.factura-header{font-size:0.9rem;font-weight:700;color:#D81B7A;margin-bottom:8px;}
+.factura-row{display:flex;justify-content:space-between;font-size:0.85rem;padding:4px 0;border-bottom:1px solid #E5C5D5;color:#1A0A12;}
+.factura-total{display:flex;justify-content:space-between;font-size:1rem;font-weight:700;color:#1B9E5A;margin-top:8px;}
+.factura-cambio{font-size:0.9rem;color:#E68900;margin-top:6px;text-align:center;}
+.calc-box{background:#FAF0F5;border:1px solid #E5C5D5;border-radius:14px;padding:14px;margin-bottom:14px;}
+.main-btn{background:#FAF0F5;border:1px solid #E5C5D5;border-radius:14px;padding:20px 16px;margin-bottom:10px;cursor:pointer;display:flex;align-items:center;gap:14px;}
+.main-btn-icon{font-size:2rem;}
+.main-btn-text{font-size:1.1rem;font-weight:700;color:#1A0A12;}
+.main-btn-sub{font-size:0.78rem;color:#9C4270;}
 </style>
 """, unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # INICIALIZAR
 # ══════════════════════════════════════════════════════════════════════════════
-
 if "iniciado" not in st.session_state:
     init_inventario()
     st.session_state.iniciado = True
-
 if "limpieza" not in st.session_state:
     limpiar_datos_viejos()
     st.session_state.limpieza = True
 
-for k in ["ok_prod","ok_cargue","ok_venta_fab","ok_venta_carro","ok_dev","ok_stock","es_admin"]:
+# Session state
+defaults = {
+    "es_admin": False,
+    "vista": "menu",        # menu | produccion | carro | fabrica | resumen
+    "carrito": {},
+    "precios_carrito": {},  # precio modificado por item
+    "factura_guardada": None,
+    "ok_prod": False,
+    "ok_cargue": False,
+    "ok_dev": False,
+    "ok_stock": False,
+    "mostrar_calc": False,
+}
+for k, v in defaults.items():
     if k not in st.session_state:
-        st.session_state[k] = False
-
-if "carrito" not in st.session_state:
-    st.session_state.carrito = {}  # {sabor: cantidad}
-if "factura_guardada" not in st.session_state:
-    st.session_state.factura_guardada = None
+        st.session_state[k] = v
 
 # ══════════════════════════════════════════════════════════════════════════════
 # LOGIN
 # ══════════════════════════════════════════════════════════════════════════════
-
 ADMIN_USER = "jorge"
 ADMIN_HASH = "096f6432e029084963ccb57b61a5b46dd3188f9d4fe73333d7be8289ffeb7057"
 
-def check_password(pw):
+def check_pw(pw):
     return hashlib.sha256(pw.encode()).hexdigest() == ADMIN_HASH
 
 # ══════════════════════════════════════════════════════════════════════════════
-# ENCABEZADO
+# HEADER
 # ══════════════════════════════════════════════════════════════════════════════
-
 st.markdown(f"""
 <div class="brand-header">
     {logo_html}
@@ -333,45 +243,31 @@ st.markdown(f"""
 # ══════════════════════════════════════════════════════════════════════════════
 # MÉTRICAS
 # ══════════════════════════════════════════════════════════════════════════════
-
-# Métricas — consultas rápidas
-_inv_data   = sb_get("inventario", "select=stock")
-_prod_data  = sb_get("produccion", f"select=cantidad&fecha=eq.{fecha_hoy()}")
-_venta_data = sb_get("ventas",     f"select=total&fecha=eq.{fecha_hoy()}")
-
-total_bolsas_inv = sum(r["stock"] for r in _inv_data)      if _inv_data  else 0
-total_prod_hoy   = sum(r["cantidad"] for r in _prod_data)  if _prod_data else 0
-total_ventas_hoy = sum(r["total"] for r in _venta_data)    if _venta_data else 0
+_inv   = sb_get("inventario", "select=stock")
+_prod  = sb_get("produccion", f"select=cantidad&fecha=eq.{fecha_hoy()}")
+_venta = sb_get("ventas",     f"select=total&fecha=eq.{fecha_hoy()}")
+total_inv  = sum(r["stock"]    for r in _inv)   if _inv   else 0
+total_prod = sum(r["cantidad"] for r in _prod)  if _prod  else 0
+total_vta  = sum(r["total"]    for r in _venta) if _venta else 0
 
 st.markdown(f"""
 <div class="metric-row">
-    <div class="metric-box metric-pink">
-        <div class="val">{total_bolsas_inv}</div>
-        <div class="lbl">En inventario</div>
-    </div>
-    <div class="metric-box metric-yellow">
-        <div class="val">{total_prod_hoy}</div>
-        <div class="lbl">Producidas hoy</div>
-    </div>
-    <div class="metric-box metric-green">
-        <div class="val">{fmt(total_ventas_hoy)}</div>
-        <div class="lbl">Ventas hoy</div>
-    </div>
+    <div class="metric-box metric-pink"><div class="val">{total_inv}</div><div class="lbl">En inventario</div></div>
+    <div class="metric-box metric-yellow"><div class="val">{total_prod}</div><div class="lbl">Producidas hoy</div></div>
+    <div class="metric-box metric-green"><div class="val">{fmt(total_vta)}</div><div class="lbl">Ventas hoy</div></div>
 </div>
 """, unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # LOGIN PANEL
 # ══════════════════════════════════════════════════════════════════════════════
-
 if not st.session_state.es_admin:
     with st.expander("🔐 Acceso administrador", expanded=False):
-        st.markdown('<div class="section-label">Solo para Jorge</div>', unsafe_allow_html=True)
-        col_u, col_p = st.columns(2)
-        u = col_u.text_input("Usuario", placeholder="jorge", key="lu", label_visibility="collapsed")
-        p = col_p.text_input("Contraseña", type="password", placeholder="••••••••", key="lp", label_visibility="collapsed")
+        cu, cp = st.columns(2)
+        u = cu.text_input("Usuario", placeholder="jorge", key="lu", label_visibility="collapsed")
+        p = cp.text_input("Contraseña", type="password", placeholder="••••••••", key="lp", label_visibility="collapsed")
         if st.button("Entrar", key="btn_login"):
-            if u.lower() == ADMIN_USER and check_password(p):
+            if u.lower() == ADMIN_USER and check_pw(p):
                 st.session_state.es_admin = True
                 st.rerun()
             else:
@@ -380,66 +276,144 @@ else:
     st.markdown('<div class="info-box">✅ Sesión activa — <b>Jorge (Administrador)</b></div>', unsafe_allow_html=True)
     if st.button("🔒 Cerrar sesión", key="btn_logout"):
         st.session_state.es_admin = False
+        st.session_state.vista = "menu"
         st.rerun()
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TABS
+# NAVEGACIÓN — botón atrás
 # ══════════════════════════════════════════════════════════════════════════════
+if st.session_state.vista != "menu":
+    if st.button("← Volver al menú", key="btn_back"):
+        st.session_state.vista = "menu"
+        st.rerun()
+    st.markdown("---")
 
-if st.session_state.es_admin:
-    tab1, tab2, tab3, tab4 = st.tabs(["📦 Producción", "🚗 Carro", "🏭 Fábrica", "📊 Resumen"])
-else:
-    tab1, tab2, tab3 = st.tabs(["📦 Producción", "🚗 Carro", "🏭 Fábrica"])
-    tab4 = None
+# ══════════════════════════════════════════════════════════════════════════════
+# CALCULADORA (función reutilizable)
+# ══════════════════════════════════════════════════════════════════════════════
+def mostrar_calculadora():
+    with st.expander("🧮 Calculadora", expanded=False):
+        st.markdown('<div class="calc-box">', unsafe_allow_html=True)
+        billete = st.number_input("Billete del cliente ($)", min_value=0, value=0, step=1000,
+                                  key="calc_billete")
+        cobrar  = st.number_input("Total a cobrar ($)", min_value=0, value=0, step=100,
+                                  key="calc_cobrar")
+        if billete > 0 and cobrar > 0:
+            if billete >= cobrar:
+                st.markdown(f'<div class="info-box">💵 Devolver: <b>{fmt(billete - cobrar)}</b></div>',
+                            unsafe_allow_html=True)
+            else:
+                st.markdown(f'<div class="alert-low">⚠️ El billete no alcanza — faltan {fmt(cobrar - billete)}</div>',
+                            unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
 
-# ─────────────────────────────────────────────────────────────────────────────
-# TAB 1 · PRODUCCIÓN
-# ─────────────────────────────────────────────────────────────────────────────
-with tab1:
+# ══════════════════════════════════════════════════════════════════════════════
+# MENÚ PRINCIPAL
+# ══════════════════════════════════════════════════════════════════════════════
+if st.session_state.vista == "menu":
+    opciones = [
+        ("produccion", "📦", "Producción", "Registrar bolsas fabricadas"),
+        ("carro",      "🚗", "Edison & Javier", "Cargues y ventas del carro"),
+        ("fabrica",    "🏭", "Fábrica", "Ventas de Sofía y Andrea"),
+    ]
+    if st.session_state.es_admin:
+        opciones.append(("resumen", "📊", "Resumen", "Ventas, facturas y exportar"))
+
+    for vista, icon, titulo, sub in opciones:
+        st.markdown('<div class="menu-btn-wrap">', unsafe_allow_html=True)
+        if st.button(f"{icon}  {titulo}\n{sub}", key=f"btn_{vista}"):
+            st.session_state.vista = vista
+            st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+
+# ══════════════════════════════════════════════════════════════════════════════
+# VISTA: PRODUCCIÓN
+# ══════════════════════════════════════════════════════════════════════════════
+elif st.session_state.vista == "produccion":
     st.markdown('<div class="section-label">Registrar producción</div>', unsafe_allow_html=True)
 
-    empleado   = st.selectbox("¿Quién registra?", EMPLEADOS_PRODUCCION, key="emp")
-    sabor_p    = st.selectbox("Sabor producido", list(PRODUCTOS.keys()), key="sabor_p")
+    empleado   = st.selectbox("¿Quién registra?", EMPLEADOS, key="emp")
+    sabor_p    = st.selectbox("Sabor producido", SABORES_LISTA, key="sabor_p")
     cantidad_p = st.number_input("Bolsas producidas", min_value=1, max_value=5000, value=50, step=10, key="cant_p")
 
-    _st = sb_get("inventario", f"select=stock&sabor=eq.{requests.utils.quote(sabor_p)}")
-    stock_act = int(_st[0]["stock"]) if _st else 0
-    st.markdown(f'<div class="info-box">📦 Stock actual de <b>{sabor_p}</b>: {stock_act} bolsas → quedará en <b>{stock_act + cantidad_p}</b></div>', unsafe_allow_html=True)
+    stock_act = get_stock(sabor_p)
+    st.markdown(f'<div class="info-box">📦 Stock actual de <b>{sabor_p}</b>: {stock_act} → quedará en <b>{stock_act + cantidad_p}</b></div>', unsafe_allow_html=True)
 
     if st.button("✅ Registrar producción", key="btn_prod"):
-        guardar_produccion(empleado, sabor_p, cantidad_p)
+        sb_post("produccion", {
+            "fecha": fecha_hoy(), "hora": ahora(),
+            "empleado": empleado, "sabor": sabor_p, "cantidad": cantidad_p
+        })
+        agregar_stock(sabor_p, cantidad_p)
         st.session_state.ok_prod = True
+        time.sleep(1)
         st.rerun()
 
     if st.session_state.ok_prod:
         st.markdown('<div class="success-toast">✅ ¡Producción registrada!</div>', unsafe_allow_html=True)
         st.session_state.ok_prod = False
 
-    # Leer datos frescos directamente desde Supabase
-    raw_prod = sb_get("produccion", f"select=hora,empleado,sabor,cantidad&fecha=eq.{fecha_hoy()}&order=hora.desc")
-    st.markdown('<div class="section-label">Producción de hoy</div>', unsafe_allow_html=True)
+    # Producción de hoy — tabla editable
+    raw_prod = sb_get("produccion", f"select=id,hora,empleado,sabor,cantidad&fecha=eq.{fecha_hoy()}&order=hora.desc")
     if raw_prod:
-        st.dataframe(pd.DataFrame(raw_prod), use_container_width=True, hide_index=True)
-    else:
-        st.caption("Aún no hay producción registrada hoy.")
+        st.markdown('<div class="section-label">Producción de hoy</div>', unsafe_allow_html=True)
+        st.caption("Toca una celda de Bolsas para editar directamente.")
+        df_prod = pd.DataFrame(raw_prod)
+        df_edit = df_prod[["hora","empleado","sabor","cantidad"]].copy()
+        df_edit.columns = ["Hora","Empleado","Sabor","Bolsas"]
 
+        edited = st.data_editor(
+            df_edit,
+            use_container_width=True,
+            hide_index=True,
+            disabled=["Hora","Empleado","Sabor"],
+            column_config={
+                "Bolsas": st.column_config.NumberColumn("Bolsas", min_value=0, step=1)
+            },
+            key="prod_editor"
+        )
+
+        # Detectar cambios y guardar
+        col_g, col_e = st.columns(2)
+        if col_g.button("💾 Guardar cambios", key="btn_save_prod"):
+            for i, row in edited.iterrows():
+                orig = df_prod.iloc[i]
+                nueva_cant = int(row["Bolsas"])
+                if nueva_cant != orig["cantidad"]:
+                    diff = nueva_cant - orig["cantidad"]
+                    sb_patch("produccion", f"id=eq.{orig['id']}", {"cantidad": nueva_cant})
+                    if diff > 0:
+                        agregar_stock(orig["sabor"], diff)
+                    elif diff < 0:
+                        restar_stock(orig["sabor"], abs(diff))
+            time.sleep(1)
+            st.rerun()
+
+        # Eliminar fila seleccionada
+        ids_prod = {f"{r['hora']} — {r['sabor']} ({r['cantidad']} bolsas)": r for r in raw_prod}
+        sel_del = st.selectbox("Eliminar registro", ["— Selecciona —"] + list(ids_prod.keys()), key="sel_del_prod")
+        if sel_del != "— Selecciona —" and col_e.button("🗑️ Eliminar", key="btn_del_prod"):
+            reg_del = ids_prod[sel_del]
+            sb_delete("produccion", f"id=eq.{reg_del['id']}")
+            restar_stock(reg_del["sabor"], reg_del["cantidad"])
+            time.sleep(1)
+            st.rerun()
+
+    # Inventario actual
     raw_inv = sb_get("inventario", "select=sabor,stock,precio&order=sabor.asc")
-    st.markdown('<div class="section-label">Inventario actual</div>', unsafe_allow_html=True)
     if raw_inv:
-        df_show = pd.DataFrame(raw_inv)
-        df_show["precio"] = df_show["precio"].apply(fmt)
-        df_show["estado"] = df_show["stock"].apply(lambda x: "🔴 Agotado" if x==0 else ("🟡 Poco" if x<10 else "🟢 OK"))
-        df_show.columns = ["Sabor","Bolsas","Precio","Estado"]
-        st.dataframe(df_show, use_container_width=True, hide_index=True)
-    else:
-        st.caption("Cargando inventario...")
+        st.markdown('<div class="section-label">Inventario actual</div>', unsafe_allow_html=True)
+        df_inv = pd.DataFrame(raw_inv)
+        df_inv["precio"] = df_inv["precio"].apply(fmt)
+        df_inv["estado"] = df_inv["stock"].apply(lambda x: "🔴 Agotado" if x==0 else ("🟡 Poco" if x<10 else "🟢 OK"))
+        df_inv.columns = ["Sabor","Bolsas","Precio","Estado"]
+        st.dataframe(df_inv, use_container_width=True, hide_index=True)
 
+    # Ajuste manual
     st.markdown('<div class="section-label">Ajustar stock manualmente</div>', unsafe_allow_html=True)
-    st.caption("Úsalo si necesitas corregir algún conteo.")
-    sabor_adj = st.selectbox("Sabor a ajustar", list(PRODUCTOS.keys()), key="sabor_adj")
-    _st_adj = sb_get("inventario", f"select=stock&sabor=eq.{requests.utils.quote(sabor_adj)}")
-    stock_adj = int(_st_adj[0]["stock"]) if _st_adj else 0
-    nuevo_stock = st.number_input("Stock real (bolsas)", min_value=0, value=stock_adj, step=1, key="nuevo_s")
+    sabor_adj = st.selectbox("Sabor", SABORES_LISTA, key="sabor_adj")
+    stock_adj = get_stock(sabor_adj)
+    nuevo_stock = st.number_input("Stock real", min_value=0, value=stock_adj, step=1, key="nuevo_s")
     if st.button("💾 Guardar ajuste", key="btn_adj"):
         set_stock(sabor_adj, nuevo_stock)
         st.session_state.ok_stock = True
@@ -449,280 +423,384 @@ with tab1:
         st.markdown('<div class="success-toast">✅ Stock ajustado.</div>', unsafe_allow_html=True)
         st.session_state.ok_stock = False
 
-# ─────────────────────────────────────────────────────────────────────────────
-# TAB 2 · CARRO
-# ─────────────────────────────────────────────────────────────────────────────
-with tab2:
-    sub_c1, sub_c2, sub_c3 = st.tabs(["Nuevo cargue", "Registrar venta", "Devolución semanal"])
+# ══════════════════════════════════════════════════════════════════════════════
+# VISTA: CARRO (Edison & Javier)
+# ══════════════════════════════════════════════════════════════════════════════
+elif st.session_state.vista == "carro":
+    mostrar_calculadora()
 
-    with sub_c1:
-        st.markdown('<div class="section-label">Cargue del carro 🚗</div>', unsafe_allow_html=True)
-        st.caption("Registra lo que llevan Javier y Edison en este viaje.")
-        sabor_cg = st.selectbox("Sabor", list(PRODUCTOS.keys()), key="sabor_cg")
+    sub1, sub2, sub3 = st.tabs(["🚗 Nuevo cargue", "💵 Registrar venta", "🔄 Devolución"])
+
+    with sub1:
+        st.markdown('<div class="section-label">Cargue del carro</div>', unsafe_allow_html=True)
+        sabor_cg = st.selectbox("Sabor", SABORES_LISTA, key="sabor_cg")
         cant_cg  = st.number_input("Bolsas a cargar", min_value=1, max_value=500, value=10, step=5, key="cant_cg")
-        _st2 = sb_get("inventario", f"select=stock&sabor=eq.{requests.utils.quote(sabor_cg)}")
-        stock_disp = int(_st2[0]["stock"]) if _st2 else 0
+        stock_cg = get_stock(sabor_cg)
 
-        if stock_disp < cant_cg:
-            st.markdown(f'<div class="alert-low">⚠️ Solo hay {stock_disp} bolsas de {sabor_cg}.</div>', unsafe_allow_html=True)
+        if stock_cg < cant_cg:
+            st.markdown(f'<div class="alert-low">⚠️ Solo hay {stock_cg} bolsas de {sabor_cg}.</div>', unsafe_allow_html=True)
         else:
-            st.markdown(f'<div class="info-box">📦 Disponible: <b>{stock_disp}</b> · Quedarán: <b>{stock_disp - cant_cg}</b></div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="info-box">📦 Disponible: <b>{stock_cg}</b> · Quedarán: <b>{stock_cg - cant_cg}</b></div>', unsafe_allow_html=True)
 
-        if st.button("🚗 Registrar cargue", key="btn_cg", disabled=(stock_disp < cant_cg)):
-            guardar_cargue(sabor_cg, cant_cg)
+        if st.button("🚗 Registrar cargue", key="btn_cg", disabled=(stock_cg < cant_cg)):
+            sb_post("cargues", {"fecha": fecha_hoy(), "hora": ahora(), "sabor": sabor_cg, "cantidad": cant_cg})
+            restar_stock(sabor_cg, cant_cg)
             st.session_state.ok_cargue = True
             time.sleep(1)
             st.rerun()
 
         if st.session_state.ok_cargue:
-            st.markdown('<div class="success-toast">✅ Cargue registrado. ¡Buen viaje!</div>', unsafe_allow_html=True)
+            st.markdown('<div class="success-toast">✅ Cargue registrado.</div>', unsafe_allow_html=True)
             st.session_state.ok_cargue = False
 
-        df_ca = leer_cargue_activo()
-        if not df_ca.empty:
-            st.markdown('<div class="section-label">Lo que lleva el carro ahora</div>', unsafe_allow_html=True)
-            df_ca.columns = ["Sabor","Bolsas pendientes"]
-            st.dataframe(df_ca, use_container_width=True, hide_index=True)
+        # Cargue activo hoy
+        raw_cg = sb_get("cargues", f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}")
+        raw_vc = sb_get("ventas",  f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}&canal=eq.Carro")
+        if raw_cg:
+            df_cg = pd.DataFrame(raw_cg).groupby("sabor")["cantidad"].sum().reset_index()
+            df_cg.columns = ["sabor","cargado"]
+            if raw_vc:
+                df_vc2 = pd.DataFrame(raw_vc).groupby("sabor")["cantidad"].sum().reset_index()
+                df_vc2.columns = ["sabor","vendido"]
+                df_cg = df_cg.merge(df_vc2, on="sabor", how="left").fillna(0)
+            else:
+                df_cg["vendido"] = 0
+            df_cg["pendiente"] = df_cg["cargado"] - df_cg["vendido"]
+            df_pend = df_cg[df_cg["pendiente"] > 0][["sabor","pendiente"]]
+            if not df_pend.empty:
+                st.markdown('<div class="section-label">Lo que lleva el carro ahora</div>', unsafe_allow_html=True)
+                df_pend.columns = ["Sabor","Bolsas pendientes"]
+                st.dataframe(df_pend, use_container_width=True, hide_index=True)
 
-    with sub_c2:
-        st.markdown('<div class="section-label">Venta del carro 💵</div>', unsafe_allow_html=True)
-        sabor_vc = st.selectbox("Sabor vendido", list(PRODUCTOS.keys()), key="sabor_vc")
-        cant_vc  = st.number_input("Bolsas vendidas", min_value=1, max_value=500, value=10, step=1, key="cant_vc")
-        st.markdown(f'<div class="info-box">💰 Total: <b>{fmt(PRODUCTOS[sabor_vc] * cant_vc)}</b></div>', unsafe_allow_html=True)
+    with sub2:
+        st.markdown('<div class="section-label">Venta del carro</div>', unsafe_allow_html=True)
+        sabor_vc = st.selectbox("Sabor vendido", SABORES_LISTA, key="sabor_vc")
+        cant_vc  = st.number_input("Bolsas vendidas", min_value=1, max_value=500, value=1, step=1, key="cant_vc")
+        precio_vc = PRODUCTOS[sabor_vc]
+        total_vc  = precio_vc * cant_vc
+        st.markdown(f'<div class="info-box">💰 Total: <b>{fmt(total_vc)}</b></div>', unsafe_allow_html=True)
 
-        if st.button("💵 Registrar venta", key="btn_vc"):
-            guardar_venta("Carro", VENDEDORES_CARRO, sabor_vc, cant_vc)
-            st.session_state.ok_venta_carro = True
+        if st.button("💵 Registrar venta carro", key="btn_vc"):
+            sb_post("ventas", {
+                "fecha": fecha_hoy(), "hora": ahora(), "canal": "Carro",
+                "vendedor": "Javier & Edison", "sabor": sabor_vc,
+                "cantidad": cant_vc, "total": total_vc,
+                "cliente": "", "factura_id": ""
+            })
+            st.session_state.ok_cargue = True
             time.sleep(1)
             st.rerun()
 
-        if st.session_state.ok_venta_carro:
-            st.markdown('<div class="success-toast">✅ Venta del carro registrada.</div>', unsafe_allow_html=True)
-            st.session_state.ok_venta_carro = False
-
-        df_vh = leer_ventas_hoy()
-        if not df_vh.empty:
-            df_vc = df_vh[df_vh["canal"]=="Carro"]
-            if not df_vc.empty:
+        # Solo admin ve ventas del carro
+        if st.session_state.es_admin:
+            raw_vcv = sb_get("ventas", f"select=hora,sabor,cantidad,total&fecha=eq.{fecha_hoy()}&canal=eq.Carro&order=hora.desc")
+            if raw_vcv:
                 st.markdown('<div class="section-label">Ventas del carro hoy</div>', unsafe_allow_html=True)
-                vista_vc = df_vc[["hora","sabor","cantidad","total"]].copy()
-                vista_vc["total"] = vista_vc["total"].apply(fmt)
-                vista_vc.columns = ["Hora","Sabor","Bolsas","Total $"]
-                st.dataframe(vista_vc, use_container_width=True, hide_index=True)
+                df_vcv = pd.DataFrame(raw_vcv)
+                df_vcv["total"] = df_vcv["total"].apply(fmt)
+                df_vcv.columns = ["Hora","Sabor","Bolsas","Total $"]
+                st.dataframe(df_vcv, use_container_width=True, hide_index=True)
 
-    with sub_c3:
-        st.markdown('<div class="section-label">Devolución semanal 🔄</div>', unsafe_allow_html=True)
-        st.markdown('<div class="warn-box">⚠️ Solo usar al final de la semana (viernes o sábado).</div>', unsafe_allow_html=True)
-        sabor_dev = st.selectbox("Sabor a devolver", list(PRODUCTOS.keys()), key="sabor_dev")
+    with sub3:
+        st.markdown('<div class="section-label">Devolución al inventario 🔄</div>', unsafe_allow_html=True)
+        st.caption("Registra las bolsas que regresan al inventario.")
+        sabor_dev = st.selectbox("Sabor a devolver", SABORES_LISTA, key="sabor_dev")
         cant_dev  = st.number_input("Bolsas devueltas", min_value=1, max_value=500, value=1, step=1, key="cant_dev")
+        fecha_dev = st.date_input("Fecha de devolución", value=datetime.now(COL_TZ).date(), key="fecha_dev")
 
         if st.button("🔄 Registrar devolución", key="btn_dev"):
-            guardar_devolucion(sabor_dev, cant_dev)
+            sb_post("devoluciones", {"fecha": str(fecha_dev), "sabor": sabor_dev, "cantidad": cant_dev})
+            agregar_stock(sabor_dev, cant_dev)
             st.session_state.ok_dev = True
             time.sleep(1)
             st.rerun()
 
         if st.session_state.ok_dev:
-            st.markdown('<div class="success-toast">✅ Devolución registrada.</div>', unsafe_allow_html=True)
+            st.markdown('<div class="success-toast">✅ Devolución registrada. Stock actualizado.</div>', unsafe_allow_html=True)
             st.session_state.ok_dev = False
 
-# ─────────────────────────────────────────────────────────────────────────────
-# TAB 3 · FÁBRICA
-# ─────────────────────────────────────────────────────────────────────────────
-with tab3:
+# ══════════════════════════════════════════════════════════════════════════════
+# VISTA: FÁBRICA
+# ══════════════════════════════════════════════════════════════════════════════
+elif st.session_state.vista == "fabrica":
+    mostrar_calculadora()
+
     st.markdown('<div class="section-label">Nueva venta 🏭</div>', unsafe_allow_html=True)
 
     vendedor_f = st.selectbox("Vendedor", VENDEDORES_FABRICA, key="vend_f")
     cliente_f  = st.text_input("Nombre del cliente", placeholder="Ej: Tienda Don Carlos", key="cliente_f")
 
-    st.markdown('<div class="section-label">Agregar productos al carrito</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-label">Agregar al carrito</div>', unsafe_allow_html=True)
 
-    col_s, col_c = st.columns([2,1])
-    sabor_vf = col_s.selectbox("Sabor", list(PRODUCTOS.keys()), key="sabor_vf")
+    col_s, col_c = st.columns([2, 1])
+    sabor_vf = col_s.selectbox("Sabor", SABORES_LISTA, key="sabor_vf")
     cant_vf  = col_c.number_input("Bolsas", min_value=1, max_value=500, value=1, step=1, key="cant_vf")
 
-    _st3 = sb_get("inventario", f"select=stock&sabor=eq.{requests.utils.quote(sabor_vf)}")
-    stock_vf = int(_st3[0]["stock"]) if _st3 else 0
+    stock_vf   = get_stock(sabor_vf)
     en_carrito = st.session_state.carrito.get(sabor_vf, 0)
     disponible = stock_vf - en_carrito
 
     if disponible < cant_vf:
-        st.markdown(f'<div class="alert-low">⚠️ Solo hay {disponible} bolsas disponibles de {sabor_vf} ({en_carrito} ya en carrito).</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="alert-low">⚠️ Solo hay {disponible} bolsas disponibles de {sabor_vf}.</div>', unsafe_allow_html=True)
 
-    col_add, col_clear = st.columns(2)
-    if col_add.button("➕ Agregar al carrito", key="btn_add", disabled=(disponible < cant_vf)):
-        st.session_state.carrito[sabor_vf] = st.session_state.carrito.get(sabor_vf, 0) + cant_vf
+    col_add, col_clr = st.columns(2)
+    if col_add.button("➕ Agregar", key="btn_add", disabled=(disponible < cant_vf)):
+        st.session_state.carrito[sabor_vf] = en_carrito + cant_vf
+        if sabor_vf not in st.session_state.precios_carrito:
+            st.session_state.precios_carrito[sabor_vf] = PRODUCTOS[sabor_vf]
         st.rerun()
 
-    if col_clear.button("🗑️ Vaciar carrito", key="btn_clear"):
+    if col_clr.button("🗑️ Vaciar", key="btn_clr"):
         st.session_state.carrito = {}
+        st.session_state.precios_carrito = {}
         st.rerun()
 
-    # Mostrar carrito
+    # Carrito con precio editable
     if st.session_state.carrito:
         st.markdown('<div class="section-label">Carrito actual</div>', unsafe_allow_html=True)
-        total_factura = 0
-        filas = []
-        for s, c in st.session_state.carrito.items():
-            subtotal = PRODUCTOS[s] * c
-            total_factura += subtotal
-            filas.append({"Sabor": s, "Bolsas": c, "Precio unit.": fmt(PRODUCTOS[s]), "Subtotal": fmt(subtotal)})
-        st.dataframe(pd.DataFrame(filas), use_container_width=True, hide_index=True)
-        st.markdown(f'<div class="info-box">💰 <b>Total a cobrar: {fmt(total_factura)}</b></div>', unsafe_allow_html=True)
+        total_fac = 0
+        items_a_eliminar = []
+
+        for s, c in list(st.session_state.carrito.items()):
+            precio_orig = PRODUCTOS[s]
+            precio_mod  = st.session_state.precios_carrito.get(s, precio_orig)
+
+            col1, col2, col3, col4 = st.columns([3, 2, 2, 1])
+            col1.markdown(f"**{s}** × {c}")
+            nuevo_precio = col2.number_input("$", min_value=0, value=precio_mod,
+                                             step=100, key=f"precio_{s}",
+                                             label_visibility="collapsed")
+            st.session_state.precios_carrito[s] = nuevo_precio
+            subtotal = nuevo_precio * c
+            total_fac += subtotal
+            col3.markdown(f"**{fmt(subtotal)}**")
+            if col4.button("✕", key=f"rm_{s}"):
+                items_a_eliminar.append(s)
+
+        for s in items_a_eliminar:
+            del st.session_state.carrito[s]
+            del st.session_state.precios_carrito[s]
+        if items_a_eliminar:
+            st.rerun()
+
+        # Billete y vuelto
+        st.markdown('<div class="section-label">Pago del cliente</div>', unsafe_allow_html=True)
+        billete_f = st.number_input("Billete del cliente ($)", min_value=0, value=0,
+                                    step=1000, key="billete_fab")
+        if billete_f > 0:
+            if billete_f >= total_fac:
+                st.markdown(f'<div class="info-box">💰 Total: <b>{fmt(total_fac)}</b> · Devolver: <b>{fmt(billete_f - total_fac)}</b></div>', unsafe_allow_html=True)
+            else:
+                st.markdown(f'<div class="alert-low">⚠️ Total: {fmt(total_fac)} · Falta: {fmt(total_fac - billete_f)}</div>', unsafe_allow_html=True)
+        else:
+            st.markdown(f'<div class="info-box">💰 Total a cobrar: <b>{fmt(total_fac)}</b></div>', unsafe_allow_html=True)
 
         if st.button("✅ Confirmar venta", key="btn_vf"):
             if not cliente_f.strip():
-                st.markdown('<div class="alert-low">⚠️ Escribe el nombre del cliente antes de confirmar.</div>', unsafe_allow_html=True)
+                st.markdown('<div class="alert-low">⚠️ Escribe el nombre del cliente.</div>', unsafe_allow_html=True)
             else:
-                fid = guardar_venta_fabrica(cliente_f.strip(), vendedor_f, st.session_state.carrito)
+                fid = str(uuid.uuid4())[:8].upper()
+                for s, c in st.session_state.carrito.items():
+                    precio_final = st.session_state.precios_carrito.get(s, PRODUCTOS[s])
+                    sb_post("ventas", {
+                        "fecha": fecha_hoy(), "hora": ahora(), "canal": "Fábrica",
+                        "vendedor": vendedor_f, "sabor": s, "cantidad": c,
+                        "total": precio_final * c, "cliente": cliente_f.strip(),
+                        "factura_id": fid
+                    })
+                    restar_stock(s, c)
                 st.session_state.factura_guardada = {
-                    "id": fid,
-                    "cliente": cliente_f.strip(),
+                    "id": fid, "cliente": cliente_f.strip(),
                     "vendedor": vendedor_f,
                     "items": dict(st.session_state.carrito),
-                    "total": total_factura
+                    "precios": dict(st.session_state.precios_carrito),
+                    "total": total_fac,
+                    "billete": billete_f
                 }
                 st.session_state.carrito = {}
-                st.session_state.ok_venta_fab = True
+                st.session_state.precios_carrito = {}
                 time.sleep(1)
                 st.rerun()
 
-    # Mostrar factura
-    if st.session_state.ok_venta_fab and st.session_state.factura_guardada:
+    # Mostrar factura confirmada
+    if st.session_state.factura_guardada:
         fac = st.session_state.factura_guardada
         st.markdown(f"""
-        <div class="success-toast">
-            ✅ Venta registrada — Factura <b>#{fac['id']}</b><br>
-            Cliente: <b>{fac['cliente']}</b> · Vendedor: <b>{fac['vendedor']}</b><br>
-            Total: <b>{fmt(fac['total'])}</b>
-        </div>
+        <div class="factura-box">
+            <div class="factura-header">🧾 Factura #{fac['id']} — {fac['cliente']}</div>
+            <div style="font-size:0.78rem;color:rgba(255,255,255,0.4);margin-bottom:8px;">Vendedor: {fac['vendedor']} · {fecha_hoy()}</div>
         """, unsafe_allow_html=True)
-        st.session_state.ok_venta_fab = False
+        for s, c in fac["items"].items():
+            precio = fac["precios"].get(s, PRODUCTOS[s])
+            st.markdown(f'<div class="factura-row"><span>{s} × {c}</span><span>{fmt(precio*c)}</span></div>', unsafe_allow_html=True)
+        vuelto = fac["billete"] - fac["total"] if fac["billete"] > 0 else 0
+        st.markdown(f'<div class="factura-total"><span>TOTAL</span><span>{fmt(fac["total"])}</span></div>', unsafe_allow_html=True)
+        if vuelto > 0:
+            st.markdown(f'<div class="factura-cambio">💵 Devolver al cliente: <b>{fmt(vuelto)}</b></div>', unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
 
-    # Historial del día
-    raw_vf = sb_get("ventas", f"select=hora,cliente,vendedor,sabor,cantidad,total,factura_id&fecha=eq.{fecha_hoy()}&canal=eq.Fábrica&order=hora.desc")
-    if raw_vf:
-        st.markdown('<div class="section-label">Ventas fábrica hoy</div>', unsafe_allow_html=True)
-        df_vf = pd.DataFrame(raw_vf)
-        df_vf["total"] = df_vf["total"].apply(fmt)
-        df_vf.columns = ["Hora","Cliente","Vendedor","Sabor","Bolsas","Total $","Factura"]
-        st.dataframe(df_vf, use_container_width=True, hide_index=True)
+        # Cambio de producto post-factura
+        st.markdown('<div class="section-label">¿El cliente quiere cambiar algo?</div>', unsafe_allow_html=True)
+        col_a, col_b = st.columns(2)
+        sabor_out = col_a.selectbox("Devuelve", SABORES_LISTA, key="cambio_out")
+        sabor_in  = col_b.selectbox("Lleva en cambio", SABORES_LISTA, key="cambio_in")
+        cant_cambio = st.number_input("Cantidad", min_value=1, max_value=50, value=1, step=1, key="cant_cambio")
 
-# ─────────────────────────────────────────────────────────────────────────────
-# TAB 4 · RESUMEN (solo admin)
-# ─────────────────────────────────────────────────────────────────────────────
-if tab4 is not None:
-    with tab4:
-        sub_r1, sub_r2, sub_r3 = st.tabs(["Hoy", "Por fechas", "💾 Exportar"])
+        if st.button("🔁 Registrar cambio", key="btn_cambio"):
+            # Revertir el producto devuelto
+            sb_post("ventas", {
+                "fecha": fecha_hoy(), "hora": ahora(), "canal": "Cambio",
+                "vendedor": fac["vendedor"], "sabor": sabor_out,
+                "cantidad": -cant_cambio,
+                "total": -(PRODUCTOS[sabor_out] * cant_cambio),
+                "cliente": fac["cliente"], "factura_id": fac["id"]
+            })
+            agregar_stock(sabor_out, cant_cambio)
+            # Registrar el nuevo producto
+            sb_post("ventas", {
+                "fecha": fecha_hoy(), "hora": ahora(), "canal": "Cambio",
+                "vendedor": fac["vendedor"], "sabor": sabor_in,
+                "cantidad": cant_cambio,
+                "total": PRODUCTOS[sabor_in] * cant_cambio,
+                "cliente": fac["cliente"], "factura_id": fac["id"]
+            })
+            restar_stock(sabor_in, cant_cambio)
+            st.markdown(f'<div class="success-toast">✅ Cambio registrado: {cant_cambio} {sabor_out} → {cant_cambio} {sabor_in}</div>', unsafe_allow_html=True)
+            time.sleep(1)
+            st.rerun()
 
-        with sub_r1:
-            st.markdown('<div class="section-label">Resumen del día</div>', unsafe_allow_html=True)
-            df_vt = leer_ventas_hoy()
-            if df_vt.empty:
-                st.info("Aún no hay ventas registradas hoy.")
-            else:
-                total_fab   = int(df_vt[df_vt["canal"]=="Fábrica"]["total"].sum()) if "canal" in df_vt.columns else 0
-                total_carro = int(df_vt[df_vt["canal"]=="Carro"]["total"].sum())   if "canal" in df_vt.columns else 0
-                gran_total  = total_fab + total_carro
+        if st.button("🧾 Nueva venta", key="btn_nueva"):
+            st.session_state.factura_guardada = None
+            st.rerun()
 
+    # Solo admin ve historial
+    if st.session_state.es_admin:
+        raw_vf = sb_get("ventas", f"select=hora,cliente,vendedor,sabor,cantidad,total,factura_id&fecha=eq.{fecha_hoy()}&canal=eq.Fábrica&order=factura_id.asc,hora.asc")
+        if raw_vf:
+            st.markdown('<div class="section-label">Facturas de hoy</div>', unsafe_allow_html=True)
+            df_vf = pd.DataFrame(raw_vf)
+            facturas_ids = df_vf["factura_id"].unique()
+            for fid in facturas_ids:
+                grupo = df_vf[df_vf["factura_id"]==fid]
+                cliente_n = grupo["cliente"].iloc[0]
+                vendedor_n = grupo["vendedor"].iloc[0]
+                hora_n = grupo["hora"].iloc[0]
+                total_n = grupo["total"].sum()
                 st.markdown(f"""
-                <div class="metric-row">
-                    <div class="metric-box metric-pink"><div class="val">{fmt(total_fab)}</div><div class="lbl">Fábrica</div></div>
-                    <div class="metric-box metric-yellow"><div class="val">{fmt(total_carro)}</div><div class="lbl">Carro</div></div>
-                    <div class="metric-box metric-green"><div class="val">{fmt(gran_total)}</div><div class="lbl">Total día</div></div>
-                </div>""", unsafe_allow_html=True)
+                <div class="factura-box">
+                    <div class="factura-header">🧾 #{fid} — {cliente_n}</div>
+                    <div style="font-size:0.78rem;color:rgba(255,255,255,0.4);margin-bottom:8px;">{vendedor_n} · {hora_n}</div>
+                """, unsafe_allow_html=True)
+                for _, row in grupo.iterrows():
+                    st.markdown(f'<div class="factura-row"><span>{row["sabor"]} × {row["cantidad"]}</span><span>{fmt(row["total"])}</span></div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="factura-total"><span>TOTAL</span><span>{fmt(total_n)}</span></div>', unsafe_allow_html=True)
+                st.markdown('</div>', unsafe_allow_html=True)
 
-                st.markdown('<div class="section-label">Por sabor</div>', unsafe_allow_html=True)
-                por_sabor = df_vt.groupby("sabor").agg(bolsas=("cantidad","sum"), total=("total","sum")).reset_index()
-                por_sabor = por_sabor.sort_values("total", ascending=False)
-                por_sabor["total"] = por_sabor["total"].apply(fmt)
-                por_sabor.columns = ["Sabor","Bolsas","Total $"]
-                st.dataframe(por_sabor, use_container_width=True, hide_index=True)
+# ══════════════════════════════════════════════════════════════════════════════
+# VISTA: RESUMEN (solo admin)
+# ══════════════════════════════════════════════════════════════════════════════
+elif st.session_state.vista == "resumen" and st.session_state.es_admin:
+    sub_r1, sub_r2, sub_r3 = st.tabs(["Hoy", "Por fechas", "💾 Exportar"])
 
-        with sub_r2:
-            st.markdown('<div class="section-label">Consultar por fechas</div>', unsafe_allow_html=True)
-            col_a, col_b = st.columns(2)
-            f_ini = col_a.date_input("Desde", value=date(datetime.now(COL_TZ).year, datetime.now(COL_TZ).month, 1), key="f_ini")
-            f_fin = col_b.date_input("Hasta", value=datetime.now(COL_TZ).date(), key="f_fin")
-            df_rango = leer_ventas_rango(f_ini, f_fin)
+    with sub_r1:
+        st.markdown('<div class="section-label">Resumen del día</div>', unsafe_allow_html=True)
+        raw_vt = sb_get("ventas", f"select=*&fecha=eq.{fecha_hoy()}&order=hora.asc")
+        if not raw_vt:
+            st.info("Aún no hay ventas hoy.")
+        else:
+            df_vt = pd.DataFrame(raw_vt)
+            total_fab   = int(df_vt[df_vt["canal"]=="Fábrica"]["total"].sum()) if "canal" in df_vt.columns else 0
+            total_carro = int(df_vt[df_vt["canal"]=="Carro"]["total"].sum())   if "canal" in df_vt.columns else 0
+            st.markdown(f"""
+            <div class="metric-row">
+                <div class="metric-box metric-pink"><div class="val">{fmt(total_fab)}</div><div class="lbl">Fábrica</div></div>
+                <div class="metric-box metric-yellow"><div class="val">{fmt(total_carro)}</div><div class="lbl">Carro</div></div>
+                <div class="metric-box metric-green"><div class="val">{fmt(total_fab+total_carro)}</div><div class="lbl">Total</div></div>
+            </div>""", unsafe_allow_html=True)
 
-            if df_rango.empty:
-                st.info("No hay ventas en ese rango.")
-            else:
-                total_r  = int(df_rango["total"].sum())
-                bolsas_r = int(df_rango["cantidad"].sum())
-                dias_r   = df_rango["fecha"].nunique()
+            st.markdown('<div class="section-label">Por sabor</div>', unsafe_allow_html=True)
+            por_sabor = df_vt.groupby("sabor").agg(bolsas=("cantidad","sum"), total=("total","sum")).reset_index()
+            por_sabor = por_sabor.sort_values("total", ascending=False)
+            por_sabor["total"] = por_sabor["total"].apply(fmt)
+            por_sabor.columns = ["Sabor","Bolsas","Total $"]
+            st.dataframe(por_sabor, use_container_width=True, hide_index=True)
 
-                st.markdown(f"""
-                <div class="metric-row">
-                    <div class="metric-box metric-green"><div class="val">{fmt(total_r)}</div><div class="lbl">Ingresos</div></div>
-                    <div class="metric-box metric-pink"><div class="val">{bolsas_r}</div><div class="lbl">Bolsas</div></div>
-                    <div class="metric-box metric-yellow"><div class="val">{dias_r}</div><div class="lbl">Días</div></div>
-                </div>""", unsafe_allow_html=True)
+            st.markdown('<div class="section-label">Facturas fábrica</div>', unsafe_allow_html=True)
+            df_fab = df_vt[df_vt["canal"]=="Fábrica"]
+            if not df_fab.empty:
+                for fid in df_fab["factura_id"].unique():
+                    if not fid:
+                        continue
+                    grupo = df_fab[df_fab["factura_id"]==fid]
+                    cliente_n = grupo["cliente"].iloc[0]
+                    vendedor_n = grupo["vendedor"].iloc[0]
+                    hora_n = grupo["hora"].iloc[0]
+                    total_n = grupo["total"].sum()
+                    st.markdown(f"""
+                    <div class="factura-box">
+                        <div class="factura-header">🧾 #{fid} — {cliente_n}</div>
+                        <div style="font-size:0.78rem;color:rgba(255,255,255,0.4);margin-bottom:8px;">{vendedor_n} · {hora_n}</div>
+                    """, unsafe_allow_html=True)
+                    for _, row in grupo.iterrows():
+                        st.markdown(f'<div class="factura-row"><span>{row["sabor"]} × {row["cantidad"]}</span><span>{fmt(row["total"])}</span></div>', unsafe_allow_html=True)
+                    st.markdown(f'<div class="factura-total"><span>TOTAL</span><span>{fmt(total_n)}</span></div>', unsafe_allow_html=True)
+                    st.markdown('</div>', unsafe_allow_html=True)
 
-                st.markdown('<div class="section-label">Por día</div>', unsafe_allow_html=True)
-                por_dia = df_rango.groupby("fecha").agg(bolsas=("cantidad","sum"), total=("total","sum")).reset_index()
-                por_dia["total"] = por_dia["total"].apply(fmt)
-                por_dia.columns  = ["Fecha","Bolsas","Total $"]
-                st.dataframe(por_dia, use_container_width=True, hide_index=True)
+    with sub_r2:
+        st.markdown('<div class="section-label">Consultar por fechas</div>', unsafe_allow_html=True)
+        col_a, col_b = st.columns(2)
+        f_ini = col_a.date_input("Desde", value=date(datetime.now(COL_TZ).year, datetime.now(COL_TZ).month, 1), key="f_ini")
+        f_fin = col_b.date_input("Hasta", value=datetime.now(COL_TZ).date(), key="f_fin")
+        raw_rango = sb_get("ventas", f"select=*&fecha=gte.{f_ini}&fecha=lte.{f_fin}&order=fecha.asc")
 
-                st.markdown('<div class="section-label">Por canal</div>', unsafe_allow_html=True)
-                por_canal = df_rango.groupby("canal").agg(bolsas=("cantidad","sum"), total=("total","sum")).reset_index()
-                por_canal["total"] = por_canal["total"].apply(fmt)
-                por_canal.columns  = ["Canal","Bolsas","Total $"]
-                st.dataframe(por_canal, use_container_width=True, hide_index=True)
+        if not raw_rango:
+            st.info("No hay ventas en ese rango.")
+        else:
+            df_r = pd.DataFrame(raw_rango)
+            total_r  = int(df_r["total"].sum())
+            bolsas_r = int(df_r["cantidad"].sum())
+            dias_r   = df_r["fecha"].nunique()
+            st.markdown(f"""
+            <div class="metric-row">
+                <div class="metric-box metric-green"><div class="val">{fmt(total_r)}</div><div class="lbl">Ingresos</div></div>
+                <div class="metric-box metric-pink"><div class="val">{bolsas_r}</div><div class="lbl">Bolsas</div></div>
+                <div class="metric-box metric-yellow"><div class="val">{dias_r}</div><div class="lbl">Días</div></div>
+            </div>""", unsafe_allow_html=True)
 
-        with sub_r3:
-            st.markdown('<div class="section-label">Exportar datos</div>', unsafe_allow_html=True)
-            st.caption("Descarga los datos para guardar como respaldo en tu PC o Google Drive.")
+            st.markdown('<div class="section-label">Por día</div>', unsafe_allow_html=True)
+            por_dia = df_r.groupby("fecha").agg(bolsas=("cantidad","sum"), total=("total","sum")).reset_index()
+            por_dia["total"] = por_dia["total"].apply(fmt)
+            por_dia.columns  = ["Fecha","Bolsas","Total $"]
+            st.dataframe(por_dia, use_container_width=True, hide_index=True)
 
-            col_e1, col_e2 = st.columns(2)
-            f_exp_ini = col_e1.date_input("Desde", value=date(datetime.now(COL_TZ).year, datetime.now(COL_TZ).month, 1), key="f_exp_ini")
-            f_exp_fin = col_e2.date_input("Hasta", value=datetime.now(COL_TZ).date(), key="f_exp_fin")
+            st.markdown('<div class="section-label">Por canal</div>', unsafe_allow_html=True)
+            por_canal = df_r.groupby("canal").agg(bolsas=("cantidad","sum"), total=("total","sum")).reset_index()
+            por_canal["total"] = por_canal["total"].apply(fmt)
+            por_canal.columns  = ["Canal","Bolsas","Total $"]
+            st.dataframe(por_canal, use_container_width=True, hide_index=True)
 
-            if st.button("📥 Descargar ventas (CSV)", key="btn_exp_ventas"):
-                raw_exp = sb_get("ventas", f"select=*&fecha=gte.{f_exp_ini}&fecha=lte.{f_exp_fin}&order=fecha.asc,hora.asc")
-                if raw_exp:
-                    df_exp = pd.DataFrame(raw_exp)
-                    csv = df_exp.to_csv(index=False).encode("utf-8")
-                    st.download_button(
-                        label="⬇️ Guardar archivo de ventas",
-                        data=csv,
-                        file_name=f"ventas_{f_exp_ini}_{f_exp_fin}.csv",
-                        mime="text/csv",
-                        key="dl_ventas"
-                    )
-                else:
-                    st.info("No hay ventas en ese rango.")
+    with sub_r3:
+        st.markdown('<div class="section-label">Exportar datos</div>', unsafe_allow_html=True)
+        col_e1, col_e2 = st.columns(2)
+        f_exp_ini = col_e1.date_input("Desde", value=date(datetime.now(COL_TZ).year, datetime.now(COL_TZ).month, 1), key="f_exp_ini")
+        f_exp_fin = col_e2.date_input("Hasta", value=datetime.now(COL_TZ).date(), key="f_exp_fin")
 
-            if st.button("📥 Descargar producción (CSV)", key="btn_exp_prod"):
-                raw_exp2 = sb_get("produccion", f"select=*&fecha=gte.{f_exp_ini}&fecha=lte.{f_exp_fin}&order=fecha.asc,hora.asc")
-                if raw_exp2:
-                    df_exp2 = pd.DataFrame(raw_exp2)
-                    csv2 = df_exp2.to_csv(index=False).encode("utf-8")
-                    st.download_button(
-                        label="⬇️ Guardar archivo de producción",
-                        data=csv2,
-                        file_name=f"produccion_{f_exp_ini}_{f_exp_fin}.csv",
-                        mime="text/csv",
-                        key="dl_prod"
-                    )
-                else:
-                    st.info("No hay producción en ese rango.")
+        if st.button("📥 Ventas (CSV)", key="btn_exp_v"):
+            raw_e = sb_get("ventas", f"select=*&fecha=gte.{f_exp_ini}&fecha=lte.{f_exp_fin}&order=fecha.asc")
+            if raw_e:
+                csv = pd.DataFrame(raw_e).to_csv(index=False).encode("utf-8")
+                st.download_button("⬇️ Descargar ventas", csv, f"ventas_{f_exp_ini}_{f_exp_fin}.csv", "text/csv", key="dl_v")
 
-            if st.button("📥 Descargar inventario actual (CSV)", key="btn_exp_inv"):
-                raw_exp3 = sb_get("inventario", "select=*&order=sabor.asc")
-                if raw_exp3:
-                    df_exp3 = pd.DataFrame(raw_exp3)
-                    csv3 = df_exp3.to_csv(index=False).encode("utf-8")
-                    st.download_button(
-                        label="⬇️ Guardar inventario",
-                        data=csv3,
-                        file_name=f"inventario_{fecha_hoy()}.csv",
-                        mime="text/csv",
-                        key="dl_inv"
-                    )
-                else:
-                    st.info("Inventario vacío.")
+        if st.button("📥 Producción (CSV)", key="btn_exp_p"):
+            raw_e2 = sb_get("produccion", f"select=*&fecha=gte.{f_exp_ini}&fecha=lte.{f_exp_fin}&order=fecha.asc")
+            if raw_e2:
+                csv2 = pd.DataFrame(raw_e2).to_csv(index=False).encode("utf-8")
+                st.download_button("⬇️ Descargar producción", csv2, f"produccion_{f_exp_ini}_{f_exp_fin}.csv", "text/csv", key="dl_p")
 
-            st.markdown('<div class="warn-box">💡 Guarda estos archivos en Google Drive o en tu PC como respaldo semanal.</div>', unsafe_allow_html=True)
+        if st.button("📥 Inventario actual (CSV)", key="btn_exp_i"):
+            raw_e3 = sb_get("inventario", "select=*&order=sabor.asc")
+            if raw_e3:
+                csv3 = pd.DataFrame(raw_e3).to_csv(index=False).encode("utf-8")
+                st.download_button("⬇️ Descargar inventario", csv3, f"inventario_{fecha_hoy()}.csv", "text/csv", key="dl_i")
+
+        st.markdown('<div class="warn-box">💡 Guarda estos archivos semanalmente como respaldo.</div>', unsafe_allow_html=True)
