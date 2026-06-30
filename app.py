@@ -708,7 +708,7 @@ if st.session_state.vista == "menu":
         st.rerun()
 
     botones_html = "".join(
-        f'<a href="?ir={vista}" class="menu-link-btn">'
+        f'<a href="?ir={vista}" target="_self" class="menu-link-btn">'
         f'<span class="menu-link-deco"></span>'
         f'<span class="menu-link-icon">{icon}</span>'
         f'<span class="menu-link-text">'
