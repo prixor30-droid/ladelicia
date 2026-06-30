@@ -213,8 +213,32 @@ function bloquearTecladoSelects() {
         });
     } catch (e) {}
 }
+function arreglarAnchoBotonesMenu() {
+    try {
+        const keys = ['btn_produccion', 'btn_carro', 'btn_fabrica', 'btn_resumen'];
+        keys.forEach(function(k) {
+            const btnWrap = window.parent.document.querySelector('[data-testid="stButton-' + k + '"]');
+            if (btnWrap) {
+                let el = btnWrap;
+                for (let i = 0; i < 4; i++) {
+                    if (el && el.parentElement) {
+                        el = el.parentElement;
+                        if (el.getAttribute('data-testid') === 'stElementContainer') {
+                            el.style.width = '100%';
+                            el.style.minWidth = '100%';
+                            el.style.maxWidth = '100%';
+                            break;
+                        }
+                    }
+                }
+            }
+        });
+    } catch (e) {}
+}
 bloquearTecladoSelects();
+arreglarAnchoBotonesMenu();
 setInterval(bloquearTecladoSelects, 500);
+setInterval(arreglarAnchoBotonesMenu, 500);
 </script>
 """, height=0)
 
