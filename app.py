@@ -449,6 +449,30 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
+# ALERTA GLOBAL DE STOCK BAJO — visible en TODAS las vistas
+# ══════════════════════════════════════════════════════════════════════════════
+raw_inv_global = sb_get("inventario", "select=sabor,stock")
+if raw_inv_global:
+    agotados = [r for r in raw_inv_global if r["stock"] == 0]
+    bajos_global = [r for r in raw_inv_global if 0 < r["stock"] < STOCK_MINIMO]
+
+    if agotados:
+        nombres_ag = ", ".join(r["sabor"] for r in agotados[:6])
+        extra_ag = f" y {len(agotados)-6} más" if len(agotados) > 6 else ""
+        st.markdown(
+            f'<div class="alert-low">🔴 <b>Agotado:</b> {nombres_ag}{extra_ag}</div>',
+            unsafe_allow_html=True
+        )
+
+    if bajos_global:
+        nombres_bj = ", ".join(f"{r['sabor']} ({r['stock']})" for r in bajos_global[:6])
+        extra_bj = f" y {len(bajos_global)-6} más" if len(bajos_global) > 6 else ""
+        st.markdown(
+            f'<div class="warn-box">⚠️ <b>Stock bajo:</b> {nombres_bj}{extra_bj}</div>',
+            unsafe_allow_html=True
+        )
+
+# ══════════════════════════════════════════════════════════════════════════════
 # LOGIN PANEL
 # ══════════════════════════════════════════════════════════════════════════════
 if not st.session_state.es_admin:
@@ -504,18 +528,6 @@ def mostrar_calculadora():
 # MENÚ PRINCIPAL
 # ══════════════════════════════════════════════════════════════════════════════
 if st.session_state.vista == "menu":
-    # Alerta de stock bajo
-    raw_inv_check = sb_get("inventario", "select=sabor,stock")
-    if raw_inv_check:
-        bajos = [r for r in raw_inv_check if r["stock"] < STOCK_MINIMO]
-        if bajos:
-            nombres_bajos = ", ".join(f"{r['sabor']} ({r['stock']})" for r in bajos[:5])
-            extra = f" y {len(bajos)-5} más" if len(bajos) > 5 else ""
-            st.markdown(
-                f'<div class="alert-low">⚠️ <b>Stock bajo:</b> {nombres_bajos}{extra}</div>',
-                unsafe_allow_html=True
-            )
-
     opciones = [
         ("produccion", "📦", "Producción", "Registrar bolsas fabricadas"),
         ("carro",      "🚗", "Edison & Javier", "Cargues y ventas del carro"),
