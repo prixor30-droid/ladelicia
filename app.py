@@ -80,6 +80,7 @@ PRODUCTOS = {
 SABORES_LISTA = list(PRODUCTOS.keys())
 EMPLEADOS = ["Andrea", "Sofía", "Javier", "Edison", "Otro"]
 VENDEDORES_FABRICA = ["Sofía", "Andrea"]
+STOCK_MINIMO = 10  # alerta cuando un sabor tenga menos de esta cantidad
 
 def fmt(n):
     return f"${int(n):,.0f}".replace(",", ".")
@@ -274,11 +275,20 @@ for k, v in defaults.items():
 # ══════════════════════════════════════════════════════════════════════════════
 # LOGIN
 # ══════════════════════════════════════════════════════════════════════════════
-ADMIN_USER = "jorge"
-ADMIN_HASH = "096f6432e029084963ccb57b61a5b46dd3188f9d4fe73333d7be8289ffeb7057"
+ADMINS = {
+    "jorge":  "096f6432e029084963ccb57b61a5b46dd3188f9d4fe73333d7be8289ffeb7057",
+    "andrea": "55739c3876b1b91c8ef3712eda72ec732cd187f1c31f59f14ab187fe3cd04b5f",
+}
+NOMBRES_ADMIN = {"jorge": "Jorge", "andrea": "Andrea"}
 
-def check_pw(pw):
-    return hashlib.sha256(pw.encode()).hexdigest() == ADMIN_HASH
+def check_login(usuario, pw):
+    u = usuario.lower().strip()
+    if u in ADMINS:
+        return hashlib.sha256(pw.encode()).hexdigest() == ADMINS[u]
+    return False
+
+if "admin_actual" not in st.session_state:
+    st.session_state.admin_actual = None
 
 # ══════════════════════════════════════════════════════════════════════════════
 # HEADER
@@ -322,15 +332,18 @@ if not st.session_state.es_admin:
         u = cu.text_input("Usuario", placeholder="jorge", key="lu", label_visibility="collapsed")
         p = cp.text_input("Contraseña", type="password", placeholder="••••••••", key="lp", label_visibility="collapsed")
         if st.button("Entrar", key="btn_login"):
-            if u.lower() == ADMIN_USER and check_pw(p):
+            if check_login(u, p):
                 st.session_state.es_admin = True
+                st.session_state.admin_actual = u.lower().strip()
                 st.rerun()
             else:
                 st.markdown('<div class="alert-low">⚠️ Usuario o contraseña incorrectos.</div>', unsafe_allow_html=True)
 else:
-    st.markdown('<div class="info-box">✅ Sesión activa — <b>Jorge (Administrador)</b></div>', unsafe_allow_html=True)
+    nombre_admin = NOMBRES_ADMIN.get(st.session_state.admin_actual, "Administrador")
+    st.markdown(f'<div class="info-box">✅ Sesión activa — <b>{nombre_admin} (Administrador)</b></div>', unsafe_allow_html=True)
     if st.button("🔒 Cerrar sesión", key="btn_logout"):
         st.session_state.es_admin = False
+        st.session_state.admin_actual = None
         st.session_state.vista = "menu"
         st.rerun()
 
@@ -366,6 +379,18 @@ def mostrar_calculadora():
 # MENÚ PRINCIPAL
 # ══════════════════════════════════════════════════════════════════════════════
 if st.session_state.vista == "menu":
+    # Alerta de stock bajo
+    raw_inv_check = sb_get("inventario", "select=sabor,stock")
+    if raw_inv_check:
+        bajos = [r for r in raw_inv_check if r["stock"] < STOCK_MINIMO]
+        if bajos:
+            nombres_bajos = ", ".join(f"{r['sabor']} ({r['stock']})" for r in bajos[:5])
+            extra = f" y {len(bajos)-5} más" if len(bajos) > 5 else ""
+            st.markdown(
+                f'<div class="alert-low">⚠️ <b>Stock bajo:</b> {nombres_bajos}{extra}</div>',
+                unsafe_allow_html=True
+            )
+
     opciones = [
         ("produccion", "📦", "Producción", "Registrar bolsas fabricadas"),
         ("carro",      "🚗", "Edison & Javier", "Cargues y ventas del carro"),
@@ -862,7 +887,7 @@ elif st.session_state.vista == "fabrica":
 # VISTA: RESUMEN (solo admin)
 # ══════════════════════════════════════════════════════════════════════════════
 elif st.session_state.vista == "resumen" and st.session_state.es_admin:
-    sub_r1, sub_r2, sub_r3 = st.tabs(["Hoy", "Por fechas", "💾 Exportar"])
+    sub_r1, sub_r2, sub_r3, sub_r4 = st.tabs(["Hoy", "Por fechas", "📅 Mes", "💾 Exportar"])
 
     with sub_r1:
         st.markdown('<div class="section-label">Resumen del día</div>', unsafe_allow_html=True)
@@ -883,6 +908,10 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
             st.markdown('<div class="section-label">Por sabor</div>', unsafe_allow_html=True)
             por_sabor = df_vt.groupby("sabor").agg(bolsas=("cantidad","sum"), total=("total","sum")).reset_index()
             por_sabor = por_sabor.sort_values("total", ascending=False)
+
+            chart_data = por_sabor.set_index("sabor")["bolsas"]
+            st.bar_chart(chart_data, color="#D81B7A")
+
             por_sabor["total"] = por_sabor["total"].apply(fmt)
             por_sabor.columns = ["Sabor","Bolsas","Total $"]
             st.dataframe(por_sabor, use_container_width=True, hide_index=True)
@@ -942,6 +971,50 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
             st.dataframe(por_canal, use_container_width=True, hide_index=True)
 
     with sub_r3:
+        st.markdown('<div class="section-label">Reporte del mes actual</div>', unsafe_allow_html=True)
+        hoy_dt = datetime.now(COL_TZ)
+        primer_dia = date(hoy_dt.year, hoy_dt.month, 1)
+        ultimo_dia = hoy_dt.date()
+        nombre_mes = hoy_dt.strftime("%B %Y").capitalize()
+        st.caption(f"Resumen automático de {nombre_mes}")
+
+        raw_mes = sb_get("ventas", f"select=*&fecha=gte.{primer_dia}&fecha=lte.{ultimo_dia}")
+        raw_prod_mes = sb_get("produccion", f"select=cantidad&fecha=gte.{primer_dia}&fecha=lte.{ultimo_dia}")
+
+        if not raw_mes:
+            st.info("Aún no hay ventas este mes.")
+        else:
+            df_mes = pd.DataFrame(raw_mes)
+            total_mes   = int(df_mes["total"].sum())
+            bolsas_mes  = int(df_mes["cantidad"].sum())
+            dias_mes    = df_mes["fecha"].nunique()
+            prod_mes    = sum(r["cantidad"] for r in raw_prod_mes) if raw_prod_mes else 0
+            promedio_dia = total_mes / dias_mes if dias_mes > 0 else 0
+
+            st.markdown(f"""
+            <div class="metric-row">
+                <div class="metric-box metric-green"><div class="val">{fmt(total_mes)}</div><div class="lbl">Ingresos del mes</div></div>
+                <div class="metric-box metric-pink"><div class="val">{bolsas_mes}</div><div class="lbl">Bolsas vendidas</div></div>
+                <div class="metric-box metric-yellow"><div class="val">{fmt(promedio_dia)}</div><div class="lbl">Promedio diario</div></div>
+            </div>""", unsafe_allow_html=True)
+
+            st.markdown(f'<div class="info-box">📦 Producción total del mes: <b>{prod_mes} bolsas</b></div>', unsafe_allow_html=True)
+
+            st.markdown('<div class="section-label">Sabor más vendido</div>', unsafe_allow_html=True)
+            top_sabores = df_mes.groupby("sabor")["cantidad"].sum().reset_index().sort_values("cantidad", ascending=False)
+            if not top_sabores.empty:
+                top1 = top_sabores.iloc[0]
+                st.markdown(f'<div class="info-box">🏆 <b>{top1["sabor"]}</b> con {int(top1["cantidad"])} bolsas vendidas</div>', unsafe_allow_html=True)
+
+            st.markdown('<div class="section-label">Evolución de ventas en el mes</div>', unsafe_allow_html=True)
+            por_dia_mes = df_mes.groupby("fecha")["total"].sum()
+            st.line_chart(por_dia_mes, color="#D81B7A")
+
+            st.markdown('<div class="section-label">Tendencia por sabor</div>', unsafe_allow_html=True)
+            top_sabores.columns = ["Sabor","Bolsas"]
+            st.dataframe(top_sabores, use_container_width=True, hide_index=True)
+
+    with sub_r4:
         st.markdown('<div class="section-label">Exportar datos</div>', unsafe_allow_html=True)
         col_e1, col_e2 = st.columns(2)
         f_exp_ini = col_e1.date_input("Desde", value=date(datetime.now(COL_TZ).year, datetime.now(COL_TZ).month, 1), key="f_exp_ini")
