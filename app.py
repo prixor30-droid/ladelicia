@@ -460,10 +460,11 @@ label,.stSelectbox label,.stNumberInput label,.stDateInput label,.stTextInput la
 .stButton>button{width:100%;background:#D81B7A !important;color:white !important;-webkit-text-fill-color:white !important;border:none !important;border-radius:12px !important;padding:14px !important;font-size:1rem !important;font-weight:700 !important;cursor:pointer;margin-top:4px;box-shadow:0 4px 16px rgba(216,27,122,0.25);white-space:pre-line !important;line-height:1.4 !important;}
 .stButton>button:hover{opacity:0.88;}
 .menu-links-wrap{margin:0 -1rem;}
-.menu-link-btn{display:flex;align-items:center;gap:14px;background:#FFFFFF;text-decoration:none;border-radius:16px;box-shadow:0 2px 10px rgba(216,27,122,0.15);padding:18px 20px;margin:0 1rem 12px 1rem;min-height:84px;box-sizing:border-box;}
-.menu-link-btn:hover{box-shadow:0 4px 14px rgba(216,27,122,0.22);}
-.menu-link-icon{font-size:2rem;flex-shrink:0;}
-.menu-link-text{display:flex;flex-direction:column;text-align:left;}
+.menu-link-btn{display:block;position:relative;overflow:hidden;background:linear-gradient(135deg,#FFFFFF,#FCEEF4);text-decoration:none;border-radius:18px;box-shadow:0 3px 12px rgba(216,27,122,0.18);padding:18px 20px;margin:0 1rem 12px 1rem;min-height:84px;box-sizing:border-box;}
+.menu-link-btn:hover{box-shadow:0 5px 16px rgba(216,27,122,0.25);}
+.menu-link-deco{position:absolute;top:-14px;right:-14px;width:64px;height:64px;background:rgba(216,27,122,0.08);border-radius:50%;}
+.menu-link-icon{font-size:1.7rem;display:block;margin-bottom:4px;}
+.menu-link-text{display:flex;flex-direction:column;text-align:left;position:relative;z-index:1;}
 .menu-link-titulo{font-size:1.05rem;font-weight:700;color:#1A0A12;}
 .menu-link-sub{font-size:0.8rem;color:#9C4270;margin-top:2px;}
 
@@ -708,6 +709,7 @@ if st.session_state.vista == "menu":
 
     botones_html = "".join(
         f'<a href="?ir={vista}" class="menu-link-btn">'
+        f'<span class="menu-link-deco"></span>'
         f'<span class="menu-link-icon">{icon}</span>'
         f'<span class="menu-link-text">'
         f'<span class="menu-link-titulo">{titulo}</span>'
