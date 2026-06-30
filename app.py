@@ -596,33 +596,45 @@ elif st.session_state.vista == "fabrica":
         st.session_state.precios_carrito = {}
         st.rerun()
 
-    # Carrito con precio editable
+    # Carrito como tabla editable
     if st.session_state.carrito:
         st.markdown('<div class="section-label">Carrito actual</div>', unsafe_allow_html=True)
-        total_fac = 0
-        items_a_eliminar = []
+        st.caption("Toca cualquier celda para cambiar sabor, cantidad o precio.")
 
-        for s, c in list(st.session_state.carrito.items()):
-            precio_orig = PRODUCTOS[s]
-            precio_mod  = st.session_state.precios_carrito.get(s, precio_orig)
+        sabores_carrito = list(st.session_state.carrito.keys())
+        df_carrito = pd.DataFrame({
+            "Sabor":    sabores_carrito,
+            "Cantidad": [st.session_state.carrito[s] for s in sabores_carrito],
+            "Precio":   [st.session_state.precios_carrito.get(s, PRODUCTOS[s]) for s in sabores_carrito],
+        })
+        df_carrito["Subtotal"] = df_carrito["Cantidad"] * df_carrito["Precio"]
 
-            col1, col2, col3, col4 = st.columns([3, 2, 2, 1])
-            col1.markdown(f"**{s}** × {c}")
-            nuevo_precio = col2.number_input("$", min_value=0, value=precio_mod,
-                                             step=100, key=f"precio_{s}",
-                                             label_visibility="collapsed")
-            st.session_state.precios_carrito[s] = nuevo_precio
-            subtotal = nuevo_precio * c
-            total_fac += subtotal
-            col3.markdown(f"**{fmt(subtotal)}**")
-            if col4.button("✕", key=f"rm_{s}"):
-                items_a_eliminar.append(s)
+        edited_cart = st.data_editor(
+            df_carrito,
+            use_container_width=True,
+            hide_index=True,
+            num_rows="dynamic",
+            column_config={
+                "Sabor":    st.column_config.SelectboxColumn("Sabor", options=SABORES_LISTA),
+                "Cantidad": st.column_config.NumberColumn("Cantidad", min_value=1, step=1),
+                "Precio":   st.column_config.NumberColumn("Precio", min_value=0, step=100),
+                "Subtotal": st.column_config.NumberColumn("Subtotal", disabled=True),
+            },
+            key="carrito_editor"
+        )
 
-        for s in items_a_eliminar:
-            del st.session_state.carrito[s]
-            del st.session_state.precios_carrito[s]
-        if items_a_eliminar:
+        if st.button("💾 Aplicar cambios al carrito", key="btn_save_cart"):
+            nuevo_carrito = {}
+            nuevos_precios = {}
+            for _, row in edited_cart.iterrows():
+                if pd.notna(row["Sabor"]) and row["Cantidad"] > 0:
+                    nuevo_carrito[row["Sabor"]] = nuevo_carrito.get(row["Sabor"], 0) + int(row["Cantidad"])
+                    nuevos_precios[row["Sabor"]] = int(row["Precio"])
+            st.session_state.carrito = nuevo_carrito
+            st.session_state.precios_carrito = nuevos_precios
             st.rerun()
+
+        total_fac = float((edited_cart["Cantidad"] * edited_cart["Precio"]).sum())
 
         # Billete y vuelto
         st.markdown('<div class="section-label">Pago del cliente</div>', unsafe_allow_html=True)
