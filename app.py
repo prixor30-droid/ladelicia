@@ -22,6 +22,16 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
+# Meta tags PWA — permiten instalar la app sin barra de navegador
+st.markdown("""
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="La Delicia">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#D81B7A">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+""", unsafe_allow_html=True)
+
 # ══════════════════════════════════════════════════════════════════════════════
 # SUPABASE
 # ══════════════════════════════════════════════════════════════════════════════
