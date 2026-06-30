@@ -1266,31 +1266,46 @@ elif st.session_state.vista == "fabrica":
 
         # Cambio de producto post-factura
         st.markdown('<div class="section-label">¿El cliente quiere cambiar algo?</div>', unsafe_allow_html=True)
+
         col_a, col_b = st.columns(2)
         sabor_out = col_a.selectbox("Devuelve", SABORES_LISTA, key="cambio_out")
+        cant_out  = col_a.number_input("Cantidad que devuelve", min_value=1, max_value=50, value=1, step=1, key="cant_out")
+
         sabor_in  = col_b.selectbox("Lleva en cambio", SABORES_LISTA, key="cambio_in")
-        cant_cambio = st.number_input("Cantidad", min_value=1, max_value=50, value=1, step=1, key="cant_cambio")
+        cant_in   = col_b.number_input("Cantidad que lleva", min_value=1, max_value=50, value=1, step=1, key="cant_in")
+
+        valor_out = PRODUCTOS[sabor_out] * cant_out
+        valor_in  = PRODUCTOS[sabor_in] * cant_in
+        diferencia = valor_in - valor_out
+
+        if diferencia > 0:
+            st.markdown(f'<div class="warn-box">💰 El cliente debe pagar <b>{fmt(diferencia)}</b> adicionales</div>', unsafe_allow_html=True)
+        elif diferencia < 0:
+            st.markdown(f'<div class="info-box">💵 Hay que devolver <b>{fmt(abs(diferencia))}</b> al cliente</div>', unsafe_allow_html=True)
+        else:
+            st.markdown('<div class="info-box">✅ Cambio sin diferencia de valor</div>', unsafe_allow_html=True)
 
         if st.button("🔁 Registrar cambio", key="btn_cambio"):
             # Revertir el producto devuelto
             sb_post("ventas", {
                 "fecha": fecha_hoy(), "hora": ahora(), "canal": "Cambio",
                 "vendedor": fac["vendedor"], "sabor": sabor_out,
-                "cantidad": -cant_cambio,
-                "total": -(PRODUCTOS[sabor_out] * cant_cambio),
+                "cantidad": -cant_out,
+                "total": -valor_out,
                 "cliente": fac["cliente"], "factura_id": fac["id"]
             })
-            agregar_stock(sabor_out, cant_cambio)
+            agregar_stock(sabor_out, cant_out)
             # Registrar el nuevo producto
             sb_post("ventas", {
                 "fecha": fecha_hoy(), "hora": ahora(), "canal": "Cambio",
                 "vendedor": fac["vendedor"], "sabor": sabor_in,
-                "cantidad": cant_cambio,
-                "total": PRODUCTOS[sabor_in] * cant_cambio,
+                "cantidad": cant_in,
+                "total": valor_in,
                 "cliente": fac["cliente"], "factura_id": fac["id"]
             })
-            restar_stock(sabor_in, cant_cambio)
-            st.markdown(f'<div class="success-toast">✅ Cambio registrado: {cant_cambio} {sabor_out} → {cant_cambio} {sabor_in}</div>', unsafe_allow_html=True)
+            restar_stock(sabor_in, cant_in)
+            get_metricas_globales.clear()
+            st.markdown(f'<div class="success-toast">✅ Cambio registrado: {cant_out} {sabor_out} → {cant_in} {sabor_in}</div>', unsafe_allow_html=True)
             time.sleep(0.3)
             st.rerun()
 
