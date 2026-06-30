@@ -181,36 +181,38 @@ def render_recibo(registros):
     vendedor_r = r0["vendedor"]
     total_r = sum(r["total"] for r in registros)
 
-    items_html = "".join(f"""
-        <div class="recibo-item">
-            <div class="recibo-item-nombre">{r['sabor']}</div>
-            <div class="recibo-item-detalle">
-                <span>{r['cantidad']} × {fmt(r['total']/r['cantidad'] if r['cantidad'] else 0)}</span>
-                <span>{fmt(r['total'])}</span>
-            </div>
-        </div>
-    """ for r in registros)
+    items_partes = []
+    for r in registros:
+        precio_unit = fmt(r['total']/r['cantidad']) if r['cantidad'] else fmt(0)
+        items_partes.append(
+            '<div class="recibo-item">'
+            f'<div class="recibo-item-nombre">{r["sabor"]}</div>'
+            '<div class="recibo-item-detalle">'
+            f'<span>{r["cantidad"]} × {precio_unit}</span>'
+            f'<span>{fmt(r["total"])}</span>'
+            '</div></div>'
+        )
+    items_html = "".join(items_partes)
 
-    return f"""
-    <div class="recibo-wrap">
-        <div class="recibo-ticket">
-            <div class="recibo-logo">{logo_html}</div>
-            <div class="recibo-titulo">Productos La Delicia</div>
-            <div class="recibo-sub">Factura electrónica de venta</div>
-            <div class="recibo-sub">No. FV-{fid}</div>
-            <div class="recibo-linea-punteada"></div>
-            <div class="recibo-dato"><b>Fecha:</b> {fecha_r} · {hora_r}</div>
-            <div class="recibo-dato"><b>Cliente:</b> {cliente_r}</div>
-            <div class="recibo-dato"><b>Vendedor:</b> {vendedor_r}</div>
-            <div class="recibo-linea-punteada"></div>
-            {items_html}
-            <div class="recibo-linea-punteada"></div>
-            <div class="recibo-total-row"><span>TOTAL</span><span>{fmt(total_r)}</span></div>
-            <div class="recibo-linea-punteada"></div>
-            <div class="recibo-footer">¡Gracias por su compra!</div>
-        </div>
-    </div>
-    """
+    partes = [
+        '<div class="recibo-wrap"><div class="recibo-ticket">',
+        f'<div class="recibo-logo">{logo_html}</div>',
+        '<div class="recibo-titulo">Productos La Delicia</div>',
+        '<div class="recibo-sub">Factura electrónica de venta</div>',
+        f'<div class="recibo-sub">No. FV-{fid}</div>',
+        '<div class="recibo-linea-punteada"></div>',
+        f'<div class="recibo-dato"><b>Fecha:</b> {fecha_r} · {hora_r}</div>',
+        f'<div class="recibo-dato"><b>Cliente:</b> {cliente_r}</div>',
+        f'<div class="recibo-dato"><b>Vendedor:</b> {vendedor_r}</div>',
+        '<div class="recibo-linea-punteada"></div>',
+        items_html,
+        '<div class="recibo-linea-punteada"></div>',
+        f'<div class="recibo-total-row"><span>TOTAL</span><span>{fmt(total_r)}</span></div>',
+        '<div class="recibo-linea-punteada"></div>',
+        '<div class="recibo-footer">¡Gracias por su compra!</div>',
+        '</div></div>'
+    ]
+    return "".join(partes)
 
 def grafica_barras_sabor(labels, valores, titulo="bolsas"):
     """Gráfica de barras horizontales con colores de La Delicia."""
