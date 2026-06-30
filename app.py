@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import base64
 import hashlib
@@ -197,19 +198,21 @@ label,.stSelectbox label,.stNumberInput label,.stDateInput label,.stTextInput la
 """, unsafe_allow_html=True)
 
 # Bloquear teclado virtual en los selectbox (solo permite tocar y elegir)
-st.markdown("""
+components.html("""
 <script>
 function bloquearTecladoSelects() {
-    document.querySelectorAll('[data-baseweb="select"] input').forEach(function(inp) {
-        inp.setAttribute('inputmode', 'none');
-        inp.setAttribute('readonly', 'true');
-    });
+    try {
+        const inputs = window.parent.document.querySelectorAll('[data-baseweb="select"] input');
+        inputs.forEach(function(inp) {
+            inp.setAttribute('inputmode', 'none');
+            inp.setAttribute('readonly', 'true');
+        });
+    } catch (e) {}
 }
-const obs = new MutationObserver(bloquearTecladoSelects);
-obs.observe(document.body, {childList: true, subtree: true});
 bloquearTecladoSelects();
+setInterval(bloquearTecladoSelects, 500);
 </script>
-""", unsafe_allow_html=True)
+""", height=0)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # INICIALIZAR
