@@ -85,6 +85,52 @@ STOCK_MINIMO = 10  # alerta cuando un sabor tenga menos de esta cantidad
 def fmt(n):
     return f"${int(n):,.0f}".replace(",", ".")
 
+def tabla_facturas_html(df_canal):
+    """Genera tabla HTML estilo factura electrónica: Fecha, N° comprobante, Vendedor, Cliente, Total, Estado."""
+    filas = []
+    for fid in df_canal["factura_id"].unique():
+        if not fid:
+            continue
+        grupo = df_canal[df_canal["factura_id"]==fid]
+        filas.append({
+            "fecha":    grupo["fecha"].iloc[0],
+            "factura":  fid,
+            "vendedor": grupo["vendedor"].iloc[0],
+            "cliente":  grupo["cliente"].iloc[0],
+            "total":    grupo["total"].sum(),
+        })
+    if not filas:
+        return None
+    filas.sort(key=lambda r: (r["fecha"], r["factura"]), reverse=True)
+
+    filas_html = "".join(f"""
+        <tr>
+            <td>{r['fecha']}</td>
+            <td class="num-comp">FV-{r['factura']}</td>
+            <td>{r['vendedor']}</td>
+            <td>{r['cliente']}</td>
+            <td class="total-col">{fmt(r['total'])}</td>
+            <td class="estado-ok">✓ Aprobado</td>
+        </tr>""" for r in filas)
+
+    return f"""
+    <div class="tabla-fact-wrap">
+        <table class="tabla-fact">
+            <thead>
+                <tr>
+                    <th>Fecha</th>
+                    <th>N° Comprobante</th>
+                    <th>Vendedor</th>
+                    <th>Cliente</th>
+                    <th>Total</th>
+                    <th>Estado</th>
+                </tr>
+            </thead>
+            <tbody>{filas_html}</tbody>
+        </table>
+    </div>
+    """
+
 def grafica_barras_sabor(labels, valores, titulo="bolsas"):
     """Gráfica de barras horizontales con colores de La Delicia."""
     import json as _json
@@ -319,6 +365,15 @@ div[data-testid="stElementContainer"]:has([data-testid="stButton-btn_produccion"
 .factura-row{display:flex;justify-content:space-between;font-size:0.85rem;padding:4px 0;border-bottom:1px solid #E5C5D5;color:#1A0A12;}
 .factura-total{display:flex;justify-content:space-between;font-size:1rem;font-weight:700;color:#1B9E5A;margin-top:8px;}
 .factura-cambio{font-size:0.9rem;color:#E68900;margin-top:6px;text-align:center;}
+.tabla-fact-wrap{overflow-x:auto;border-radius:10px;box-shadow:0 2px 10px rgba(216,27,122,0.10);margin-bottom:14px;}
+.tabla-fact{width:100%;border-collapse:collapse;font-size:0.78rem;background:#FFFFFF;}
+.tabla-fact thead{background:#D81B7A;}
+.tabla-fact thead th{color:white;font-weight:600;padding:10px 8px;text-align:left;white-space:nowrap;}
+.tabla-fact tbody td{padding:9px 8px;border-bottom:1px solid #F0E0E8;color:#1A0A12;white-space:nowrap;}
+.tabla-fact tbody tr:hover{background:#FAF0F5;}
+.tabla-fact .num-comp{color:#D81B7A;font-weight:600;}
+.tabla-fact .estado-ok{color:#1B9E5A;font-weight:600;}
+.tabla-fact .total-col{text-align:right;font-weight:600;}
 .calc-box{background:#FFFFFF;border-radius:14px;padding:14px;margin-bottom:14px;box-shadow:0 2px 10px rgba(216,27,122,0.10);}
 .main-btn{background:#FAF0F5;border:1px solid #E5C5D5;border-radius:14px;padding:20px 16px;margin-bottom:10px;cursor:pointer;display:flex;align-items:center;gap:14px;}
 .main-btn-icon{font-size:2rem;}
@@ -1056,23 +1111,9 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
             st.markdown('<div class="section-label">Facturas fábrica</div>', unsafe_allow_html=True)
             df_fab = df_vt[df_vt["canal"]=="Fábrica"]
             if not df_fab.empty:
-                for fid in df_fab["factura_id"].unique():
-                    if not fid:
-                        continue
-                    grupo = df_fab[df_fab["factura_id"]==fid]
-                    cliente_n = grupo["cliente"].iloc[0]
-                    vendedor_n = grupo["vendedor"].iloc[0]
-                    hora_n = grupo["hora"].iloc[0]
-                    total_n = grupo["total"].sum()
-                    st.markdown(f"""
-                    <div class="factura-box">
-                        <div class="factura-header">🧾 #{fid} — {cliente_n}</div>
-                        <div style="font-size:0.78rem;color:rgba(255,255,255,0.4);margin-bottom:8px;">{vendedor_n} · {hora_n}</div>
-                    """, unsafe_allow_html=True)
-                    for _, row in grupo.iterrows():
-                        st.markdown(f'<div class="factura-row"><span>{row["sabor"]} × {row["cantidad"]}</span><span>{fmt(row["total"])}</span></div>', unsafe_allow_html=True)
-                    st.markdown(f'<div class="factura-total"><span>TOTAL</span><span>{fmt(total_n)}</span></div>', unsafe_allow_html=True)
-                    st.markdown('</div>', unsafe_allow_html=True)
+                tabla_html = tabla_facturas_html(df_fab)
+                if tabla_html:
+                    st.markdown(tabla_html, unsafe_allow_html=True)
 
     with sub_r2:
         st.markdown('<div class="section-label">Consultar por fechas</div>', unsafe_allow_html=True)
@@ -1107,30 +1148,13 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
             por_canal.columns  = ["Canal","Bolsas","Total $"]
             st.dataframe(por_canal, use_container_width=True, hide_index=True)
 
-            # Facturas individuales del rango, agrupadas por día
+            # Facturas individuales del rango, en formato tabla
             df_fab_r = df_r[df_r["canal"]=="Fábrica"]
             if not df_fab_r.empty:
                 st.markdown('<div class="section-label">Facturas del rango</div>', unsafe_allow_html=True)
-                for fecha_d in sorted(df_fab_r["fecha"].unique(), reverse=True):
-                    st.markdown(f'<div class="warn-box">📅 <b>{fecha_d}</b></div>', unsafe_allow_html=True)
-                    df_dia = df_fab_r[df_fab_r["fecha"]==fecha_d]
-                    for fid in df_dia["factura_id"].unique():
-                        if not fid:
-                            continue
-                        grupo = df_dia[df_dia["factura_id"]==fid]
-                        cliente_n = grupo["cliente"].iloc[0]
-                        vendedor_n = grupo["vendedor"].iloc[0]
-                        hora_n = grupo["hora"].iloc[0]
-                        total_n = grupo["total"].sum()
-                        st.markdown(f"""
-                        <div class="factura-box">
-                            <div class="factura-header">🧾 #{fid} — {cliente_n}</div>
-                            <div style="font-size:0.78rem;color:#9C4270;margin-bottom:8px;">{vendedor_n} · {hora_n}</div>
-                        """, unsafe_allow_html=True)
-                        for _, row in grupo.iterrows():
-                            st.markdown(f'<div class="factura-row"><span>{row["sabor"]} × {row["cantidad"]}</span><span>{fmt(row["total"])}</span></div>', unsafe_allow_html=True)
-                        st.markdown(f'<div class="factura-total"><span>TOTAL</span><span>{fmt(total_n)}</span></div>', unsafe_allow_html=True)
-                        st.markdown('</div>', unsafe_allow_html=True)
+                tabla_html_r = tabla_facturas_html(df_fab_r)
+                if tabla_html_r:
+                    st.markdown(tabla_html_r, unsafe_allow_html=True)
 
     with sub_r3:
         st.markdown('<div class="section-label">Reporte del mes actual</div>', unsafe_allow_html=True)
