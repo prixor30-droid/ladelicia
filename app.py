@@ -721,10 +721,20 @@ elif st.session_state.vista == "produccion":
         st.markdown('<div class="success-toast">✅ ¡Producción registrada!</div>', unsafe_allow_html=True)
         st.session_state.ok_prod = False
 
-    # Producción de hoy — tabla totalmente editable
-    raw_prod = sb_get("produccion", f"select=id,fecha,hora,empleado,sabor,cantidad&fecha=eq.{fecha_hoy()}&order=hora.desc")
+    # Producción de un día — selector de fecha + tabla totalmente editable
+    st.markdown('<div class="section-label">Consultar producción</div>', unsafe_allow_html=True)
+    fecha_consulta = st.date_input(
+        "Día a consultar",
+        value=datetime.now(COL_TZ).date(),
+        key="fecha_consulta_prod"
+    )
+    fecha_consulta_str = str(fecha_consulta)
+    es_hoy = fecha_consulta_str == fecha_hoy()
+    titulo_tabla = "Producción de hoy" if es_hoy else f"Producción del {fecha_consulta_str}"
+
+    raw_prod = sb_get("produccion", f"select=id,fecha,hora,empleado,sabor,cantidad&fecha=eq.{fecha_consulta_str}&order=hora.desc")
     if raw_prod:
-        st.markdown('<div class="section-label">Producción de hoy</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="section-label">{titulo_tabla}</div>', unsafe_allow_html=True)
         st.caption("Toca cualquier celda para editar. Luego presiona Guardar cambios.")
         df_prod = pd.DataFrame(raw_prod)
         df_edit = df_prod[["fecha","hora","empleado","sabor","cantidad"]].copy()
@@ -787,6 +797,8 @@ elif st.session_state.vista == "produccion":
             restar_stock(reg_del["sabor"], reg_del["cantidad"])
             time.sleep(1)
             st.rerun()
+    else:
+        st.info(f"No hay producción registrada el {fecha_consulta_str}.")
 
     # Inventario actual
     raw_inv = sb_get("inventario", "select=sabor,stock,precio&order=sabor.asc")
