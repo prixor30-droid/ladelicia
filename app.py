@@ -706,15 +706,15 @@ if st.session_state.vista == "menu":
         st.query_params.clear()
         st.rerun()
 
-    botones_html = "".join(f"""
-        <a href="?ir={vista}" class="menu-link-btn">
-            <span class="menu-link-icon">{icon}</span>
-            <span class="menu-link-text">
-                <span class="menu-link-titulo">{titulo}</span>
-                <span class="menu-link-sub">{sub}</span>
-            </span>
-        </a>
-    """ for vista, icon, titulo, sub in opciones)
+    botones_html = "".join(
+        f'<a href="?ir={vista}" class="menu-link-btn">'
+        f'<span class="menu-link-icon">{icon}</span>'
+        f'<span class="menu-link-text">'
+        f'<span class="menu-link-titulo">{titulo}</span>'
+        f'<span class="menu-link-sub">{sub}</span>'
+        f'</span></a>'
+        for vista, icon, titulo, sub in opciones
+    )
 
     st.markdown(f'<div class="menu-links-wrap">{botones_html}</div>', unsafe_allow_html=True)
 
