@@ -527,9 +527,11 @@ function arreglarAnchoBotonesMenu() {
                     if (el && el.parentElement) {
                         el = el.parentElement;
                         if (el.getAttribute('data-testid') === 'stElementContainer') {
-                            el.style.width = '100%';
-                            el.style.minWidth = '100%';
-                            el.style.maxWidth = '100%';
+                            el.style.width = 'calc(100% + 2rem)';
+                            el.style.minWidth = 'calc(100% + 2rem)';
+                            el.style.maxWidth = 'calc(100% + 2rem)';
+                            el.style.marginLeft = '-1rem';
+                            el.style.marginRight = '-1rem';
                             break;
                         }
                     }
