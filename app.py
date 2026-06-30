@@ -178,12 +178,9 @@ label,.stSelectbox label,.stNumberInput label,.stDateInput label,.stTextInput la
 .section-label{font-size:0.69rem;font-weight:700;text-transform:uppercase;letter-spacing:0.7px;color:#B0185F;margin:16px 0 6px;}
 .stButton>button{width:100%;background:#D81B7A !important;color:white !important;-webkit-text-fill-color:white !important;border:none !important;border-radius:12px !important;padding:14px !important;font-size:1rem !important;font-weight:700 !important;cursor:pointer;margin-top:4px;box-shadow:0 4px 16px rgba(216,27,122,0.25);white-space:pre-line !important;line-height:1.4 !important;}
 .stButton>button:hover{opacity:0.88;}
-.menu-btn-wrap .stButton>button{min-height:84px !important;display:flex !important;flex-direction:column !important;justify-content:center !important;align-items:center !important;text-align:center !important;background:#FFFFFF !important;color:#1A0A12 !important;-webkit-text-fill-color:#1A0A12 !important;border:none !important;border-radius:16px !important;box-shadow:0 2px 10px rgba(216,27,122,0.15) !important;width:100% !important;}
-.menu-btn-wrap{width:100% !important;}
-.menu-btn-wrap > div{width:100% !important;}
-.menu-btn-wrap [data-testid="stVerticalBlock"]{width:100% !important;gap:0 !important;}
-.menu-btn-wrap [data-testid="stElementContainer"]{width:100% !important;}
-.menu-btn-wrap .stButton>button:hover{box-shadow:0 4px 14px rgba(216,27,122,0.22) !important;opacity:1 !important;}
+.menu-activo ~ div .stButton>button{min-height:84px !important;display:flex !important;flex-direction:column !important;justify-content:center !important;align-items:center !important;text-align:center !important;background:#FFFFFF !important;color:#1A0A12 !important;-webkit-text-fill-color:#1A0A12 !important;border:3px solid red !important;border-radius:16px !important;box-shadow:0 2px 10px rgba(216,27,122,0.15) !important;width:100% !important;}
+.menu-activo ~ div .stButton{width:100% !important;}
+.menu-activo ~ div .stButton>button:hover{box-shadow:0 4px 14px rgba(216,27,122,0.22) !important;opacity:1 !important;}
 [data-testid="stMetricLabel"] p{color:#9C4270 !important;}
 [data-testid="stMetricValue"]{color:#1A0A12 !important;}
 .stDataFrame{border-radius:12px;overflow:hidden;font-size:0.83rem;border:1px solid #E5C5D5;}
@@ -351,12 +348,11 @@ if st.session_state.vista == "menu":
     if st.session_state.es_admin:
         opciones.append(("resumen", "📊", "Resumen", "Ventas, facturas y exportar"))
 
+    st.markdown('<div class="menu-activo"></div>', unsafe_allow_html=True)
     for vista, icon, titulo, sub in opciones:
-        st.markdown('<div class="menu-btn-wrap">', unsafe_allow_html=True)
         if st.button(f"{icon}  {titulo}\n{sub}", key=f"btn_{vista}"):
             st.session_state.vista = vista
             st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # VISTA: PRODUCCIÓN
