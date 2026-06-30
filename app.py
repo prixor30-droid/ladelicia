@@ -227,10 +227,20 @@ html,body,[class*="css"],.stApp{font-family:'Inter',sans-serif !important;backgr
 #MainMenu,footer,header{visibility:hidden;}
 .block-container{padding-top:1rem;padding-bottom:3rem;max-width:500px;margin:0 auto;}
 @media (min-width: 768px){
-  .block-container{max-width:680px;}
+  .block-container{max-width:900px;}
+  html,body{font-size:17px;}
+  .brand-header p{font-size:0.95rem;}
+  .metric-box .val{font-size:1.6rem;}
+  .metric-box .lbl{font-size:0.8rem;}
+  .section-label{font-size:0.85rem;}
+  .stButton>button{font-size:1.15rem !important;padding:18px !important;}
+  label,.stSelectbox label,.stNumberInput label,.stDateInput label,.stTextInput label{font-size:1rem !important;}
 }
-@media (min-width: 1100px){
-  .block-container{max-width:760px;}
+@media (min-width: 1200px){
+  .block-container{max-width:1100px;}
+  html,body{font-size:18px;}
+  .metric-box .val{font-size:1.9rem;}
+  .stButton>button{font-size:1.25rem !important;padding:20px !important;}
 }
 [data-baseweb="base-input"],[data-baseweb="base-input"] *,[data-baseweb="select"],[data-baseweb="select"]>div,[data-baseweb="select"]>div>div{background-color:#FFFFFF !important;color:#1A0A12 !important;border-color:#E5C5D5 !important;}
 [data-baseweb="base-input"] input,[data-baseweb="base-input"] textarea,input[type="number"],input[type="text"],input[type="date"]{background-color:#FFFFFF !important;color:#1A0A12 !important;-webkit-text-fill-color:#1A0A12 !important;}
@@ -415,8 +425,8 @@ st.markdown(f"""
 if not st.session_state.es_admin:
     with st.expander("🔐 Acceso administrador", expanded=False):
         cu, cp = st.columns(2)
-        u = cu.text_input("Usuario", placeholder="jorge", key="lu", label_visibility="collapsed")
-        p = cp.text_input("Contraseña", type="password", placeholder="••••••••", key="lp", label_visibility="collapsed")
+        u = cu.text_input("Usuario", placeholder="Usuario", key="lu", label_visibility="collapsed")
+        p = cp.text_input("Contraseña", type="password", placeholder="Contraseña", key="lp", label_visibility="collapsed")
         if st.button("Entrar", key="btn_login"):
             if check_login(u, p):
                 st.session_state.es_admin = True
