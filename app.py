@@ -199,6 +199,35 @@ def set_stock(sabor, cantidad):
     q = requests.utils.quote(sabor)
     sb_patch("inventario", f"sabor=eq.{q}", {"stock": cantidad})
 
+def sabores_por_frecuencia(canal=None):
+    """Devuelve la lista de sabores ordenada: los más vendidos en los últimos 30 días primero."""
+    limite = (datetime.now(COL_TZ) - timedelta(days=30)).strftime("%Y-%m-%d")
+    params = f"select=sabor,cantidad&fecha=gte.{limite}"
+    if canal:
+        params += f"&canal=eq.{canal}"
+    raw = sb_get("ventas", params)
+    if not raw:
+        return SABORES_LISTA
+    conteo = {}
+    for r in raw:
+        conteo[r["sabor"]] = conteo.get(r["sabor"], 0) + r["cantidad"]
+    usados = sorted(conteo.keys(), key=lambda s: -conteo[s])
+    resto = [s for s in SABORES_LISTA if s not in conteo]
+    return usados + resto
+
+def sabores_produccion_frecuente():
+    """Sabores ordenados por frecuencia de producción en los últimos 30 días."""
+    limite = (datetime.now(COL_TZ) - timedelta(days=30)).strftime("%Y-%m-%d")
+    raw = sb_get("produccion", f"select=sabor,cantidad&fecha=gte.{limite}")
+    if not raw:
+        return SABORES_LISTA
+    conteo = {}
+    for r in raw:
+        conteo[r["sabor"]] = conteo.get(r["sabor"], 0) + r["cantidad"]
+    usados = sorted(conteo.keys(), key=lambda s: -conteo[s])
+    resto = [s for s in SABORES_LISTA if s not in conteo]
+    return usados + resto
+
 def limpiar_datos_viejos():
     limite = (datetime.now(COL_TZ) - timedelta(days=180)).strftime("%Y-%m-%d")
     for tabla in ["produccion", "ventas", "cargues", "devoluciones"]:
@@ -508,7 +537,7 @@ elif st.session_state.vista == "produccion":
     st.markdown('<div class="section-label">Registrar producción</div>', unsafe_allow_html=True)
 
     empleado   = st.selectbox("¿Quién registra?", EMPLEADOS, key="emp")
-    sabor_p    = st.selectbox("Sabor producido", SABORES_LISTA, key="sabor_p")
+    sabor_p    = st.selectbox("Sabor producido", sabores_produccion_frecuente(), key="sabor_p")
     cantidad_p = st.number_input("Bolsas producidas", min_value=1, max_value=5000, value=50, step=10, key="cant_p")
 
     stock_act = get_stock(sabor_p)
@@ -629,7 +658,7 @@ elif st.session_state.vista == "carro":
 
     with sub1:
         st.markdown('<div class="section-label">Cargue del carro</div>', unsafe_allow_html=True)
-        sabor_cg = st.selectbox("Sabor", SABORES_LISTA, key="sabor_cg")
+        sabor_cg = st.selectbox("Sabor", sabores_por_frecuencia("Carro"), key="sabor_cg")
         cant_cg  = st.number_input("Bolsas a cargar", min_value=1, max_value=500, value=10, step=5, key="cant_cg")
         stock_cg = get_stock(sabor_cg)
 
@@ -672,7 +701,7 @@ elif st.session_state.vista == "carro":
         st.markdown('<div class="section-label">Venta del carro</div>', unsafe_allow_html=True)
 
         col_s, col_c = st.columns([2, 1])
-        sabor_vc = col_s.selectbox("Sabor", SABORES_LISTA, key="sabor_vc")
+        sabor_vc = col_s.selectbox("Sabor", sabores_por_frecuencia("Carro"), key="sabor_vc")
         cant_vc  = col_c.number_input("Bolsas", min_value=1, max_value=500, value=1, step=1, key="cant_vc")
 
         if st.button("➕ Agregar al carrito", key="btn_add_carro"):
@@ -796,7 +825,7 @@ elif st.session_state.vista == "fabrica":
     st.markdown('<div class="section-label">Agregar al carrito</div>', unsafe_allow_html=True)
 
     col_s, col_c = st.columns([2, 1])
-    sabor_vf = col_s.selectbox("Sabor", SABORES_LISTA, key="sabor_vf")
+    sabor_vf = col_s.selectbox("Sabor", sabores_por_frecuencia("Fábrica"), key="sabor_vf")
     cant_vf  = col_c.number_input("Bolsas", min_value=1, max_value=500, value=1, step=1, key="cant_vf")
 
     stock_vf   = get_stock(sabor_vf)
