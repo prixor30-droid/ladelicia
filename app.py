@@ -459,10 +459,13 @@ label,.stSelectbox label,.stNumberInput label,.stDateInput label,.stTextInput la
 .section-label{font-size:0.69rem;font-weight:700;text-transform:uppercase;letter-spacing:0.7px;color:#B0185F;margin:16px 0 6px;}
 .stButton>button{width:100%;background:#D81B7A !important;color:white !important;-webkit-text-fill-color:white !important;border:none !important;border-radius:12px !important;padding:14px !important;font-size:1rem !important;font-weight:700 !important;cursor:pointer;margin-top:4px;box-shadow:0 4px 16px rgba(216,27,122,0.25);white-space:pre-line !important;line-height:1.4 !important;}
 .stButton>button:hover{opacity:0.88;}
-[data-testid="stButton-btn_produccion"],[data-testid="stButton-btn_carro"],[data-testid="stButton-btn_fabrica"],[data-testid="stButton-btn_resumen"]{width:100% !important;max-width:100% !important;}
-[data-testid="stButton-btn_produccion"] button,[data-testid="stButton-btn_carro"] button,[data-testid="stButton-btn_fabrica"] button,[data-testid="stButton-btn_resumen"] button{background:#FFFFFF !important;color:#1A0A12 !important;-webkit-text-fill-color:#1A0A12 !important;box-shadow:0 2px 10px rgba(216,27,122,0.15) !important;min-height:84px !important;border-radius:16px !important;width:100% !important;max-width:100% !important;}
-[data-testid="stButton-btn_produccion"] button:hover,[data-testid="stButton-btn_carro"] button:hover,[data-testid="stButton-btn_fabrica"] button:hover,[data-testid="stButton-btn_resumen"] button:hover{box-shadow:0 4px 14px rgba(216,27,122,0.22) !important;opacity:1 !important;}
-div[data-testid="stElementContainer"]:has([data-testid="stButton-btn_produccion"]),div[data-testid="stElementContainer"]:has([data-testid="stButton-btn_carro"]),div[data-testid="stElementContainer"]:has([data-testid="stButton-btn_fabrica"]),div[data-testid="stElementContainer"]:has([data-testid="stButton-btn_resumen"]){width:100% !important;min-width:100% !important;}
+.menu-links-wrap{margin:0 -1rem;}
+.menu-link-btn{display:flex;align-items:center;gap:14px;background:#FFFFFF;text-decoration:none;border-radius:16px;box-shadow:0 2px 10px rgba(216,27,122,0.15);padding:18px 20px;margin:0 1rem 12px 1rem;min-height:84px;box-sizing:border-box;}
+.menu-link-btn:hover{box-shadow:0 4px 14px rgba(216,27,122,0.22);}
+.menu-link-icon{font-size:2rem;flex-shrink:0;}
+.menu-link-text{display:flex;flex-direction:column;text-align:left;}
+.menu-link-titulo{font-size:1.05rem;font-weight:700;color:#1A0A12;}
+.menu-link-sub{font-size:0.8rem;color:#9C4270;margin-top:2px;}
 
 [data-testid="stMetricLabel"] p{color:#9C4270 !important;}
 [data-testid="stMetricValue"]{color:#1A0A12 !important;}
@@ -516,34 +519,8 @@ function bloquearTecladoSelects() {
         });
     } catch (e) {}
 }
-function arreglarAnchoBotonesMenu() {
-    try {
-        const keys = ['btn_produccion', 'btn_carro', 'btn_fabrica', 'btn_resumen'];
-        keys.forEach(function(k) {
-            const btnWrap = window.parent.document.querySelector('[data-testid="stButton-' + k + '"]');
-            if (btnWrap) {
-                let el = btnWrap;
-                for (let i = 0; i < 4; i++) {
-                    if (el && el.parentElement) {
-                        el = el.parentElement;
-                        if (el.getAttribute('data-testid') === 'stElementContainer') {
-                            el.style.width = 'calc(100% + 2rem)';
-                            el.style.minWidth = 'calc(100% + 2rem)';
-                            el.style.maxWidth = 'calc(100% + 2rem)';
-                            el.style.marginLeft = '-1rem';
-                            el.style.marginRight = '-1rem';
-                            break;
-                        }
-                    }
-                }
-            }
-        });
-    } catch (e) {}
-}
 bloquearTecladoSelects();
-arreglarAnchoBotonesMenu();
 setInterval(bloquearTecladoSelects, 500);
-setInterval(arreglarAnchoBotonesMenu, 500);
 </script>
 """, height=0)
 
@@ -722,11 +699,24 @@ if st.session_state.vista == "menu":
     if st.session_state.es_admin:
         opciones.append(("resumen", "📊", "Resumen", "Ventas, facturas y exportar"))
 
-    st.markdown('<div class="menu-activo"></div>', unsafe_allow_html=True)
-    for vista, icon, titulo, sub in opciones:
-        if st.button(f"{icon}  {titulo}\n{sub}", key=f"btn_{vista}"):
-            st.session_state.vista = vista
-            st.rerun()
+    # Detectar clic vía query param
+    qp = st.query_params
+    if "ir" in qp and qp["ir"] in [o[0] for o in opciones]:
+        st.session_state.vista = qp["ir"]
+        st.query_params.clear()
+        st.rerun()
+
+    botones_html = "".join(f"""
+        <a href="?ir={vista}" class="menu-link-btn">
+            <span class="menu-link-icon">{icon}</span>
+            <span class="menu-link-text">
+                <span class="menu-link-titulo">{titulo}</span>
+                <span class="menu-link-sub">{sub}</span>
+            </span>
+        </a>
+    """ for vista, icon, titulo, sub in opciones)
+
+    st.markdown(f'<div class="menu-links-wrap">{botones_html}</div>', unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # VISTA: PRODUCCIÓN
