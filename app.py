@@ -896,6 +896,67 @@ elif st.session_state.vista == "carro":
                 df_pend.columns = ["Sabor","Bolsas pendientes"]
                 st.dataframe(df_pend, use_container_width=True, hide_index=True)
 
+        # Tabla editable de cargues del día — para corregir errores
+        raw_cg_full = sb_get("cargues", f"select=id,fecha,hora,sabor,cantidad&fecha=eq.{fecha_hoy()}&order=hora.desc")
+        if raw_cg_full:
+            st.markdown('<div class="section-label">Cargues registrados hoy</div>', unsafe_allow_html=True)
+            st.caption("Toca cualquier celda para corregir un error. Luego presiona Guardar cambios.")
+            df_cg_full = pd.DataFrame(raw_cg_full)
+            df_cg_edit = df_cg_full[["fecha","hora","sabor","cantidad"]].copy()
+            df_cg_edit.columns = ["Fecha","Hora","Sabor","Bolsas"]
+
+            edited_cg = st.data_editor(
+                df_cg_edit,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "Fecha":  st.column_config.TextColumn("Fecha"),
+                    "Hora":   st.column_config.TextColumn("Hora"),
+                    "Sabor":  st.column_config.SelectboxColumn("Sabor", options=SABORES_LISTA),
+                    "Bolsas": st.column_config.NumberColumn("Bolsas", min_value=0, step=1),
+                },
+                key="cargue_editor"
+            )
+
+            col_gcg, col_ecg = st.columns(2)
+            if col_gcg.button("💾 Guardar cambios", key="btn_save_cg"):
+                for i, row in edited_cg.iterrows():
+                    orig = df_cg_full.iloc[i]
+                    cambios = {}
+                    if row["Fecha"] != orig["fecha"]:
+                        cambios["fecha"] = row["Fecha"]
+                    if row["Hora"] != orig["hora"]:
+                        cambios["hora"] = row["Hora"]
+                    if row["Sabor"] != orig["sabor"]:
+                        # Cambió el sabor: revertir stock del sabor viejo (devolverlo) y restar del nuevo
+                        agregar_stock(orig["sabor"], orig["cantidad"])
+                        restar_stock(row["Sabor"], int(row["Bolsas"]))
+                        cambios["sabor"] = row["Sabor"]
+                        cambios["cantidad"] = int(row["Bolsas"])
+                    elif int(row["Bolsas"]) != orig["cantidad"]:
+                        diff = int(row["Bolsas"]) - orig["cantidad"]
+                        if diff > 0:
+                            restar_stock(orig["sabor"], diff)
+                        elif diff < 0:
+                            agregar_stock(orig["sabor"], abs(diff))
+                        cambios["cantidad"] = int(row["Bolsas"])
+
+                    if cambios:
+                        sb_patch("cargues", f"id=eq.{orig['id']}", cambios)
+                get_metricas_globales.clear()
+                time.sleep(0.3)
+                st.rerun()
+
+            ids_cg = {f"{r['fecha']} {r['hora']} — {r['sabor']} ({r['cantidad']} bolsas)": r for r in raw_cg_full}
+            sel_del_cg = st.selectbox("Eliminar registro", ["— Selecciona —"] + list(ids_cg.keys()), key="sel_del_cg")
+            if sel_del_cg != "— Selecciona —" and col_ecg.button("🗑️ Eliminar", key="btn_del_cg"):
+                reg_del_cg = ids_cg[sel_del_cg]
+                sb_delete("cargues", f"id=eq.{reg_del_cg['id']}")
+                agregar_stock(reg_del_cg["sabor"], reg_del_cg["cantidad"])
+                get_metricas_globales.clear()
+                time.sleep(0.3)
+                st.rerun()
+
     with sub2:
         st.markdown('<div class="section-label">Venta del carro</div>', unsafe_allow_html=True)
 
