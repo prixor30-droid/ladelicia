@@ -273,11 +273,16 @@ total_inv  = sum(r["stock"]    for r in _inv)   if _inv   else 0
 total_prod = sum(r["cantidad"] for r in _prod)  if _prod  else 0
 total_vta  = sum(r["total"]    for r in _venta) if _venta else 0
 
+if st.session_state.es_admin:
+    tarjeta_ventas = f'<div class="metric-box metric-green"><div class="val">{fmt(total_vta)}</div><div class="lbl">Ventas hoy</div></div>'
+else:
+    tarjeta_ventas = '<div class="metric-box metric-green"><div class="val">🔒</div><div class="lbl">Solo admin</div></div>'
+
 st.markdown(f"""
 <div class="metric-row">
     <div class="metric-box metric-pink"><div class="val">{total_inv}</div><div class="lbl">En inventario</div></div>
     <div class="metric-box metric-yellow"><div class="val">{total_prod}</div><div class="lbl">Producidas hoy</div></div>
-    <div class="metric-box metric-green"><div class="val">{fmt(total_vta)}</div><div class="lbl">Ventas hoy</div></div>
+    {tarjeta_ventas}
 </div>
 """, unsafe_allow_html=True)
 
