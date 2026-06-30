@@ -85,6 +85,92 @@ STOCK_MINIMO = 10  # alerta cuando un sabor tenga menos de esta cantidad
 def fmt(n):
     return f"${int(n):,.0f}".replace(",", ".")
 
+def grafica_barras_sabor(labels, valores, titulo="bolsas"):
+    """Gráfica de barras horizontales con colores de La Delicia."""
+    import json as _json
+    altura = max(220, len(labels) * 36 + 60)
+    labels_json = _json.dumps(labels, ensure_ascii=False)
+    valores_json = _json.dumps(valores)
+    html = f"""
+    <div style="position:relative;width:100%;height:{altura}px;background:#FFFFFF;border-radius:14px;padding:12px;box-shadow:0 2px 10px rgba(216,27,122,0.10);">
+        <canvas id="chartBarras" role="img" aria-label="Gráfica de {titulo} por sabor"></canvas>
+    </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+    <script>
+    new Chart(document.getElementById('chartBarras'), {{
+        type: 'bar',
+        data: {{
+            labels: {labels_json},
+            datasets: [{{
+                label: '{titulo}',
+                data: {valores_json},
+                backgroundColor: '#D81B7A',
+                borderRadius: 6,
+                barThickness: 22
+            }}]
+        }},
+        options: {{
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {{ legend: {{ display: false }} }},
+            scales: {{
+                x: {{ grid: {{ color: '#F0E0E8' }}, ticks: {{ color: '#9C4270', font: {{ size: 11 }} }} }},
+                y: {{ grid: {{ display: false }}, ticks: {{ color: '#1A0A12', font: {{ size: 12, weight: '600' }} }} }}
+            }}
+        }}
+    }});
+    </script>
+    """
+    components.html(html, height=altura + 20)
+
+def grafica_linea_ventas(fechas, valores):
+    """Gráfica de línea para evolución de ventas en el tiempo."""
+    import json as _json
+    fechas_json = _json.dumps(fechas, ensure_ascii=False)
+    valores_json = _json.dumps(valores)
+    html = f"""
+    <div style="position:relative;width:100%;height:260px;background:#FFFFFF;border-radius:14px;padding:14px;box-shadow:0 2px 10px rgba(216,27,122,0.10);">
+        <canvas id="chartLinea" role="img" aria-label="Gráfica de evolución de ventas en el mes"></canvas>
+    </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+    <script>
+    const ctx = document.getElementById('chartLinea').getContext('2d');
+    const gradiente = ctx.createLinearGradient(0,0,0,220);
+    gradiente.addColorStop(0, 'rgba(216,27,122,0.25)');
+    gradiente.addColorStop(1, 'rgba(216,27,122,0.02)');
+    new Chart(ctx, {{
+        type: 'line',
+        data: {{
+            labels: {fechas_json},
+            datasets: [{{
+                label: 'Ventas',
+                data: {valores_json},
+                borderColor: '#D81B7A',
+                backgroundColor: gradiente,
+                fill: true,
+                tension: 0.35,
+                pointBackgroundColor: '#D81B7A',
+                pointBorderColor: '#FFFFFF',
+                pointBorderWidth: 2,
+                pointRadius: 4,
+                borderWidth: 2.5
+            }}]
+        }},
+        options: {{
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {{ legend: {{ display: false }} }},
+            scales: {{
+                x: {{ grid: {{ display: false }}, ticks: {{ color: '#9C4270', font: {{ size: 10 }}, maxRotation: 45 }} }},
+                y: {{ grid: {{ color: '#F0E0E8' }}, ticks: {{ color: '#9C4270', font: {{ size: 11 }} }} }}
+            }}
+        }}
+    }});
+    </script>
+    """
+    components.html(html, height=280)
+
 # ══════════════════════════════════════════════════════════════════════════════
 # DB HELPERS
 # ══════════════════════════════════════════════════════════════════════════════
@@ -910,7 +996,7 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
             por_sabor = por_sabor.sort_values("total", ascending=False)
 
             chart_data = por_sabor.set_index("sabor")["bolsas"]
-            st.bar_chart(chart_data, color="#D81B7A")
+            grafica_barras_sabor(por_sabor["sabor"].tolist(), por_sabor["bolsas"].tolist(), "bolsas vendidas")
 
             por_sabor["total"] = por_sabor["total"].apply(fmt)
             por_sabor.columns = ["Sabor","Bolsas","Total $"]
@@ -1007,8 +1093,8 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
                 st.markdown(f'<div class="info-box">🏆 <b>{top1["sabor"]}</b> con {int(top1["cantidad"])} bolsas vendidas</div>', unsafe_allow_html=True)
 
             st.markdown('<div class="section-label">Evolución de ventas en el mes</div>', unsafe_allow_html=True)
-            por_dia_mes = df_mes.groupby("fecha")["total"].sum()
-            st.line_chart(por_dia_mes, color="#D81B7A")
+            por_dia_mes = df_mes.groupby("fecha")["total"].sum().reset_index()
+            grafica_linea_ventas(por_dia_mes["fecha"].tolist(), por_dia_mes["total"].tolist())
 
             st.markdown('<div class="section-label">Tendencia por sabor</div>', unsafe_allow_html=True)
             top_sabores.columns = ["Sabor","Bolsas"]
