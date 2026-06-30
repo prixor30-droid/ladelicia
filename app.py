@@ -242,7 +242,7 @@ def get_logo_b64():
 
 logo_b64 = get_logo_b64()
 logo_html = (
-    f'<img src="data:image/png;base64,{logo_b64}" style="height:620px;object-fit:contain;margin-bottom:6px;">'
+    f'<img src="data:image/png;base64,{logo_b64}" style="height:120px;object-fit:contain;margin-bottom:6px;">'
     if logo_b64 else "🍟"
 )
 
@@ -1106,6 +1106,31 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
             por_canal["total"] = por_canal["total"].apply(fmt)
             por_canal.columns  = ["Canal","Bolsas","Total $"]
             st.dataframe(por_canal, use_container_width=True, hide_index=True)
+
+            # Facturas individuales del rango, agrupadas por día
+            df_fab_r = df_r[df_r["canal"]=="Fábrica"]
+            if not df_fab_r.empty:
+                st.markdown('<div class="section-label">Facturas del rango</div>', unsafe_allow_html=True)
+                for fecha_d in sorted(df_fab_r["fecha"].unique(), reverse=True):
+                    st.markdown(f'<div class="warn-box">📅 <b>{fecha_d}</b></div>', unsafe_allow_html=True)
+                    df_dia = df_fab_r[df_fab_r["fecha"]==fecha_d]
+                    for fid in df_dia["factura_id"].unique():
+                        if not fid:
+                            continue
+                        grupo = df_dia[df_dia["factura_id"]==fid]
+                        cliente_n = grupo["cliente"].iloc[0]
+                        vendedor_n = grupo["vendedor"].iloc[0]
+                        hora_n = grupo["hora"].iloc[0]
+                        total_n = grupo["total"].sum()
+                        st.markdown(f"""
+                        <div class="factura-box">
+                            <div class="factura-header">🧾 #{fid} — {cliente_n}</div>
+                            <div style="font-size:0.78rem;color:#9C4270;margin-bottom:8px;">{vendedor_n} · {hora_n}</div>
+                        """, unsafe_allow_html=True)
+                        for _, row in grupo.iterrows():
+                            st.markdown(f'<div class="factura-row"><span>{row["sabor"]} × {row["cantidad"]}</span><span>{fmt(row["total"])}</span></div>', unsafe_allow_html=True)
+                        st.markdown(f'<div class="factura-total"><span>TOTAL</span><span>{fmt(total_n)}</span></div>', unsafe_allow_html=True)
+                        st.markdown('</div>', unsafe_allow_html=True)
 
     with sub_r3:
         st.markdown('<div class="section-label">Reporte del mes actual</div>', unsafe_allow_html=True)
