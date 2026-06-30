@@ -613,9 +613,9 @@ elif st.session_state.vista == "fabrica":
             df_carrito,
             use_container_width=True,
             hide_index=True,
-            num_rows="dynamic",
+            num_rows="fixed",
             column_config={
-                "Sabor":    st.column_config.SelectboxColumn("Sabor", options=SABORES_LISTA),
+                "Sabor":    st.column_config.TextColumn("Sabor", disabled=True),
                 "Cantidad": st.column_config.NumberColumn("Cantidad", min_value=1, step=1),
                 "Precio":   st.column_config.NumberColumn("Precio", min_value=0, step=100),
                 "Subtotal": st.column_config.NumberColumn("Subtotal", disabled=True),
@@ -632,6 +632,14 @@ elif st.session_state.vista == "fabrica":
                     nuevos_precios[row["Sabor"]] = int(row["Precio"])
             st.session_state.carrito = nuevo_carrito
             st.session_state.precios_carrito = nuevos_precios
+            st.rerun()
+
+        # Quitar un sabor completo del carrito
+        sabor_quitar = st.selectbox("Quitar un sabor del carrito", ["— Selecciona —"] + sabores_carrito, key="sel_quitar")
+        if sabor_quitar != "— Selecciona —" and st.button("✕ Quitar del carrito", key="btn_quitar"):
+            del st.session_state.carrito[sabor_quitar]
+            if sabor_quitar in st.session_state.precios_carrito:
+                del st.session_state.precios_carrito[sabor_quitar]
             st.rerun()
 
         total_fac = float((edited_cart["Cantidad"] * edited_cart["Precio"]).sum())
