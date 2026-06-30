@@ -230,6 +230,8 @@ defaults = {
     "vista": "menu",        # menu | produccion | carro | fabrica | resumen
     "carrito": {},
     "precios_carrito": {},  # precio modificado por item
+    "carrito_carro": {},
+    "precios_carro": {},
     "factura_guardada": None,
     "ok_prod": False,
     "ok_cargue": False,
@@ -515,22 +517,89 @@ elif st.session_state.vista == "carro":
 
     with sub2:
         st.markdown('<div class="section-label">Venta del carro</div>', unsafe_allow_html=True)
-        sabor_vc = st.selectbox("Sabor vendido", SABORES_LISTA, key="sabor_vc")
-        cant_vc  = st.number_input("Bolsas vendidas", min_value=1, max_value=500, value=1, step=1, key="cant_vc")
-        precio_vc = PRODUCTOS[sabor_vc]
-        total_vc  = precio_vc * cant_vc
-        st.markdown(f'<div class="info-box">💰 Total: <b>{fmt(total_vc)}</b></div>', unsafe_allow_html=True)
 
-        if st.button("💵 Registrar venta carro", key="btn_vc"):
-            sb_post("ventas", {
-                "fecha": fecha_hoy(), "hora": ahora(), "canal": "Carro",
-                "vendedor": "Javier & Edison", "sabor": sabor_vc,
-                "cantidad": cant_vc, "total": total_vc,
-                "cliente": "", "factura_id": ""
-            })
-            st.session_state.ok_cargue = True
-            time.sleep(1)
+        col_s, col_c = st.columns([2, 1])
+        sabor_vc = col_s.selectbox("Sabor", SABORES_LISTA, key="sabor_vc")
+        cant_vc  = col_c.number_input("Bolsas", min_value=1, max_value=500, value=1, step=1, key="cant_vc")
+
+        if st.button("➕ Agregar al carrito", key="btn_add_carro"):
+            actual = st.session_state.carrito_carro.get(sabor_vc, 0)
+            st.session_state.carrito_carro[sabor_vc] = actual + cant_vc
+            if sabor_vc not in st.session_state.precios_carro:
+                st.session_state.precios_carro[sabor_vc] = PRODUCTOS[sabor_vc]
             st.rerun()
+
+        if st.session_state.carrito_carro:
+            st.markdown('<div class="section-label">Carrito de venta</div>', unsafe_allow_html=True)
+            st.caption("Toca cualquier celda para cambiar cantidad o precio.")
+
+            sabores_cc = list(st.session_state.carrito_carro.keys())
+            df_cc = pd.DataFrame({
+                "Sabor":    sabores_cc,
+                "Cantidad": [st.session_state.carrito_carro[s] for s in sabores_cc],
+                "Precio":   [st.session_state.precios_carro.get(s, PRODUCTOS[s]) for s in sabores_cc],
+            })
+            df_cc["Subtotal"] = df_cc["Cantidad"] * df_cc["Precio"]
+
+            edited_cc = st.data_editor(
+                df_cc,
+                use_container_width=True,
+                hide_index=True,
+                num_rows="fixed",
+                column_config={
+                    "Sabor":    st.column_config.TextColumn("Sabor", disabled=True),
+                    "Cantidad": st.column_config.NumberColumn("Cantidad", min_value=1, step=1),
+                    "Precio":   st.column_config.NumberColumn("Precio", min_value=0, step=100),
+                    "Subtotal": st.column_config.NumberColumn("Subtotal", disabled=True),
+                },
+                key="carro_cart_editor"
+            )
+
+            if st.button("💾 Aplicar cambios", key="btn_save_cc"):
+                nuevo_cc = {}
+                nuevos_p_cc = {}
+                for _, row in edited_cc.iterrows():
+                    if pd.notna(row["Sabor"]) and row["Cantidad"] > 0:
+                        nuevo_cc[row["Sabor"]] = nuevo_cc.get(row["Sabor"], 0) + int(row["Cantidad"])
+                        nuevos_p_cc[row["Sabor"]] = int(row["Precio"])
+                st.session_state.carrito_carro = nuevo_cc
+                st.session_state.precios_carro = nuevos_p_cc
+                st.rerun()
+
+            sabor_quitar_cc = st.selectbox("Quitar un sabor", ["— Selecciona —"] + sabores_cc, key="sel_quitar_cc")
+            if sabor_quitar_cc != "— Selecciona —" and st.button("✕ Quitar", key="btn_quitar_cc"):
+                del st.session_state.carrito_carro[sabor_quitar_cc]
+                if sabor_quitar_cc in st.session_state.precios_carro:
+                    del st.session_state.precios_carro[sabor_quitar_cc]
+                st.rerun()
+
+            total_cc = float((edited_cc["Cantidad"] * edited_cc["Precio"]).sum())
+            st.markdown(f'<div class="info-box">💰 Total: <b>{fmt(total_cc)}</b></div>', unsafe_allow_html=True)
+
+            col_clr2, col_conf = st.columns(2)
+            if col_clr2.button("🗑️ Vaciar carrito", key="btn_clr_cc"):
+                st.session_state.carrito_carro = {}
+                st.session_state.precios_carro = {}
+                st.rerun()
+
+            if col_conf.button("✅ Confirmar venta", key="btn_vc"):
+                for s, c in st.session_state.carrito_carro.items():
+                    precio_final = st.session_state.precios_carro.get(s, PRODUCTOS[s])
+                    sb_post("ventas", {
+                        "fecha": fecha_hoy(), "hora": ahora(), "canal": "Carro",
+                        "vendedor": "Javier & Edison", "sabor": s,
+                        "cantidad": c, "total": precio_final * c,
+                        "cliente": "", "factura_id": ""
+                    })
+                st.session_state.carrito_carro = {}
+                st.session_state.precios_carro = {}
+                st.session_state.ok_cargue = True
+                time.sleep(1)
+                st.rerun()
+
+        if st.session_state.ok_cargue:
+            st.markdown('<div class="success-toast">✅ Venta del carro registrada.</div>', unsafe_allow_html=True)
+            st.session_state.ok_cargue = False
 
         # Solo admin ve ventas del carro
         if st.session_state.es_admin:
