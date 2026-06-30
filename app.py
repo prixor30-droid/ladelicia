@@ -181,6 +181,7 @@ label,.stSelectbox label,.stNumberInput label,.stDateInput label,.stTextInput la
 [data-testid="stButton-btn_produccion"],[data-testid="stButton-btn_carro"],[data-testid="stButton-btn_fabrica"],[data-testid="stButton-btn_resumen"]{width:100% !important;max-width:100% !important;}
 [data-testid="stButton-btn_produccion"] button,[data-testid="stButton-btn_carro"] button,[data-testid="stButton-btn_fabrica"] button,[data-testid="stButton-btn_resumen"] button{background:#FFFFFF !important;color:#1A0A12 !important;-webkit-text-fill-color:#1A0A12 !important;box-shadow:0 2px 10px rgba(216,27,122,0.15) !important;min-height:84px !important;border-radius:16px !important;width:100% !important;max-width:100% !important;}
 [data-testid="stButton-btn_produccion"] button:hover,[data-testid="stButton-btn_carro"] button:hover,[data-testid="stButton-btn_fabrica"] button:hover,[data-testid="stButton-btn_resumen"] button:hover{box-shadow:0 4px 14px rgba(216,27,122,0.22) !important;opacity:1 !important;}
+div[data-testid="stElementContainer"]:has([data-testid="stButton-btn_produccion"]),div[data-testid="stElementContainer"]:has([data-testid="stButton-btn_carro"]),div[data-testid="stElementContainer"]:has([data-testid="stButton-btn_fabrica"]),div[data-testid="stElementContainer"]:has([data-testid="stButton-btn_resumen"]){width:100% !important;min-width:100% !important;}
 
 [data-testid="stMetricLabel"] p{color:#9C4270 !important;}
 [data-testid="stMetricValue"]{color:#1A0A12 !important;}
