@@ -136,7 +136,7 @@ logo_html = (
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-html,body,[class*="css"],.stApp{font-family:'Inter',sans-serif !important;background-color:#FFFFFF !important;color:#1A0A12 !important;}
+html,body,[class*="css"],.stApp{font-family:'Inter',sans-serif !important;background-color:#FFF8FB !important;color:#1A0A12 !important;}
 #MainMenu,footer,header{visibility:hidden;}
 .block-container{padding-top:1rem;padding-bottom:3rem;max-width:500px;margin:0 auto;}
 @media (min-width: 768px){
@@ -161,36 +161,36 @@ html,body,[class*="css"],.stApp{font-family:'Inter',sans-serif !important;backgr
 [data-baseweb="calendar"] [aria-selected="true"]{background-color:#D81B7A !important;color:white !important;}
 [data-baseweb="calendar"] tbody tr:last-child td{background-color:#FFFFFF !important;}
 label,.stSelectbox label,.stNumberInput label,.stDateInput label,.stTextInput label{color:#D81B7A !important;font-weight:600 !important;font-size:0.85rem !important;}
-.stTabs [data-baseweb="tab-list"]{background:#FAF0F5;border-radius:12px;padding:4px;gap:2px;border:1px solid #E5C5D5;margin-bottom:16px;}
+.stTabs [data-baseweb="tab-list"]{background:#FFFFFF;border-radius:12px;padding:4px;gap:2px;box-shadow:0 1px 4px rgba(216,27,122,0.10);margin-bottom:16px;}
 .stTabs [data-baseweb="tab"]{border-radius:10px;font-size:0.78rem;font-weight:600;padding:8px 4px;color:#7A2050 !important;flex:1;justify-content:center;background:transparent !important;}
 .stTabs [aria-selected="true"]{background-color:#D81B7A !important;color:white !important;}
-.brand-header{background:#FFFFFF;border-bottom:3px solid #D81B7A;border-radius:0;padding:18px 20px 16px;margin-bottom:16px;text-align:center;}
-.brand-header p{color:#9C4270;font-size:0.78rem;margin:0;}
+.brand-header{background:linear-gradient(135deg,#D81B7A,#F06292);border-radius:0 0 22px 22px;padding:22px 20px 18px;margin:-1rem -1rem 16px -1rem;text-align:center;}
+.brand-header p{color:rgba(255,255,255,0.85);font-size:0.78rem;margin:0;}
 .metric-row{display:flex;gap:9px;margin-bottom:16px;}
-.metric-box{flex:1;background:#FAF0F5;border-radius:10px;padding:14px 8px;text-align:center;border-left:3px solid #D81B7A;}
+.metric-box{flex:1;background:#FFFFFF;border-radius:14px;padding:14px 8px;text-align:center;box-shadow:0 2px 8px rgba(216,27,122,0.12);}
 .metric-box .val{font-size:1.2rem;font-weight:700;line-height:1.1;}
 .metric-box .lbl{font-size:0.65rem;color:#9C4270;margin-top:3px;}
 .metric-pink .val{color:#D81B7A;}.metric-green .val{color:#1B9E5A;}.metric-red .val{color:#D32F2F;}.metric-yellow .val{color:#E68900;}
 .alert-low{background:#FFEBEE;border-left:3px solid #D32F2F;border-radius:0 10px 10px 0;padding:10px 14px;margin-bottom:9px;font-size:0.83rem;color:#B71C1C;}
-.info-box{background:#E8F5E9;border:1px solid #A5D6A7;border-radius:12px;padding:12px 14px;margin:8px 0 14px;font-size:0.82rem;color:#1B5E20;}
-.warn-box{background:#FFF8E1;border:1px solid #FFD54F;border-radius:12px;padding:12px 14px;margin:8px 0 14px;font-size:0.82rem;color:#8D6E00;}
+.info-box{background:#FFFFFF;border-left:3px solid #1B9E5A;border-radius:10px;padding:12px 14px;margin:8px 0 14px;font-size:0.82rem;color:#1B5E20;box-shadow:0 1px 6px rgba(0,0,0,0.05);}
+.warn-box{background:#FFFFFF;border-left:3px solid #E68900;border-radius:10px;padding:12px 14px;margin:8px 0 14px;font-size:0.82rem;color:#8D6E00;box-shadow:0 1px 6px rgba(0,0,0,0.05);}
 .success-toast{background:#E8F5E9;border:1px solid #A5D6A7;border-radius:12px;padding:14px 16px;text-align:center;font-weight:600;color:#1B5E20;font-size:0.95rem;margin-top:10px;}
 .section-label{font-size:0.69rem;font-weight:700;text-transform:uppercase;letter-spacing:0.7px;color:#B0185F;margin:16px 0 6px;}
 .stButton>button{width:100%;background:#D81B7A !important;color:white !important;-webkit-text-fill-color:white !important;border:none !important;border-radius:12px !important;padding:14px !important;font-size:1rem !important;font-weight:700 !important;cursor:pointer;margin-top:4px;box-shadow:0 4px 16px rgba(216,27,122,0.25);white-space:pre-line !important;line-height:1.4 !important;}
 .stButton>button:hover{opacity:0.88;}
-.menu-btn-wrap .stButton>button{min-height:84px !important;display:flex !important;flex-direction:column !important;justify-content:center !important;align-items:center !important;text-align:center !important;background:#FAF0F5 !important;color:#1A0A12 !important;-webkit-text-fill-color:#1A0A12 !important;border-left:4px solid #D81B7A !important;border-radius:10px !important;box-shadow:none !important;}
-.menu-btn-wrap .stButton>button:hover{background:#F4DCE8 !important;opacity:1 !important;}
+.menu-btn-wrap .stButton>button{min-height:84px !important;display:flex !important;flex-direction:column !important;justify-content:center !important;align-items:center !important;text-align:center !important;background:#FFFFFF !important;color:#1A0A12 !important;-webkit-text-fill-color:#1A0A12 !important;border:none !important;border-radius:16px !important;box-shadow:0 2px 10px rgba(216,27,122,0.15) !important;}
+.menu-btn-wrap .stButton>button:hover{box-shadow:0 4px 14px rgba(216,27,122,0.22) !important;opacity:1 !important;}
 [data-testid="stMetricLabel"] p{color:#9C4270 !important;}
 [data-testid="stMetricValue"]{color:#1A0A12 !important;}
 .stDataFrame{border-radius:12px;overflow:hidden;font-size:0.83rem;border:1px solid #E5C5D5;}
 .stCaption,small{color:#9C4270 !important;}
 .stAlert{background:#FAF0F5 !important;color:#1A0A12 !important;border-color:#E5C5D5 !important;}
-.factura-box{background:#FAF0F5;border:1px solid #E5C5D5;border-radius:14px;padding:16px;margin-bottom:14px;}
+.factura-box{background:#FFFFFF;border-radius:16px;padding:16px;margin-bottom:14px;box-shadow:0 2px 10px rgba(216,27,122,0.10);}
 .factura-header{font-size:0.9rem;font-weight:700;color:#D81B7A;margin-bottom:8px;}
 .factura-row{display:flex;justify-content:space-between;font-size:0.85rem;padding:4px 0;border-bottom:1px solid #E5C5D5;color:#1A0A12;}
 .factura-total{display:flex;justify-content:space-between;font-size:1rem;font-weight:700;color:#1B9E5A;margin-top:8px;}
 .factura-cambio{font-size:0.9rem;color:#E68900;margin-top:6px;text-align:center;}
-.calc-box{background:#FAF0F5;border:1px solid #E5C5D5;border-radius:14px;padding:14px;margin-bottom:14px;}
+.calc-box{background:#FFFFFF;border-radius:14px;padding:14px;margin-bottom:14px;box-shadow:0 2px 10px rgba(216,27,122,0.10);}
 .main-btn{background:#FAF0F5;border:1px solid #E5C5D5;border-radius:14px;padding:20px 16px;margin-bottom:10px;cursor:pointer;display:flex;align-items:center;gap:14px;}
 .main-btn-icon{font-size:2rem;}
 .main-btn-text{font-size:1.1rem;font-weight:700;color:#1A0A12;}
