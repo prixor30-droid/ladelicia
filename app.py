@@ -131,6 +131,87 @@ def tabla_facturas_html(df_canal):
     </div>
     """
 
+def mostrar_facturas_seleccionables(df_canal, key_prefix):
+    """Tabla con facturas; al seleccionar una fila se abre el recibo en una vista nueva."""
+    filas = []
+    for fid in df_canal["factura_id"].unique():
+        if not fid:
+            continue
+        grupo = df_canal[df_canal["factura_id"]==fid]
+        filas.append({
+            "Fecha": grupo["fecha"].iloc[0],
+            "N° Comprobante": f"FV-{fid}",
+            "Vendedor": grupo["vendedor"].iloc[0],
+            "Cliente": grupo["cliente"].iloc[0],
+            "Total": fmt(grupo["total"].sum()),
+            "Estado": "✓ Aprobado",
+            "_fid": fid,
+        })
+    if not filas:
+        return
+    filas.sort(key=lambda r: (r["Fecha"], r["_fid"]), reverse=True)
+    df_tabla = pd.DataFrame(filas)
+
+    evento = st.dataframe(
+        df_tabla.drop(columns=["_fid"]),
+        use_container_width=True,
+        hide_index=True,
+        on_select="rerun",
+        selection_mode="single-row",
+        key=f"tabla_sel_{key_prefix}"
+    )
+
+    if evento.selection and evento.selection.rows:
+        idx = evento.selection.rows[0]
+        fid_sel = df_tabla.iloc[idx]["_fid"]
+        st.session_state.recibo_a_mostrar = fid_sel
+        st.session_state.recibo_canal_df = df_canal[df_canal["factura_id"]==fid_sel].to_dict("records")
+        st.session_state.vista = "recibo"
+        st.rerun()
+
+def render_recibo(registros):
+    """Genera el HTML de un recibo tipo ticket de papel a partir de los registros de una factura."""
+    if not registros:
+        return ""
+    r0 = registros[0]
+    fid = r0["factura_id"]
+    fecha_r = r0["fecha"]
+    hora_r = r0["hora"]
+    cliente_r = r0.get("cliente", "Consumidor Final") or "Consumidor Final"
+    vendedor_r = r0["vendedor"]
+    total_r = sum(r["total"] for r in registros)
+
+    items_html = "".join(f"""
+        <div class="recibo-item">
+            <div class="recibo-item-nombre">{r['sabor']}</div>
+            <div class="recibo-item-detalle">
+                <span>{r['cantidad']} × {fmt(r['total']/r['cantidad'] if r['cantidad'] else 0)}</span>
+                <span>{fmt(r['total'])}</span>
+            </div>
+        </div>
+    """ for r in registros)
+
+    return f"""
+    <div class="recibo-wrap">
+        <div class="recibo-ticket">
+            <div class="recibo-logo">{logo_html}</div>
+            <div class="recibo-titulo">Productos La Delicia</div>
+            <div class="recibo-sub">Factura electrónica de venta</div>
+            <div class="recibo-sub">No. FV-{fid}</div>
+            <div class="recibo-linea-punteada"></div>
+            <div class="recibo-dato"><b>Fecha:</b> {fecha_r} · {hora_r}</div>
+            <div class="recibo-dato"><b>Cliente:</b> {cliente_r}</div>
+            <div class="recibo-dato"><b>Vendedor:</b> {vendedor_r}</div>
+            <div class="recibo-linea-punteada"></div>
+            {items_html}
+            <div class="recibo-linea-punteada"></div>
+            <div class="recibo-total-row"><span>TOTAL</span><span>{fmt(total_r)}</span></div>
+            <div class="recibo-linea-punteada"></div>
+            <div class="recibo-footer">¡Gracias por su compra!</div>
+        </div>
+    </div>
+    """
+
 def grafica_barras_sabor(labels, valores, titulo="bolsas"):
     """Gráfica de barras horizontales con colores de La Delicia."""
     import json as _json
@@ -374,6 +455,19 @@ div[data-testid="stElementContainer"]:has([data-testid="stButton-btn_produccion"
 .tabla-fact .num-comp{color:#D81B7A;font-weight:600;}
 .tabla-fact .estado-ok{color:#1B9E5A;font-weight:600;}
 .tabla-fact .total-col{text-align:right;font-weight:600;}
+.recibo-wrap{display:flex;justify-content:center;padding:20px 0;}
+.recibo-ticket{background:#FFFFFF;width:100%;max-width:380px;padding:24px 20px;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,0.12);font-family:'Courier New',monospace;}
+.recibo-logo{text-align:center;margin-bottom:6px;}
+.recibo-logo img{height:60px !important;}
+.recibo-titulo{text-align:center;font-weight:700;font-size:1rem;color:#1A0A12;}
+.recibo-sub{text-align:center;font-size:0.78rem;color:#9C4270;}
+.recibo-linea-punteada{border-top:1.5px dashed #D8B5C8;margin:12px 0;}
+.recibo-dato{font-size:0.82rem;color:#1A0A12;margin-bottom:4px;}
+.recibo-item{margin-bottom:8px;}
+.recibo-item-nombre{font-size:0.85rem;font-weight:600;color:#1A0A12;}
+.recibo-item-detalle{display:flex;justify-content:space-between;font-size:0.8rem;color:#9C4270;}
+.recibo-total-row{display:flex;justify-content:space-between;font-size:1.05rem;font-weight:700;color:#1B9E5A;}
+.recibo-footer{text-align:center;font-size:0.8rem;color:#9C4270;font-style:italic;}
 .calc-box{background:#FFFFFF;border-radius:14px;padding:14px;margin-bottom:14px;box-shadow:0 2px 10px rgba(216,27,122,0.10);}
 .main-btn{background:#FAF0F5;border:1px solid #E5C5D5;border-radius:14px;padding:20px 16px;margin-bottom:10px;cursor:pointer;display:flex;align-items:center;gap:14px;}
 .main-btn-icon{font-size:2rem;}
@@ -555,8 +649,9 @@ else:
 # NAVEGACIÓN — botón atrás
 # ══════════════════════════════════════════════════════════════════════════════
 if st.session_state.vista != "menu":
-    if st.button("← Volver al menú", key="btn_back"):
-        st.session_state.vista = "menu"
+    texto_volver = "← Volver al resumen" if st.session_state.vista == "recibo" else "← Volver al menú"
+    if st.button(texto_volver, key="btn_back"):
+        st.session_state.vista = "resumen" if st.session_state.vista == "recibo" else "menu"
         st.rerun()
     st.markdown("---")
 
@@ -1078,6 +1173,13 @@ elif st.session_state.vista == "fabrica":
 # ══════════════════════════════════════════════════════════════════════════════
 # VISTA: RESUMEN (solo admin)
 # ══════════════════════════════════════════════════════════════════════════════
+elif st.session_state.vista == "recibo":
+    registros_recibo = st.session_state.get("recibo_canal_df", [])
+    if registros_recibo:
+        st.markdown(render_recibo(registros_recibo), unsafe_allow_html=True)
+    else:
+        st.info("No se encontró la factura seleccionada.")
+
 elif st.session_state.vista == "resumen" and st.session_state.es_admin:
     sub_r1, sub_r2, sub_r3, sub_r4 = st.tabs(["Hoy", "Por fechas", "📅 Mes", "💾 Exportar"])
 
@@ -1109,11 +1211,10 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
             st.dataframe(por_sabor, use_container_width=True, hide_index=True)
 
             st.markdown('<div class="section-label">Facturas fábrica</div>', unsafe_allow_html=True)
+            st.caption("Toca una fila para ver el recibo completo.")
             df_fab = df_vt[df_vt["canal"]=="Fábrica"]
             if not df_fab.empty:
-                tabla_html = tabla_facturas_html(df_fab)
-                if tabla_html:
-                    st.markdown(tabla_html, unsafe_allow_html=True)
+                mostrar_facturas_seleccionables(df_fab, "hoy")
 
     with sub_r2:
         st.markdown('<div class="section-label">Consultar por fechas</div>', unsafe_allow_html=True)
@@ -1152,9 +1253,8 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
             df_fab_r = df_r[df_r["canal"]=="Fábrica"]
             if not df_fab_r.empty:
                 st.markdown('<div class="section-label">Facturas del rango</div>', unsafe_allow_html=True)
-                tabla_html_r = tabla_facturas_html(df_fab_r)
-                if tabla_html_r:
-                    st.markdown(tabla_html_r, unsafe_allow_html=True)
+                st.caption("Toca una fila para ver el recibo completo.")
+                mostrar_facturas_seleccionables(df_fab_r, "rango")
 
     with sub_r3:
         st.markdown('<div class="section-label">Reporte del mes actual</div>', unsafe_allow_html=True)
