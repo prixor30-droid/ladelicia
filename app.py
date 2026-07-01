@@ -911,8 +911,9 @@ elif st.session_state.vista == "carro":
             st.session_state.ok_cargue = False
 
         # Cargue activo hoy
-        raw_cg = sb_get("cargues", f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}")
-        raw_vc = sb_get("ventas",  f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}&canal=eq.Carro")
+        raw_cg = sb_get("cargues",      f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}")
+        raw_vc = sb_get("ventas",        f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}&canal=eq.Carro")
+        raw_dev = sb_get("devoluciones", f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}")
         if raw_cg:
             df_cg = pd.DataFrame(raw_cg).groupby("sabor")["cantidad"].sum().reset_index()
             df_cg.columns = ["sabor","cargado"]
@@ -922,7 +923,13 @@ elif st.session_state.vista == "carro":
                 df_cg = df_cg.merge(df_vc2, on="sabor", how="left").fillna(0)
             else:
                 df_cg["vendido"] = 0
-            df_cg["pendiente"] = df_cg["cargado"] - df_cg["vendido"]
+            if raw_dev:
+                df_dev2 = pd.DataFrame(raw_dev).groupby("sabor")["cantidad"].sum().reset_index()
+                df_dev2.columns = ["sabor","devuelto"]
+                df_cg = df_cg.merge(df_dev2, on="sabor", how="left").fillna(0)
+            else:
+                df_cg["devuelto"] = 0
+            df_cg["pendiente"] = df_cg["cargado"] - df_cg["vendido"] - df_cg["devuelto"]
             df_pend = df_cg[df_cg["pendiente"] > 0][["sabor","pendiente"]]
             if not df_pend.empty:
                 st.markdown('<div class="section-label">Lo que lleva el carro ahora</div>', unsafe_allow_html=True)
