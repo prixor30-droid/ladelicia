@@ -1088,11 +1088,7 @@ elif st.session_state.vista == "carro":
         # Mostrar factura confirmada
         if st.session_state.factura_carro_guardada:
             fac_vc = st.session_state.factura_carro_guardada
-            st.markdown(f"""
-            <div class="factura-box">
-                <div class="factura-header">🧾 Factura #{fac_vc['id']} — {fac_vc['cliente']}</div>
-                <div style="font-size:0.78rem;color:#9C4270;margin-bottom:8px;">Vendedor: {fac_vc['vendedor']} · {fecha_hoy()}</div>
-            """, unsafe_allow_html=True)
+            st.markdown(f'<div class="factura-box"><div class="factura-header">🧾 Factura #{fac_vc["id"]} — {fac_vc["cliente"]}</div><div style="font-size:0.78rem;color:#9C4270;margin-bottom:8px;">Vendedor: {fac_vc["vendedor"]} · {fecha_hoy()}</div>', unsafe_allow_html=True)
             for s, c in fac_vc["items"].items():
                 precio = fac_vc["precios"].get(s, PRODUCTOS[s])
                 st.markdown(f'<div class="factura-row"><span>{s} × {c}</span><span>{fmt(precio*c)}</span></div>', unsafe_allow_html=True)
@@ -1101,6 +1097,71 @@ elif st.session_state.vista == "carro":
             if vuelto_vc > 0:
                 st.markdown(f'<div class="factura-cambio">💵 Devolver al cliente: <b>{fmt(vuelto_vc)}</b></div>', unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
+
+            # Cambio de producto post-factura
+            st.markdown('<div class="section-label">¿El cliente quiere cambiar algo?</div>', unsafe_allow_html=True)
+            col_a, col_b = st.columns(2)
+            sabor_out_vc = col_a.selectbox("Devuelve", SABORES_LISTA, key="cambio_out_vc")
+            cant_out_vc  = col_a.number_input("Cantidad que devuelve", min_value=1, max_value=50, value=1, step=1, key="cant_out_vc")
+            sabor_in_vc  = col_b.selectbox("Lleva en cambio", SABORES_LISTA, key="cambio_in_vc")
+            cant_in_vc   = col_b.number_input("Cantidad que lleva", min_value=1, max_value=50, value=1, step=1, key="cant_in_vc")
+
+            valor_out_vc = PRODUCTOS[sabor_out_vc] * cant_out_vc
+            valor_in_vc  = PRODUCTOS[sabor_in_vc] * cant_in_vc
+            dif_vc = valor_in_vc - valor_out_vc
+            if dif_vc > 0:
+                st.markdown(f'<div class="warn-box">💰 El cliente debe pagar <b>{fmt(dif_vc)}</b> adicionales</div>', unsafe_allow_html=True)
+            elif dif_vc < 0:
+                st.markdown(f'<div class="info-box">💵 Hay que devolver <b>{fmt(abs(dif_vc))}</b> al cliente</div>', unsafe_allow_html=True)
+            else:
+                st.markdown('<div class="info-box">✅ Cambio sin diferencia de valor</div>', unsafe_allow_html=True)
+
+            if st.button("🔁 Registrar cambio", key="btn_cambio_vc"):
+                sb_post("ventas", {
+                    "fecha": fecha_hoy(), "hora": ahora(), "canal": "Cambio",
+                    "vendedor": fac_vc["vendedor"], "sabor": sabor_out_vc,
+                    "cantidad": -cant_out_vc, "total": -valor_out_vc,
+                    "cliente": fac_vc["cliente"], "factura_id": fac_vc["id"]
+                })
+                agregar_stock(sabor_out_vc, cant_out_vc)
+                sb_post("ventas", {
+                    "fecha": fecha_hoy(), "hora": ahora(), "canal": "Cambio",
+                    "vendedor": fac_vc["vendedor"], "sabor": sabor_in_vc,
+                    "cantidad": cant_in_vc, "total": valor_in_vc,
+                    "cliente": fac_vc["cliente"], "factura_id": fac_vc["id"]
+                })
+                restar_stock(sabor_in_vc, cant_in_vc)
+                get_metricas_globales.clear()
+                time.sleep(0.3)
+                # Recargar factura actualizada desde Supabase
+                registros_act_vc = sb_get("ventas", f"select=sabor,cantidad,total&factura_id=eq.{fac_vc['id']}&canal=neq.Cambio")
+                cambios_act_vc   = sb_get("ventas", f"select=sabor,cantidad,total&factura_id=eq.{fac_vc['id']}&canal=eq.Cambio")
+                items_act_vc = {}
+                precios_act_vc = {}
+                for r in (registros_act_vc or []):
+                    if r["cantidad"] > 0:
+                        items_act_vc[r["sabor"]] = items_act_vc.get(r["sabor"], 0) + r["cantidad"]
+                        precios_act_vc[r["sabor"]] = r["total"] // r["cantidad"] if r["cantidad"] else PRODUCTOS[r["sabor"]]
+                for r in (cambios_act_vc or []):
+                    if r["cantidad"] > 0:
+                        items_act_vc[r["sabor"]] = items_act_vc.get(r["sabor"], 0) + r["cantidad"]
+                        precios_act_vc[r["sabor"]] = r["total"] // r["cantidad"] if r["cantidad"] else PRODUCTOS[r["sabor"]]
+                    elif r["cantidad"] < 0:
+                        s = r["sabor"]
+                        if s in items_act_vc:
+                            items_act_vc[s] = max(0, items_act_vc[s] + r["cantidad"])
+                            if items_act_vc[s] == 0:
+                                del items_act_vc[s]
+                                if s in precios_act_vc:
+                                    del precios_act_vc[s]
+                total_act_vc = sum(precios_act_vc.get(s, PRODUCTOS[s]) * c for s, c in items_act_vc.items())
+                st.session_state.factura_carro_guardada = {
+                    **fac_vc,
+                    "items": items_act_vc,
+                    "precios": precios_act_vc,
+                    "total": total_act_vc,
+                }
+                st.rerun()
 
             if st.button("🧾 Nueva venta", key="btn_nueva_vc"):
                 st.session_state.factura_carro_guardada = None
