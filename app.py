@@ -1251,7 +1251,7 @@ elif st.session_state.vista == "carro":
                     f'</div>',
                     unsafe_allow_html=True
                 )
-            df_vt_carro = sb_get("ventas", f"select=hora,cliente,vendedor,sabor,cantidad,total,factura_id&fecha=eq.{fecha_hoy()}&canal=eq.Carro&order=hora.desc")
+            df_vt_carro = sb_get("ventas", f"select=fecha,hora,cliente,vendedor,sabor,cantidad,total,factura_id&fecha=eq.{fecha_hoy()}&canal=eq.Carro&order=hora.desc")
             if df_vt_carro:
                 df_carro_v = pd.DataFrame(df_vt_carro)
                 st.markdown('<div class="section-label">Facturas del carro hoy</div>', unsafe_allow_html=True)
@@ -1528,7 +1528,7 @@ elif st.session_state.vista == "fabrica":
                 f'</div>',
                 unsafe_allow_html=True
             )
-        raw_vf = sb_get("ventas", f"select=hora,cliente,vendedor,sabor,cantidad,total,factura_id&fecha=eq.{fecha_hoy()}&canal=eq.Fábrica&order=factura_id.asc,hora.asc")
+        raw_vf = sb_get("ventas", f"select=fecha,hora,cliente,vendedor,sabor,cantidad,total,factura_id&fecha=eq.{fecha_hoy()}&canal=eq.Fábrica&order=factura_id.asc,hora.asc")
         if raw_vf:
             st.markdown('<div class="section-label">Facturas de hoy</div>', unsafe_allow_html=True)
             df_vf = pd.DataFrame(raw_vf)
