@@ -940,7 +940,7 @@ elif st.session_state.vista == "carro":
             df_pend = df_cg[df_cg["pendiente"] > 0][["sabor","pendiente"]]
             if not df_pend.empty:
                 st.markdown('<div class="section-label">Lo que lleva el carro ahora</div>', unsafe_allow_html=True)
-                df_pend.columns = ["Sabor","Bolsas pendientes"]
+                df_pend.columns = ["Sabor","Bolsas pendientes por vender"]
                 st.dataframe(df_pend, use_container_width=True, hide_index=True)
 
         # Tabla editable de cargues del día — para corregir errores
