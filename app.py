@@ -174,13 +174,15 @@ def mostrar_facturas_seleccionables(df_canal, key_prefix):
     if evento.selection and evento.selection.rows:
         idx = evento.selection.rows[0]
         fid_sel = df_tabla.iloc[idx]["_fid"]
+        # Cargar TODOS los registros de esta factura incluyendo cambios
+        todos = sb_get("ventas", f"select=*&factura_id=eq.{requests.utils.quote(fid_sel)}")
         st.session_state.recibo_a_mostrar = fid_sel
-        st.session_state.recibo_canal_df = df_canal[df_canal["factura_id"]==fid_sel].to_dict("records")
+        st.session_state.recibo_canal_df = todos if todos else []
         st.session_state.vista = "recibo"
         st.rerun()
 
 def render_recibo(registros):
-    """Genera el HTML de un recibo tipo ticket de papel a partir de los registros de una factura."""
+    """Genera el HTML de un recibo tipo ticket consolidando originales + cambios."""
     if not registros:
         return ""
     r0 = registros[0]
@@ -189,17 +191,29 @@ def render_recibo(registros):
     hora_r = r0["hora"]
     cliente_r = r0.get("cliente", "Consumidor Final") or "Consumidor Final"
     vendedor_r = r0["vendedor"]
-    total_r = sum(r["total"] for r in registros)
+
+    # Consolidar items: sumar cantidades y totales por sabor (incluyendo negativos de cambios)
+    items_cons = {}
+    totales_cons = {}
+    for r in registros:
+        s = r["sabor"]
+        items_cons[s]  = items_cons.get(s, 0) + r["cantidad"]
+        totales_cons[s] = totales_cons.get(s, 0) + r["total"]
+
+    # Filtrar items con cantidad > 0 (los que quedaron después de cambios)
+    items_finales = {s: c for s, c in items_cons.items() if c > 0}
+    total_r = sum(totales_cons[s] for s in items_finales)
 
     items_partes = []
-    for r in registros:
-        precio_unit = fmt(r['total']/r['cantidad']) if r['cantidad'] else fmt(0)
+    for s, c in items_finales.items():
+        total_item = totales_cons[s]
+        precio_unit = fmt(total_item / c) if c else fmt(0)
         items_partes.append(
             '<div class="recibo-item">'
-            f'<div class="recibo-item-nombre">{r["sabor"]}</div>'
+            f'<div class="recibo-item-nombre">{s}</div>'
             '<div class="recibo-item-detalle">'
-            f'<span>{r["cantidad"]} × {precio_unit}</span>'
-            f'<span>{fmt(r["total"])}</span>'
+            f'<span>{c} × {precio_unit}</span>'
+            f'<span>{fmt(total_item)}</span>'
             '</div></div>'
         )
     items_html = "".join(items_partes)
