@@ -1186,6 +1186,50 @@ elif st.session_state.vista == "carro":
                 st.session_state.factura_carro_guardada = None
                 st.rerun()
 
+        # Facturas del día — visible para todos desde cualquier dispositivo
+        st.markdown('<div class="section-label">Ventas de hoy</div>', unsafe_allow_html=True)
+        raw_fact_vc = sb_get("ventas",
+            f"select=factura_id,cliente,hora,total&fecha=eq.{fecha_hoy()}&canal=eq.Carro&order=hora.desc")
+        if raw_fact_vc:
+            # Agrupar por factura
+            facturas_vc = {}
+            for r in raw_fact_vc:
+                fid = r["factura_id"]
+                if not fid:
+                    continue
+                if fid not in facturas_vc:
+                    facturas_vc[fid] = {"cliente": r["cliente"], "hora": r["hora"], "total": 0}
+                if r["total"] > 0:
+                    facturas_vc[fid]["total"] += r["total"]
+
+            for fid, datos in facturas_vc.items():
+                st.markdown(
+                    f'<div class="factura-box" style="margin-bottom:8px;">'
+                    f'<div class="factura-header">🧾 {datos["cliente"]}</div>'
+                    f'<div class="factura-row"><span>Hora</span><span>{datos["hora"]}</span></div>'
+                    f'<div class="factura-total"><span>Total</span><span>{fmt(datos["total"])}</span></div>'
+                    f'</div>',
+                    unsafe_allow_html=True
+                )
+        else:
+            st.caption("Aún no hay ventas registradas hoy.")
+
+        # Inventario del cargue — visible para todos
+        st.markdown('<div class="section-label">Papas disponibles del cargue</div>', unsafe_allow_html=True)
+        raw_inv_vc = sb_get("inventario", "select=sabor,stock&order=sabor.asc")
+        if raw_inv_vc:
+            con_stock = [r for r in raw_inv_vc if r["stock"] > 0]
+            sin_stock = [r for r in raw_inv_vc if r["stock"] == 0]
+            if con_stock:
+                filas_inv = "".join(
+                    f'<div class="factura-row"><span>{r["sabor"]}</span><span><b>{r["stock"]} bolsas</b></span></div>'
+                    for r in con_stock
+                )
+                st.markdown(f'<div class="factura-box">{filas_inv}</div>', unsafe_allow_html=True)
+            if sin_stock:
+                nombres_sin = ", ".join(r["sabor"] for r in sin_stock)
+                st.markdown(f'<div class="alert-low">🔴 Agotados: {nombres_sin}</div>', unsafe_allow_html=True)
+
         # Solo admin ve resumen y facturas del carro
         if st.session_state.es_admin:
             raw_resumen_carro = sb_get("ventas", f"select=total,cantidad&fecha=eq.{fecha_hoy()}&canal=eq.Carro")
