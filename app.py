@@ -940,7 +940,7 @@ elif st.session_state.vista == "carro":
             df_pend = df_cg[df_cg["pendiente"] > 0][["sabor","pendiente"]]
             if not df_pend.empty:
                 st.markdown('<div class="section-label">Lo que lleva el carro ahora</div>', unsafe_allow_html=True)
-                df_pend.columns = ["Sabor","Bolsas pendientes por vender"]
+                df_pend.columns = ["Sabor","Bolsas pendientes"]
                 st.dataframe(df_pend, use_container_width=True, hide_index=True)
 
         # Tabla editable de cargues del día — para corregir errores
@@ -1228,17 +1228,38 @@ elif st.session_state.vista == "carro":
         else:
             st.caption("Aún no hay ventas registradas hoy.")
 
-        # Inventario del cargue — visible para todos
+        # Papas disponibles del cargue — lo que lleva el carro pendiente de vender
         st.markdown('<div class="section-label">Papas disponibles del cargue</div>', unsafe_allow_html=True)
-        raw_inv_vc = sb_get("inventario", "select=sabor,stock&order=sabor.asc")
-        if raw_inv_vc:
-            con_stock = [r for r in raw_inv_vc if r["stock"] > 0]
-            if con_stock:
-                filas_inv = "".join(
-                    f'<div class="factura-row"><span>{r["sabor"]}</span><span><b>{r["stock"]} bolsas</b></span></div>'
-                    for r in con_stock
+        raw_cg2   = sb_get("cargues",      f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}")
+        raw_vc2   = sb_get("ventas",        f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}&canal=eq.Carro")
+        raw_dev2  = sb_get("devoluciones",  f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}")
+        if raw_cg2:
+            df_cg2 = pd.DataFrame(raw_cg2).groupby("sabor")["cantidad"].sum().reset_index()
+            df_cg2.columns = ["sabor","cargado"]
+            if raw_vc2:
+                df_vc3 = pd.DataFrame(raw_vc2).groupby("sabor")["cantidad"].sum().reset_index()
+                df_vc3.columns = ["sabor","vendido"]
+                df_cg2 = df_cg2.merge(df_vc3, on="sabor", how="left").fillna(0)
+            else:
+                df_cg2["vendido"] = 0
+            if raw_dev2:
+                df_dev3 = pd.DataFrame(raw_dev2).groupby("sabor")["cantidad"].sum().reset_index()
+                df_dev3.columns = ["sabor","devuelto"]
+                df_cg2 = df_cg2.merge(df_dev3, on="sabor", how="left").fillna(0)
+            else:
+                df_cg2["devuelto"] = 0
+            df_cg2["pendiente"] = df_cg2["cargado"] - df_cg2["vendido"] - df_cg2["devuelto"]
+            disponibles = df_cg2[df_cg2["pendiente"] > 0]
+            if not disponibles.empty:
+                filas_cg = "".join(
+                    f'<div class="factura-row"><span>{row["sabor"]}</span><span><b>{int(row["pendiente"])} bolsas</b></span></div>'
+                    for _, row in disponibles.iterrows()
                 )
-                st.markdown(f'<div class="factura-box">{filas_inv}</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="factura-box">{filas_cg}</div>', unsafe_allow_html=True)
+            else:
+                st.caption("No hay cargue activo hoy.")
+        else:
+            st.caption("No hay cargue registrado hoy.")
 
         # Solo admin ve resumen y facturas del carro
         if st.session_state.es_admin:
