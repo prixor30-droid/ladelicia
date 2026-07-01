@@ -1076,28 +1076,33 @@ elif st.session_state.vista == "carro":
                 if not cliente_vc.strip():
                     st.markdown('<div class="alert-low">⚠️ Escribe el nombre del cliente.</div>', unsafe_allow_html=True)
                 else:
-                    fid_vc = str(uuid.uuid4())[:8].upper()
-                    for s, c in st.session_state.carrito_carro.items():
-                        precio_final = st.session_state.precios_carro.get(s, PRODUCTOS[s])
-                        sb_post("ventas", {
-                            "fecha": fecha_hoy(), "hora": ahora(), "canal": "Carro",
-                            "vendedor": "Javier & Edison", "sabor": s,
-                            "cantidad": c, "total": precio_final * c,
-                            "cliente": cliente_vc.strip(), "factura_id": fid_vc
-                        })
-                    st.session_state.factura_carro_guardada = {
-                        "id": fid_vc, "cliente": cliente_vc.strip(),
-                        "vendedor": "Javier & Edison",
-                        "items": dict(st.session_state.carrito_carro),
-                        "precios": dict(st.session_state.precios_carro),
-                        "total": total_cc,
-                        "billete": billete_vc
-                    }
-                    st.session_state.carrito_carro = {}
-                    st.session_state.precios_carro = {}
-                    get_metricas_globales.clear()
-                    time.sleep(0.3)
-                    st.rerun()
+                    # Validar stock final antes de confirmar
+                    sin_stock = [s for s, c in st.session_state.carrito_carro.items() if get_stock(s) < c]
+                    if sin_stock:
+                        st.markdown(f'<div class="alert-low">⚠️ Stock insuficiente: <b>{", ".join(sin_stock)}</b>. Ajusta el carrito.</div>', unsafe_allow_html=True)
+                    else:
+                        fid_vc = str(uuid.uuid4())[:8].upper()
+                        for s, c in st.session_state.carrito_carro.items():
+                            precio_final = st.session_state.precios_carro.get(s, PRODUCTOS[s])
+                            sb_post("ventas", {
+                                "fecha": fecha_hoy(), "hora": ahora(), "canal": "Carro",
+                                "vendedor": "Javier & Edison", "sabor": s,
+                                "cantidad": c, "total": precio_final * c,
+                                "cliente": cliente_vc.strip(), "factura_id": fid_vc
+                            })
+                        st.session_state.factura_carro_guardada = {
+                            "id": fid_vc, "cliente": cliente_vc.strip(),
+                            "vendedor": "Javier & Edison",
+                            "items": dict(st.session_state.carrito_carro),
+                            "precios": dict(st.session_state.precios_carro),
+                            "total": total_cc,
+                            "billete": billete_vc
+                        }
+                        st.session_state.carrito_carro = {}
+                        st.session_state.precios_carro = {}
+                        get_metricas_globales.clear()
+                        time.sleep(0.3)
+                        st.rerun()
 
         # Mostrar factura confirmada
         if st.session_state.factura_carro_guardada:
@@ -1321,29 +1326,34 @@ elif st.session_state.vista == "fabrica":
             if not cliente_f.strip():
                 st.markdown('<div class="alert-low">⚠️ Escribe el nombre del cliente.</div>', unsafe_allow_html=True)
             else:
-                fid = str(uuid.uuid4())[:8].upper()
-                for s, c in st.session_state.carrito.items():
-                    precio_final = st.session_state.precios_carrito.get(s, PRODUCTOS[s])
-                    sb_post("ventas", {
-                        "fecha": fecha_hoy(), "hora": ahora(), "canal": "Fábrica",
-                        "vendedor": vendedor_f, "sabor": s, "cantidad": c,
-                        "total": precio_final * c, "cliente": cliente_f.strip(),
-                        "factura_id": fid
-                    })
-                    restar_stock(s, c)
-                st.session_state.factura_guardada = {
-                    "id": fid, "cliente": cliente_f.strip(),
-                    "vendedor": vendedor_f,
-                    "items": dict(st.session_state.carrito),
-                    "precios": dict(st.session_state.precios_carrito),
-                    "total": total_fac,
-                    "billete": billete_f
-                }
-                st.session_state.carrito = {}
-                st.session_state.precios_carrito = {}
-                get_metricas_globales.clear()
-                time.sleep(0.3)
-                st.rerun()
+                # Validar stock final antes de confirmar
+                sin_stock_f = [s for s, c in st.session_state.carrito.items() if get_stock(s) < c]
+                if sin_stock_f:
+                    st.markdown(f'<div class="alert-low">⚠️ Stock insuficiente: <b>{", ".join(sin_stock_f)}</b>. Ajusta el carrito.</div>', unsafe_allow_html=True)
+                else:
+                    fid = str(uuid.uuid4())[:8].upper()
+                    for s, c in st.session_state.carrito.items():
+                        precio_final = st.session_state.precios_carrito.get(s, PRODUCTOS[s])
+                        sb_post("ventas", {
+                            "fecha": fecha_hoy(), "hora": ahora(), "canal": "Fábrica",
+                            "vendedor": vendedor_f, "sabor": s, "cantidad": c,
+                            "total": precio_final * c, "cliente": cliente_f.strip(),
+                            "factura_id": fid
+                        })
+                        restar_stock(s, c)
+                    st.session_state.factura_guardada = {
+                        "id": fid, "cliente": cliente_f.strip(),
+                        "vendedor": vendedor_f,
+                        "items": dict(st.session_state.carrito),
+                        "precios": dict(st.session_state.precios_carrito),
+                        "total": total_fac,
+                        "billete": billete_f
+                    }
+                    st.session_state.carrito = {}
+                    st.session_state.precios_carrito = {}
+                    get_metricas_globales.clear()
+                    time.sleep(0.3)
+                    st.rerun()
 
     # Mostrar factura confirmada
     if st.session_state.factura_guardada:
