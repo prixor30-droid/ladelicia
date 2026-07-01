@@ -1181,8 +1181,20 @@ elif st.session_state.vista == "carro":
                 st.session_state.factura_carro_guardada = None
                 st.rerun()
 
-        # Solo admin ve ventas del carro
+        # Solo admin ve resumen y facturas del carro
         if st.session_state.es_admin:
+            raw_resumen_carro = sb_get("ventas", f"select=total,cantidad&fecha=eq.{fecha_hoy()}&canal=eq.Carro")
+            if raw_resumen_carro:
+                total_carro_dia  = sum(r["total"]    for r in raw_resumen_carro if r["total"] > 0)
+                bolsas_carro_dia = sum(r["cantidad"] for r in raw_resumen_carro if r["cantidad"] > 0)
+                st.markdown('<div class="section-label">Resumen del día — Javier & Edison</div>', unsafe_allow_html=True)
+                st.markdown(
+                    f'<div class="factura-box">'
+                    f'<div class="factura-row"><span>🛒 Bolsas vendidas hoy</span><span><b>{bolsas_carro_dia}</b></span></div>'
+                    f'<div class="factura-total"><span>💰 Total a entregar</span><span>{fmt(total_carro_dia)}</span></div>'
+                    f'</div>',
+                    unsafe_allow_html=True
+                )
             df_vt_carro = sb_get("ventas", f"select=hora,cliente,vendedor,sabor,cantidad,total,factura_id&fecha=eq.{fecha_hoy()}&canal=eq.Carro&order=hora.desc")
             if df_vt_carro:
                 df_carro_v = pd.DataFrame(df_vt_carro)
@@ -1432,8 +1444,29 @@ elif st.session_state.vista == "fabrica":
             st.session_state.factura_guardada = None
             st.rerun()
 
-    # Solo admin ve historial
+    # Solo admin ve resumen y historial
     if st.session_state.es_admin:
+        raw_resumen_fab = sb_get("ventas", f"select=total,cantidad,vendedor&fecha=eq.{fecha_hoy()}&canal=eq.Fábrica")
+        if raw_resumen_fab:
+            total_fab_dia  = sum(r["total"]    for r in raw_resumen_fab if r["total"] > 0)
+            bolsas_fab_dia = sum(r["cantidad"] for r in raw_resumen_fab if r["cantidad"] > 0)
+            por_vendedor = {}
+            for r in raw_resumen_fab:
+                if r["total"] > 0:
+                    v = r["vendedor"]
+                    por_vendedor[v] = por_vendedor.get(v, 0) + r["total"]
+            st.markdown('<div class="section-label">Resumen del día — Fábrica</div>', unsafe_allow_html=True)
+            filas_v = "".join(
+                f'<div class="factura-row"><span>👤 {v}</span><span><b>{fmt(t)}</b></span></div>'
+                for v, t in por_vendedor.items()
+            )
+            st.markdown(
+                f'<div class="factura-box">{filas_v}'
+                f'<div class="factura-row"><span>🛒 Bolsas vendidas hoy</span><span><b>{bolsas_fab_dia}</b></span></div>'
+                f'<div class="factura-total"><span>💰 Total a entregar</span><span>{fmt(total_fab_dia)}</span></div>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
         raw_vf = sb_get("ventas", f"select=hora,cliente,vendedor,sabor,cantidad,total,factura_id&fecha=eq.{fecha_hoy()}&canal=eq.Fábrica&order=factura_id.asc,hora.asc")
         if raw_vf:
             st.markdown('<div class="section-label">Facturas de hoy</div>', unsafe_allow_html=True)
