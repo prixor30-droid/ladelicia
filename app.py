@@ -178,6 +178,7 @@ def mostrar_facturas_seleccionables(df_canal, key_prefix):
         todos = sb_get("ventas", f"select=*&factura_id=eq.{requests.utils.quote(fid_sel)}")
         st.session_state.recibo_a_mostrar = fid_sel
         st.session_state.recibo_canal_df = todos if todos else []
+        st.session_state.vista_anterior = st.session_state.vista  # guardar de dónde venimos
         st.session_state.vista = "recibo"
         st.rerun()
 
@@ -581,6 +582,7 @@ if "limpieza" not in st.session_state:
 defaults = {
     "es_admin": False,
     "vista": "menu",        # menu | produccion | carro | fabrica | resumen
+    "vista_anterior": "resumen",
     "carrito": {},
     "precios_carrito": {},  # precio modificado por item
     "carrito_carro": {},
@@ -705,9 +707,14 @@ else:
 # NAVEGACIÓN — botón atrás
 # ══════════════════════════════════════════════════════════════════════════════
 if st.session_state.vista != "menu":
-    texto_volver = "← Volver al resumen" if st.session_state.vista == "recibo" else "← Volver al menú"
+    if st.session_state.vista == "recibo":
+        vista_volver = st.session_state.get("vista_anterior", "resumen")
+        texto_volver = f"← Volver"
+    else:
+        vista_volver = "menu"
+        texto_volver = "← Volver al menú"
     if st.button(texto_volver, key="btn_back"):
-        st.session_state.vista = "resumen" if st.session_state.vista == "recibo" else "menu"
+        st.session_state.vista = vista_volver
         st.rerun()
     st.markdown("---")
 
