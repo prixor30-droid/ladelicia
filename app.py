@@ -1233,16 +1233,12 @@ elif st.session_state.vista == "carro":
         raw_inv_vc = sb_get("inventario", "select=sabor,stock&order=sabor.asc")
         if raw_inv_vc:
             con_stock = [r for r in raw_inv_vc if r["stock"] > 0]
-            sin_stock = [r for r in raw_inv_vc if r["stock"] == 0]
             if con_stock:
                 filas_inv = "".join(
                     f'<div class="factura-row"><span>{r["sabor"]}</span><span><b>{r["stock"]} bolsas</b></span></div>'
                     for r in con_stock
                 )
                 st.markdown(f'<div class="factura-box">{filas_inv}</div>', unsafe_allow_html=True)
-            if sin_stock:
-                nombres_sin = ", ".join(r["sabor"] for r in sin_stock)
-                st.markdown(f'<div class="alert-low">🔴 Agotados: {nombres_sin}</div>', unsafe_allow_html=True)
 
         # Solo admin ve resumen y facturas del carro
         if st.session_state.es_admin:
