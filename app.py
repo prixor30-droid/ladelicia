@@ -525,7 +525,7 @@ label,.stSelectbox label,.stNumberInput label,.stDateInput label,.stTextInput la
 </style>
 """, unsafe_allow_html=True)
 
-# Bloquear teclado virtual en los selectbox (solo permite tocar y elegir)
+# Bloquear teclado virtual en los selectbox y fechas (solo permite tocar y elegir)
 components.html("""
 <script>
 function bloquearTecladoSelects() {
@@ -537,8 +537,19 @@ function bloquearTecladoSelects() {
         });
     } catch (e) {}
 }
+function bloquearTecladoFechas() {
+    try {
+        const fechas = window.parent.document.querySelectorAll('[data-testid="stDateInputField"], [data-baseweb="datepicker"] input');
+        fechas.forEach(function(inp) {
+            inp.setAttribute('inputmode', 'none');
+            inp.setAttribute('readonly', 'true');
+        });
+    } catch (e) {}
+}
 bloquearTecladoSelects();
+bloquearTecladoFechas();
 setInterval(bloquearTecladoSelects, 500);
+setInterval(bloquearTecladoFechas, 500);
 </script>
 """, height=0)
 
@@ -1305,8 +1316,41 @@ elif st.session_state.vista == "fabrica":
             })
             restar_stock(sabor_in, cant_in)
             get_metricas_globales.clear()
-            st.markdown(f'<div class="success-toast">✅ Cambio registrado: {cant_out} {sabor_out} → {cant_in} {sabor_in}</div>', unsafe_allow_html=True)
+
+            # Recargar la factura actualizada desde Supabase
             time.sleep(0.3)
+            registros_act = sb_get("ventas",
+                f"select=sabor,cantidad,total&factura_id=eq.{fac['id']}&canal=neq.Cambio")
+            cambios_act = sb_get("ventas",
+                f"select=sabor,cantidad,total&factura_id=eq.{fac['id']}&canal=eq.Cambio")
+
+            # Construir los items actualizados sumando originales + cambios
+            items_act = {}
+            precios_act = {}
+            for r in (registros_act or []):
+                if r["cantidad"] > 0:
+                    items_act[r["sabor"]] = items_act.get(r["sabor"], 0) + r["cantidad"]
+                    precios_act[r["sabor"]] = r["total"] // r["cantidad"] if r["cantidad"] else PRODUCTOS[r["sabor"]]
+            for r in (cambios_act or []):
+                if r["cantidad"] > 0:
+                    items_act[r["sabor"]] = items_act.get(r["sabor"], 0) + r["cantidad"]
+                    precios_act[r["sabor"]] = r["total"] // r["cantidad"] if r["cantidad"] else PRODUCTOS[r["sabor"]]
+                elif r["cantidad"] < 0:
+                    s = r["sabor"]
+                    if s in items_act:
+                        items_act[s] = max(0, items_act[s] + r["cantidad"])
+                        if items_act[s] == 0:
+                            del items_act[s]
+                            if s in precios_act:
+                                del precios_act[s]
+
+            total_act = sum(precios_act.get(s, PRODUCTOS[s]) * c for s, c in items_act.items())
+            st.session_state.factura_guardada = {
+                **fac,
+                "items": items_act,
+                "precios": precios_act,
+                "total": total_act,
+            }
             st.rerun()
 
         if st.button("🧾 Nueva venta", key="btn_nueva"):
