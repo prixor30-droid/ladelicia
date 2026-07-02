@@ -397,6 +397,7 @@ def agregar_stock(sabor, cantidad):
     stock = int(r[0]["stock"]) if r else 0
     sb_patch("inventario", f"sabor=eq.{q}", {"stock": stock + cantidad})
     get_inventario_completo.clear()
+    get_metricas_globales.clear()
 
 def restar_stock(sabor, cantidad):
     q = requests.utils.quote(sabor)
@@ -404,11 +405,13 @@ def restar_stock(sabor, cantidad):
     stock = int(r[0]["stock"]) if r else 0
     sb_patch("inventario", f"sabor=eq.{q}", {"stock": max(0, stock - cantidad)})
     get_inventario_completo.clear()
+    get_metricas_globales.clear()
 
 def set_stock(sabor, cantidad):
     q = requests.utils.quote(sabor)
     sb_patch("inventario", f"sabor=eq.{q}", {"stock": cantidad})
     get_inventario_completo.clear()
+    get_metricas_globales.clear()
 
 @st.cache_data(ttl=60)
 def sabores_por_frecuencia(canal=None):
