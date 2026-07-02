@@ -1111,8 +1111,6 @@ elif st.session_state.vista == "carro":
         st.markdown('<div class="section-label">Nueva venta 🚗</div>', unsafe_allow_html=True)
 
         cliente_vc = st.text_input("Nombre del cliente", placeholder="Ej: Tienda Don Carlos", key="cliente_vc")
-        es_credito_vc = st.checkbox("📋 Dejar en crédito (paga después)", key="credito_vc")
-        st.session_state["_credito_vc_val"] = es_credito_vc
 
         st.markdown('<div class="section-label">Agregar al carrito</div>', unsafe_allow_html=True)
 
@@ -1187,6 +1185,8 @@ elif st.session_state.vista == "carro":
 
             # Billete y vuelto
             st.markdown('<div class="section-label">Pago del cliente</div>', unsafe_allow_html=True)
+            es_credito_vc = st.checkbox("📋 Dejar en crédito (paga después)", key="credito_vc")
+            st.session_state["_credito_vc_val"] = es_credito_vc
 
             if not es_credito_vc:
                 billete_vc = st.number_input("Billete del cliente ($)", min_value=0, value=0,
