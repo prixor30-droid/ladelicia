@@ -1158,18 +1158,13 @@ elif st.session_state.vista == "carro":
                         time.sleep(0.3)
                         st.rerun()
 
-        # Mostrar factura confirmada
+        # Opciones post-venta — solo si hay una factura activa en esta sesión
         if st.session_state.factura_carro_guardada:
             fac_vc = st.session_state.factura_carro_guardada
-            st.markdown(f'<div class="factura-box"><div class="factura-header">🧾 Factura #{fac_vc["id"]} — {fac_vc["cliente"]}</div><div style="font-size:0.78rem;color:#9C4270;margin-bottom:8px;">Vendedor: {fac_vc["vendedor"]} · {fecha_hoy()}</div>', unsafe_allow_html=True)
-            for s, c in fac_vc["items"].items():
-                precio = fac_vc["precios"].get(s, PRODUCTOS[s])
-                st.markdown(f'<div class="factura-row"><span>{s} × {c}</span><span>{fmt(precio*c)}</span></div>', unsafe_allow_html=True)
-            vuelto_vc = fac_vc["billete"] - fac_vc["total"] if fac_vc["billete"] > 0 else 0
-            st.markdown(f'<div class="factura-total"><span>TOTAL</span><span>{fmt(fac_vc["total"])}</span></div>', unsafe_allow_html=True)
-            if vuelto_vc > 0:
-                st.markdown(f'<div class="factura-cambio">💵 Devolver al cliente: <b>{fmt(vuelto_vc)}</b></div>', unsafe_allow_html=True)
-            st.markdown('</div>', unsafe_allow_html=True)
+            st.markdown(
+                f'<div class="success-toast">✅ Venta registrada — <b>#{fac_vc["id"]}</b> · {fac_vc["cliente"]} · {fmt(fac_vc["total"])}</div>',
+                unsafe_allow_html=True
+            )
 
             # Modificar factura post-venta
             st.markdown('<div class="section-label">¿El cliente quiere algo más?</div>', unsafe_allow_html=True)
@@ -1450,22 +1445,16 @@ elif st.session_state.vista == "fabrica":
                     time.sleep(0.3)
                     st.rerun()
 
-    # Mostrar factura confirmada
+    # Opciones post-venta — solo si hay una factura activa en esta sesión
     if st.session_state.factura_guardada:
         fac = st.session_state.factura_guardada
-        st.markdown(f"""
-        <div class="factura-box">
-            <div class="factura-header">🧾 Factura #{fac['id']} — {fac['cliente']}</div>
-            <div style="font-size:0.78rem;color:rgba(255,255,255,0.4);margin-bottom:8px;">Vendedor: {fac['vendedor']} · {fecha_hoy()}</div>
-        """, unsafe_allow_html=True)
-        for s, c in fac["items"].items():
-            precio = fac["precios"].get(s, PRODUCTOS[s])
-            st.markdown(f'<div class="factura-row"><span>{s} × {c}</span><span>{fmt(precio*c)}</span></div>', unsafe_allow_html=True)
         vuelto = fac["billete"] - fac["total"] if fac["billete"] > 0 else 0
-        st.markdown(f'<div class="factura-total"><span>TOTAL</span><span>{fmt(fac["total"])}</span></div>', unsafe_allow_html=True)
-        if vuelto > 0:
-            st.markdown(f'<div class="factura-cambio">💵 Devolver al cliente: <b>{fmt(vuelto)}</b></div>', unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
+        st.markdown(
+            f'<div class="success-toast">✅ Venta registrada — <b>#{fac["id"]}</b> · {fac["cliente"]} · {fmt(fac["total"])}'
+            + (f'<br>💵 Devolver: <b>{fmt(vuelto)}</b>' if vuelto > 0 else '')
+            + '</div>',
+            unsafe_allow_html=True
+        )
 
         # Modificar factura post-venta
         st.markdown('<div class="section-label">¿El cliente quiere algo más?</div>', unsafe_allow_html=True)
