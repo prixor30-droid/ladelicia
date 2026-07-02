@@ -890,6 +890,8 @@ elif st.session_state.vista == "produccion":
 
                 if cambios:
                     sb_patch("produccion", f"id=eq.{orig['id']}", cambios)
+            get_metricas_globales.clear()
+            get_inventario_completo.clear()
             time.sleep(0.3)
             st.rerun()
 
@@ -900,6 +902,8 @@ elif st.session_state.vista == "produccion":
             reg_del = ids_prod[sel_del]
             sb_delete("produccion", f"id=eq.{reg_del['id']}")
             restar_stock(reg_del["sabor"], reg_del["cantidad"])
+            get_metricas_globales.clear()
+            get_inventario_completo.clear()
             time.sleep(0.3)
             st.rerun()
     else:
@@ -922,6 +926,8 @@ elif st.session_state.vista == "produccion":
     nuevo_stock = st.number_input("Stock real", min_value=0, value=stock_adj, step=1, key="nuevo_s")
     if st.button("💾 Guardar ajuste", key="btn_adj"):
         set_stock(sabor_adj, nuevo_stock)
+        get_metricas_globales.clear()
+        get_inventario_completo.clear()
         st.session_state.ok_stock = True
         time.sleep(0.3)
         st.rerun()
