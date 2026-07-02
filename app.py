@@ -1058,19 +1058,37 @@ elif st.session_state.vista == "carro":
         sabor_vc = col_s.selectbox("Sabor", sabores_por_frecuencia("Carro"), key="sabor_vc")
         cant_vc  = col_c.number_input("Bolsas", min_value=1, max_value=500, value=1, step=1, key="cant_vc")
 
-        # Verificar si hay cargue activo hoy
-        raw_cg_check = sb_get("cargues", f"select=cantidad&fecha=eq.{fecha_hoy()}")
-        raw_vc_check = sb_get("ventas",  f"select=cantidad&fecha=eq.{fecha_hoy()}&canal=eq.Carro")
-        hay_cargue = False
+        # Calcular disponible del carro por sabor (cargado - vendido - devuelto)
+        raw_cg_check  = sb_get("cargues",      f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}")
+        raw_vc_check  = sb_get("ventas",        f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}&canal=eq.Carro")
+        raw_dev_check = sb_get("devoluciones",  f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}")
+
+        stock_carro = {}  # disponible por sabor en el carro
         if raw_cg_check:
-            total_cargado = sum(r["cantidad"] for r in raw_cg_check)
-            total_vendido = sum(r["cantidad"] for r in raw_vc_check if r.get("cantidad", 0) > 0) if raw_vc_check else 0
-            hay_cargue = total_cargado > total_vendido
+            for r in raw_cg_check:
+                stock_carro[r["sabor"]] = stock_carro.get(r["sabor"], 0) + r["cantidad"]
+        if raw_vc_check:
+            for r in raw_vc_check:
+                if r.get("cantidad", 0) > 0:
+                    stock_carro[r["sabor"]] = stock_carro.get(r["sabor"], 0) - r["cantidad"]
+        if raw_dev_check:
+            for r in raw_dev_check:
+                stock_carro[r["sabor"]] = stock_carro.get(r["sabor"], 0) - r.get("cantidad", 0)
+
+        hay_cargue = sum(max(0, v) for v in stock_carro.values()) > 0
+        disp_sabor = max(0, stock_carro.get(sabor_vc, 0))
 
         if not hay_cargue:
             st.markdown('<div class="warn-box">⚠️ No hay papas cargadas disponibles. Registra un cargue primero.</div>', unsafe_allow_html=True)
+        else:
+            st.markdown(f'<div class="info-box">📦 Disponible en el carro de <b>{sabor_vc}</b>: <b>{disp_sabor}</b> bolsas</div>', unsafe_allow_html=True)
 
-        if st.button("➕ Agregar al carrito", key="btn_add_carro", disabled=not hay_cargue):
+        if st.button("➕ Agregar al carrito", key="btn_add_carro", disabled=(not hay_cargue or disp_sabor < cant_vc)):
+            actual = st.session_state.carrito_carro.get(sabor_vc, 0)
+            st.session_state.carrito_carro[sabor_vc] = actual + cant_vc
+            if sabor_vc not in st.session_state.precios_carro:
+                st.session_state.precios_carro[sabor_vc] = PRODUCTOS[sabor_vc]
+            st.rerun()
             actual = st.session_state.carrito_carro.get(sabor_vc, 0)
             st.session_state.carrito_carro[sabor_vc] = actual + cant_vc
             if sabor_vc not in st.session_state.precios_carro:
@@ -1149,7 +1167,7 @@ elif st.session_state.vista == "carro":
                 if not cliente_vc.strip():
                     st.markdown('<div class="alert-low">⚠️ Escribe el nombre del cliente.</div>', unsafe_allow_html=True)
                 else:
-                    sin_stock = [s for s, c in st.session_state.carrito_carro.items() if get_stock(s) < c]
+                    sin_stock = [s for s, c in st.session_state.carrito_carro.items() if stock_carro.get(s, 0) < c]
                     if sin_stock:
                         st.markdown(f'<div class="alert-low">⚠️ Stock insuficiente: <b>{", ".join(sin_stock)}</b>. Ajusta el carrito.</div>', unsafe_allow_html=True)
                     else:
