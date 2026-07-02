@@ -75,6 +75,32 @@ def sb_delete(tabla, filtro):
     except:
         return False
 
+def guardar_credito(cliente, vendedor, canal, factura_id, total):
+    sb_post("creditos", {
+        "fecha": fecha_hoy(), "hora": ahora(),
+        "cliente": cliente, "vendedor": vendedor,
+        "canal": canal, "factura_id": factura_id,
+        "total": total, "pagado": 0, "estado": "pendiente"
+    })
+
+def get_creditos_pendientes(canal=None):
+    params = "select=*&estado=eq.pendiente&order=fecha.desc"
+    if canal:
+        params += f"&canal=eq.{requests.utils.quote(canal)}"
+    return sb_get("creditos", params) or []
+
+def registrar_pago(credito_id, monto_pago, total_credito):
+    cred = sb_get("creditos", f"select=pagado,total&id=eq.{credito_id}")
+    if not cred:
+        return
+    ya_pagado = cred[0]["pagado"]
+    nuevo_pagado = ya_pagado + monto_pago
+    nuevo_estado = "pagado" if nuevo_pagado >= total_credito else "pendiente"
+    sb_patch("creditos", f"id=eq.{credito_id}", {
+        "pagado": nuevo_pagado,
+        "estado": nuevo_estado
+    })
+
 # ══════════════════════════════════════════════════════════════════════════════
 # DATOS MAESTROS
 # ══════════════════════════════════════════════════════════════════════════════
@@ -452,7 +478,7 @@ def get_logo_b64():
 
 logo_b64 = get_logo_b64()
 logo_html = (
-    f'<img src="data:image/png;base64,{logo_b64}" style="height:820px;object-fit:contain;margin-bottom:6px;">'
+    f'<img src="data:image/png;base64,{logo_b64}" style="height:120px;object-fit:contain;margin-bottom:6px;">'
     if logo_b64 else "🍟"
 )
 
@@ -572,6 +598,12 @@ label,.stSelectbox label,.stNumberInput label,.stDateInput label,.stTextInput la
 .recibo-item-detalle{display:flex;justify-content:space-between;font-size:0.8rem;color:#9C4270;}
 .recibo-total-row{display:flex;justify-content:space-between;font-size:1.05rem;font-weight:700;color:#1B9E5A;}
 .recibo-footer{text-align:center;font-size:0.8rem;color:#9C4270;font-style:italic;}
+.credito-box{background:#FFF8E1;border:1.5px solid #FFB300;border-radius:14px;padding:14px 16px;margin-bottom:10px;}
+.credito-header{font-size:0.88rem;font-weight:700;color:#E65100;margin-bottom:6px;}
+.credito-row{display:flex;justify-content:space-between;font-size:0.83rem;padding:3px 0;color:#4E342E;}
+.credito-pendiente{display:flex;justify-content:space-between;font-size:0.95rem;font-weight:700;color:#E65100;margin-top:6px;}
+.credito-pagado{display:flex;justify-content:space-between;font-size:0.95rem;font-weight:700;color:#1B9E5A;margin-top:6px;}
+.badge-credito{background:#FFB300;color:#4E2800;font-size:0.72rem;font-weight:700;padding:3px 10px;border-radius:20px;display:inline-block;margin-left:6px;}
 .calc-box{background:#FFFFFF;border-radius:14px;padding:14px;margin-bottom:14px;box-shadow:0 2px 10px rgba(216,27,122,0.10);}
 .main-btn{background:#FAF0F5;border:1px solid #E5C5D5;border-radius:14px;padding:20px 16px;margin-bottom:10px;cursor:pointer;display:flex;align-items:center;gap:14px;}
 .main-btn-icon{font-size:2rem;}
@@ -1110,15 +1142,21 @@ elif st.session_state.vista == "carro":
 
             # Billete y vuelto
             st.markdown('<div class="section-label">Pago del cliente</div>', unsafe_allow_html=True)
-            billete_vc = st.number_input("Billete del cliente ($)", min_value=0, value=0,
-                                         step=1000, key="billete_vc")
-            if billete_vc > 0:
-                if billete_vc >= total_cc:
-                    st.markdown(f'<div class="info-box">💰 Total: <b>{fmt(total_cc)}</b> · Devolver: <b>{fmt(billete_vc - total_cc)}</b></div>', unsafe_allow_html=True)
+            es_credito_vc = st.checkbox("📋 Dejar en crédito (paga después)", key="credito_vc")
+
+            if not es_credito_vc:
+                billete_vc = st.number_input("Billete del cliente ($)", min_value=0, value=0,
+                                             step=1000, key="billete_vc")
+                if billete_vc > 0:
+                    if billete_vc >= total_cc:
+                        st.markdown(f'<div class="info-box">💰 Total: <b>{fmt(total_cc)}</b> · Devolver: <b>{fmt(billete_vc - total_cc)}</b></div>', unsafe_allow_html=True)
+                    else:
+                        st.markdown(f'<div class="alert-low">⚠️ Total: {fmt(total_cc)} · Falta: {fmt(total_cc - billete_vc)}</div>', unsafe_allow_html=True)
                 else:
-                    st.markdown(f'<div class="alert-low">⚠️ Total: {fmt(total_cc)} · Falta: {fmt(total_cc - billete_vc)}</div>', unsafe_allow_html=True)
+                    st.markdown(f'<div class="info-box">💰 Total a cobrar: <b>{fmt(total_cc)}</b></div>', unsafe_allow_html=True)
             else:
-                st.markdown(f'<div class="info-box">💰 Total a cobrar: <b>{fmt(total_cc)}</b></div>', unsafe_allow_html=True)
+                billete_vc = 0
+                st.markdown(f'<div class="credito-box"><div class="credito-header">📋 Crédito — pago pendiente</div><div class="credito-pendiente"><span>Total a cobrar después</span><span>{fmt(total_cc)}</span></div></div>', unsafe_allow_html=True)
 
             col_clr2, col_conf = st.columns(2)
             if col_clr2.button("🗑️ Vaciar carrito", key="btn_clr_cc"):
@@ -1130,7 +1168,6 @@ elif st.session_state.vista == "carro":
                 if not cliente_vc.strip():
                     st.markdown('<div class="alert-low">⚠️ Escribe el nombre del cliente.</div>', unsafe_allow_html=True)
                 else:
-                    # Validar stock final antes de confirmar
                     sin_stock = [s for s, c in st.session_state.carrito_carro.items() if get_stock(s) < c]
                     if sin_stock:
                         st.markdown(f'<div class="alert-low">⚠️ Stock insuficiente: <b>{", ".join(sin_stock)}</b>. Ajusta el carrito.</div>', unsafe_allow_html=True)
@@ -1144,13 +1181,16 @@ elif st.session_state.vista == "carro":
                                 "cantidad": c, "total": precio_final * c,
                                 "cliente": cliente_vc.strip(), "factura_id": fid_vc
                             })
+                        if es_credito_vc:
+                            guardar_credito(cliente_vc.strip(), "Javier & Edison", "Carro", fid_vc, total_cc)
                         st.session_state.factura_carro_guardada = {
                             "id": fid_vc, "cliente": cliente_vc.strip(),
                             "vendedor": "Javier & Edison",
                             "items": dict(st.session_state.carrito_carro),
                             "precios": dict(st.session_state.precios_carro),
                             "total": total_cc,
-                            "billete": billete_vc
+                            "billete": billete_vc,
+                            "es_credito": es_credito_vc
                         }
                         st.session_state.carrito_carro = {}
                         st.session_state.precios_carro = {}
@@ -1396,21 +1436,26 @@ elif st.session_state.vista == "fabrica":
 
         # Billete y vuelto
         st.markdown('<div class="section-label">Pago del cliente</div>', unsafe_allow_html=True)
-        billete_f = st.number_input("Billete del cliente ($)", min_value=0, value=0,
-                                    step=1000, key="billete_fab")
-        if billete_f > 0:
-            if billete_f >= total_fac:
-                st.markdown(f'<div class="info-box">💰 Total: <b>{fmt(total_fac)}</b> · Devolver: <b>{fmt(billete_f - total_fac)}</b></div>', unsafe_allow_html=True)
+        es_credito_f = st.checkbox("📋 Dejar en crédito (paga después)", key="credito_f")
+
+        if not es_credito_f:
+            billete_f = st.number_input("Billete del cliente ($)", min_value=0, value=0,
+                                        step=1000, key="billete_fab")
+            if billete_f > 0:
+                if billete_f >= total_fac:
+                    st.markdown(f'<div class="info-box">💰 Total: <b>{fmt(total_fac)}</b> · Devolver: <b>{fmt(billete_f - total_fac)}</b></div>', unsafe_allow_html=True)
+                else:
+                    st.markdown(f'<div class="alert-low">⚠️ Total: {fmt(total_fac)} · Falta: {fmt(total_fac - billete_f)}</div>', unsafe_allow_html=True)
             else:
-                st.markdown(f'<div class="alert-low">⚠️ Total: {fmt(total_fac)} · Falta: {fmt(total_fac - billete_f)}</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="info-box">💰 Total a cobrar: <b>{fmt(total_fac)}</b></div>', unsafe_allow_html=True)
         else:
-            st.markdown(f'<div class="info-box">💰 Total a cobrar: <b>{fmt(total_fac)}</b></div>', unsafe_allow_html=True)
+            billete_f = 0
+            st.markdown(f'<div class="credito-box"><div class="credito-header">📋 Crédito — pago pendiente</div><div class="credito-pendiente"><span>Total a cobrar después</span><span>{fmt(total_fac)}</span></div></div>', unsafe_allow_html=True)
 
         if st.button("✅ Confirmar venta", key="btn_vf"):
             if not cliente_f.strip():
                 st.markdown('<div class="alert-low">⚠️ Escribe el nombre del cliente.</div>', unsafe_allow_html=True)
             else:
-                # Validar stock final antes de confirmar
                 sin_stock_f = [s for s, c in st.session_state.carrito.items() if get_stock(s) < c]
                 if sin_stock_f:
                     st.markdown(f'<div class="alert-low">⚠️ Stock insuficiente: <b>{", ".join(sin_stock_f)}</b>. Ajusta el carrito.</div>', unsafe_allow_html=True)
@@ -1425,13 +1470,16 @@ elif st.session_state.vista == "fabrica":
                             "factura_id": fid
                         })
                         restar_stock(s, c)
+                    if es_credito_f:
+                        guardar_credito(cliente_f.strip(), vendedor_f, "Fábrica", fid, total_fac)
                     st.session_state.factura_guardada = {
                         "id": fid, "cliente": cliente_f.strip(),
                         "vendedor": vendedor_f,
                         "items": dict(st.session_state.carrito),
                         "precios": dict(st.session_state.precios_carrito),
                         "total": total_fac,
-                        "billete": billete_f
+                        "billete": billete_f,
+                        "es_credito": es_credito_f
                     }
                     st.session_state.carrito = {}
                     st.session_state.precios_carrito = {}
@@ -1554,7 +1602,7 @@ elif st.session_state.vista == "recibo":
         st.info("No se encontró la factura seleccionada.")
 
 elif st.session_state.vista == "resumen" and st.session_state.es_admin:
-    sub_r1, sub_r2, sub_r3, sub_r4 = st.tabs(["Hoy", "Por fechas", "📅 Mes", "💾 Exportar"])
+    sub_r1, sub_r2, sub_r3, sub_r4, sub_r5 = st.tabs(["Hoy", "Por fechas", "📅 Mes", "💳 Créditos", "💾 Exportar"])
 
     with sub_r1:
         st.markdown('<div class="section-label">Resumen del día</div>', unsafe_allow_html=True)
@@ -1686,6 +1734,58 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
             st.dataframe(top_sabores, use_container_width=True, hide_index=True)
 
     with sub_r4:
+        st.markdown('<div class="section-label">Créditos pendientes</div>', unsafe_allow_html=True)
+        creditos = get_creditos_pendientes()
+        if not creditos:
+            st.info("No hay créditos pendientes.")
+        else:
+            total_pendiente = sum(c["total"] - c["pagado"] for c in creditos)
+            st.markdown(
+                f'<div class="credito-box"><div class="credito-pendiente"><span>💳 Total pendiente de cobro</span><span>{fmt(total_pendiente)}</span></div></div>',
+                unsafe_allow_html=True
+            )
+            for cred in creditos:
+                falta = cred["total"] - cred["pagado"]
+                st.markdown(
+                    f'<div class="credito-box">'
+                    f'<div class="credito-header">📋 {cred["cliente"]} <span class="badge-credito">Crédito</span></div>'
+                    f'<div class="credito-row"><span>Vendedor</span><span>{cred["vendedor"]}</span></div>'
+                    f'<div class="credito-row"><span>Fecha</span><span>{cred["fecha"]}</span></div>'
+                    f'<div class="credito-row"><span>Factura</span><span>FV-{cred["factura_id"]}</span></div>'
+                    f'<div class="credito-row"><span>Total venta</span><span>{fmt(cred["total"])}</span></div>'
+                    f'<div class="credito-row"><span>Ya pagó</span><span>{fmt(cred["pagado"])}</span></div>'
+                    f'<div class="credito-pendiente"><span>Pendiente</span><span>{fmt(falta)}</span></div>'
+                    f'</div>',
+                    unsafe_allow_html=True
+                )
+                with st.expander(f"💵 Registrar pago de {cred['cliente']}"):
+                    monto_pago = st.number_input(
+                        "Monto que paga ahora ($)",
+                        min_value=0, max_value=int(falta),
+                        value=int(falta), step=1000,
+                        key=f"pago_{cred['id']}"
+                    )
+                    if st.button("✅ Registrar pago", key=f"btn_pago_{cred['id']}"):
+                        registrar_pago(cred["id"], monto_pago, cred["total"])
+                        st.success(f"Pago de {fmt(monto_pago)} registrado para {cred['cliente']}.")
+                        time.sleep(0.3)
+                        st.rerun()
+
+        # Créditos ya pagados (historial)
+        creditos_pagados = sb_get("creditos", "select=*&estado=eq.pagado&order=fecha.desc") or []
+        if creditos_pagados:
+            st.markdown('<div class="section-label">Créditos cobrados</div>', unsafe_allow_html=True)
+            for cred in creditos_pagados[:10]:
+                st.markdown(
+                    f'<div class="factura-box">'
+                    f'<div class="factura-header">✅ {cred["cliente"]} — {fmt(cred["total"])}</div>'
+                    f'<div class="factura-row"><span>Fecha</span><span>{cred["fecha"]}</span></div>'
+                    f'<div class="factura-row"><span>Vendedor</span><span>{cred["vendedor"]}</span></div>'
+                    f'</div>',
+                    unsafe_allow_html=True
+                )
+
+    with sub_r5:
         st.markdown('<div class="section-label">Exportar datos</div>', unsafe_allow_html=True)
         col_e1, col_e2 = st.columns(2)
         f_exp_ini = col_e1.date_input("Desde", value=date(datetime.now(COL_TZ).year, datetime.now(COL_TZ).month, 1), key="f_exp_ini")
