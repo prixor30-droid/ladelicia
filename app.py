@@ -1113,14 +1113,12 @@ elif st.session_state.vista == "carro":
         # Verificar si hay cargue activo hoy
         raw_cg_check = sb_get("cargues", f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}")
         raw_vc_check = sb_get("ventas",  f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}&canal=eq.Carro")
-        raw_dev_check = sb_get("devoluciones", f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}")
 
         hay_cargue = False
         if raw_cg_check:
             total_cargado = sum(r["cantidad"] for r in raw_cg_check)
-            total_vendido = sum(r["cantidad"] for r in raw_vc_check) if raw_vc_check else 0
-            total_devuelto = sum(r["cantidad"] for r in raw_dev_check) if raw_dev_check else 0
-            hay_cargue = (total_cargado - total_vendido - total_devuelto) > 0
+            total_vendido = sum(r["cantidad"] for r in raw_vc_check if r["cantidad"] > 0) if raw_vc_check else 0
+            hay_cargue = total_cargado > total_vendido
 
         if not hay_cargue:
             st.markdown('<div class="warn-box">⚠️ No hay papas cargadas en el carro hoy. Primero registra un cargue en la pestaña <b>🚗 Nuevo cargue</b>.</div>', unsafe_allow_html=True)
