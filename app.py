@@ -1242,14 +1242,13 @@ elif st.session_state.vista == "carro":
                         "cantidad": -cant_out_vc, "total": -valor_out_vc,
                         "cliente": fac_vc["cliente"], "factura_id": fac_vc["id"]
                     })
-                    agregar_stock(sabor_out_vc, cant_out_vc)
+                    # Carro: NO tocar inventario general, el stock ya se descontó en el cargue
                     sb_post("ventas", {
                         "fecha": fecha_hoy(), "hora": ahora(), "canal": "Cambio",
                         "vendedor": fac_vc["vendedor"], "sabor": sabor_in_vc,
                         "cantidad": cant_in_vc, "total": valor_in_vc,
                         "cliente": fac_vc["cliente"], "factura_id": fac_vc["id"]
                     })
-                    restar_stock(sabor_in_vc, cant_in_vc)
                     time.sleep(0.3)
                     todos_vc = sb_get("ventas", f"select=*&factura_id=eq.{fac_vc['id']}")
                     st.session_state.recibo_canal_df = todos_vc or []
@@ -1269,7 +1268,7 @@ elif st.session_state.vista == "carro":
                         "cantidad": cant_add_vc, "total": precio_add_vc,
                         "cliente": fac_vc["cliente"], "factura_id": fac_vc["id"]
                     })
-                    restar_stock(sabor_add_vc, cant_add_vc)
+                    # Carro: NO tocar inventario general
                     time.sleep(0.3)
                     _recargar_factura_vc(fac_vc)
                     st.rerun()
