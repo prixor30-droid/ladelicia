@@ -174,13 +174,15 @@ def mostrar_facturas_seleccionables(df_canal, key_prefix):
         if not fid:
             continue
         grupo = df_canal[df_canal["factura_id"]==fid]
+        es_credito = bool(grupo["es_credito"].any()) if "es_credito" in grupo.columns else False
+        estado = "📋 Crédito" if es_credito else "✓ Aprobado"
         filas.append({
             "Fecha": grupo["fecha"].iloc[0],
             "N° Comprobante": f"FV-{fid}",
             "Vendedor": grupo["vendedor"].iloc[0],
             "Cliente": grupo["cliente"].iloc[0],
-            "Total": fmt(grupo["total"].sum()),
-            "Estado": "✓ Aprobado",
+            "Total": fmt(grupo[grupo["total"] > 0]["total"].sum()),
+            "Estado": estado,
             "_fid": fid,
         })
     if not filas:
@@ -207,6 +209,35 @@ def mostrar_facturas_seleccionables(df_canal, key_prefix):
         st.session_state.vista_anterior = st.session_state.vista  # guardar de dónde venimos
         st.session_state.vista = "recibo"
         st.rerun()
+
+def mostrar_creditos_pendientes(canal):
+    """Muestra créditos pendientes de cobro con botón de pago — visible para vendedores."""
+    creditos = get_creditos_pendientes(canal)
+    if not creditos:
+        return
+    st.markdown('<div class="section-label">💳 Créditos pendientes de cobro</div>', unsafe_allow_html=True)
+    for cred in creditos:
+        falta = cred["total"] - cred["pagado"]
+        st.markdown(
+            f'<div class="credito-box">'
+            f'<div class="credito-header">📋 {cred["cliente"]} <span class="badge-credito">Pendiente</span></div>'
+            f'<div class="credito-row"><span>Fecha</span><span>{cred["fecha"]}</span></div>'
+            f'<div class="credito-row"><span>Factura</span><span>FV-{cred["factura_id"]}</span></div>'
+            f'<div class="credito-pendiente"><span>Debe</span><span>{fmt(falta)}</span></div>'
+            f'</div>',
+            unsafe_allow_html=True
+        )
+        col_p, col_t = st.columns([3, 1])
+        monto_pago = col_p.number_input(
+            "Monto que paga ($)",
+            min_value=0, max_value=int(falta),
+            value=int(falta), step=1000,
+            key=f"pago_v_{cred['id']}"
+        )
+        if col_t.button("✅ Cobrado", key=f"btn_pago_v_{cred['id']}"):
+            registrar_pago(cred["id"], monto_pago, cred["total"])
+            time.sleep(0.3)
+            st.rerun()
 
 def _recargar_factura_vc(fac_vc):
     """Recarga la factura del carro desde Supabase y actualiza session_state."""
@@ -1179,7 +1210,8 @@ elif st.session_state.vista == "carro":
                                 "fecha": fecha_hoy(), "hora": ahora(), "canal": "Carro",
                                 "vendedor": "Javier & Edison", "sabor": s,
                                 "cantidad": c, "total": precio_final * c,
-                                "cliente": cliente_vc.strip(), "factura_id": fid_vc
+                                "cliente": cliente_vc.strip(), "factura_id": fid_vc,
+                                "es_credito": es_credito_vc
                             })
                         if es_credito_vc:
                             guardar_credito(cliente_vc.strip(), "Javier & Edison", "Carro", fid_vc, total_cc)
@@ -1276,12 +1308,15 @@ elif st.session_state.vista == "carro":
         st.markdown('<div class="section-label">Ventas de hoy</div>', unsafe_allow_html=True)
         st.caption("Toca una fila para ver el recibo completo.")
         raw_fact_vc = sb_get("ventas",
-            f"select=fecha,hora,cliente,vendedor,sabor,cantidad,total,factura_id&fecha=eq.{fecha_hoy()}&canal=eq.Carro&order=hora.desc")
+            f"select=fecha,hora,cliente,vendedor,sabor,cantidad,total,factura_id,es_credito&fecha=eq.{fecha_hoy()}&canal=eq.Carro&order=hora.desc")
         if raw_fact_vc:
             df_fact_vc = pd.DataFrame(raw_fact_vc)
             mostrar_facturas_seleccionables(df_fact_vc, "carro_todos")
         else:
             st.caption("Aún no hay ventas registradas hoy.")
+
+        # Créditos pendientes — visible para todos, con botón de cobro
+        mostrar_creditos_pendientes("Carro")
 
         # Papas disponibles del cargue — lo que lleva el carro pendiente de vender
         st.markdown('<div class="section-label">Papas disponibles del cargue</div>', unsafe_allow_html=True)
@@ -1467,7 +1502,7 @@ elif st.session_state.vista == "fabrica":
                             "fecha": fecha_hoy(), "hora": ahora(), "canal": "Fábrica",
                             "vendedor": vendedor_f, "sabor": s, "cantidad": c,
                             "total": precio_final * c, "cliente": cliente_f.strip(),
-                            "factura_id": fid
+                            "factura_id": fid, "es_credito": es_credito_f
                         })
                         restar_stock(s, c)
                     if es_credito_f:
@@ -1560,12 +1595,15 @@ elif st.session_state.vista == "fabrica":
     st.markdown('<div class="section-label">Ventas de hoy</div>', unsafe_allow_html=True)
     st.caption("Toca una fila para ver el recibo completo.")
     raw_fact_f = sb_get("ventas",
-        f"select=fecha,hora,cliente,vendedor,sabor,cantidad,total,factura_id&fecha=eq.{fecha_hoy()}&canal=eq.Fábrica&order=hora.desc")
+        f"select=fecha,hora,cliente,vendedor,sabor,cantidad,total,factura_id,es_credito&fecha=eq.{fecha_hoy()}&canal=eq.Fábrica&order=hora.desc")
     if raw_fact_f:
         df_fact_f = pd.DataFrame(raw_fact_f)
         mostrar_facturas_seleccionables(df_fact_f, "fabrica_todos")
     else:
         st.caption("Aún no hay ventas registradas hoy.")
+
+    # Créditos pendientes — visible para todos, con botón de cobro
+    mostrar_creditos_pendientes("Fábrica")
 
     # Solo admin ve resumen y historial
     if st.session_state.es_admin:
