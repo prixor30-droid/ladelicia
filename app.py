@@ -84,11 +84,16 @@ def guardar_credito(cliente, vendedor, canal, factura_id, total):
         "canal": str(canal),
         "factura_id": str(factura_id),
         "total": float(total),
-        "pagado": 0,
+        "pagado": 0.0,
         "estado": "pendiente"
     }
-    ok = sb_post("creditos", data)
-    return ok
+    url = f"{SUPABASE_URL}/rest/v1/creditos"
+    try:
+        r = requests.post(url, headers=HEADERS, json=data, timeout=10)
+        return r.ok
+    except Exception as e:
+        st.error(f"Error guardando crédito: {e}")
+        return False
 
 def get_creditos_pendientes(canal=None):
     if canal:
