@@ -377,9 +377,8 @@ def init_inventario():
         for sabor, precio in PRODUCTOS.items():
             sb_post("inventario", {"sabor": sabor, "stock": 0, "precio": precio})
 
-@st.cache_data(ttl=15)
 def get_inventario_completo():
-    """Trae todo el inventario de una sola vez, cacheado 15 segundos."""
+    """Trae todo el inventario de una sola vez."""
     data = sb_get("inventario", "select=sabor,stock,precio")
     return {r["sabor"]: r["stock"] for r in data} if data else {}
 
@@ -396,19 +395,16 @@ def agregar_stock(sabor, cantidad):
     r = sb_get("inventario", f"select=stock&sabor=eq.{q}")
     stock = int(r[0]["stock"]) if r else 0
     sb_patch("inventario", f"sabor=eq.{q}", {"stock": stock + cantidad})
-    get_inventario_completo.clear()
 
 def restar_stock(sabor, cantidad):
     q = requests.utils.quote(sabor)
     r = sb_get("inventario", f"select=stock&sabor=eq.{q}")
     stock = int(r[0]["stock"]) if r else 0
     sb_patch("inventario", f"sabor=eq.{q}", {"stock": max(0, stock - cantidad)})
-    get_inventario_completo.clear()
 
 def set_stock(sabor, cantidad):
     q = requests.utils.quote(sabor)
     sb_patch("inventario", f"sabor=eq.{q}", {"stock": cantidad})
-    get_inventario_completo.clear()
 
 @st.cache_data(ttl=60)
 def sabores_por_frecuencia(canal=None):
@@ -888,7 +884,6 @@ elif st.session_state.vista == "produccion":
 
                 if cambios:
                     sb_patch("produccion", f"id=eq.{orig['id']}", cambios)
-            get_inventario_completo.clear()
             time.sleep(0.3)
             st.rerun()
 
@@ -899,7 +894,6 @@ elif st.session_state.vista == "produccion":
             reg_del = ids_prod[sel_del]
             sb_delete("produccion", f"id=eq.{reg_del['id']}")
             restar_stock(reg_del["sabor"], reg_del["cantidad"])
-            get_inventario_completo.clear()
             time.sleep(0.3)
             st.rerun()
     else:
@@ -922,7 +916,6 @@ elif st.session_state.vista == "produccion":
     nuevo_stock = st.number_input("Stock real", min_value=0, value=stock_adj, step=1, key="nuevo_s")
     if st.button("💾 Guardar ajuste", key="btn_adj"):
         set_stock(sabor_adj, nuevo_stock)
-        get_inventario_completo.clear()
         st.session_state.ok_stock = True
         time.sleep(0.3)
         st.rerun()
