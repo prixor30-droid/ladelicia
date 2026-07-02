@@ -87,9 +87,15 @@ def guardar_credito(cliente, vendedor, canal, factura_id, total):
         "pagado": 0.0,
         "estado": "pendiente"
     }
+    headers_insert = {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+        "Content-Type": "application/json",
+        "Prefer": "return=minimal"
+    }
     url = f"{SUPABASE_URL}/rest/v1/creditos"
     try:
-        r = requests.post(url, headers=HEADERS, json=data, timeout=10)
+        r = requests.post(url, headers=headers_insert, json=data, timeout=10)
         return r.ok
     except Exception as e:
         st.error(f"Error guardando crédito: {e}")
