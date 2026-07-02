@@ -1276,7 +1276,7 @@ elif st.session_state.vista == "carro":
         else:
             st.caption("No hay cargue registrado hoy.")
 
-        # Solo admin ve resumen y facturas del carro
+        # Solo admin ve resumen del carro
         if st.session_state.es_admin:
             raw_resumen_carro = sb_get("ventas", f"select=total,cantidad&fecha=eq.{fecha_hoy()}&canal=eq.Carro")
             if raw_resumen_carro:
@@ -1290,12 +1290,6 @@ elif st.session_state.vista == "carro":
                     f'</div>',
                     unsafe_allow_html=True
                 )
-            df_vt_carro = sb_get("ventas", f"select=fecha,hora,cliente,vendedor,sabor,cantidad,total,factura_id&fecha=eq.{fecha_hoy()}&canal=eq.Carro&order=hora.desc")
-            if df_vt_carro:
-                df_carro_v = pd.DataFrame(df_vt_carro)
-                st.markdown('<div class="section-label">Facturas del carro hoy</div>', unsafe_allow_html=True)
-                st.caption("Toca una fila para ver el recibo completo.")
-                mostrar_facturas_seleccionables(df_carro_v, "carro_hoy")
 
     with sub3:
         st.markdown('<div class="section-label">Devolución al inventario 🔄</div>', unsafe_allow_html=True)
@@ -1355,7 +1349,7 @@ elif st.session_state.vista == "fabrica":
     # Carrito como tabla editable
     if st.session_state.carrito:
         st.markdown('<div class="section-label">Carrito actual</div>', unsafe_allow_html=True)
-        st.caption("Toca cualquier celda para cambiar sabor, cantidad o precio.")
+        st.caption("Toca cualquier celda para cambiar cantidad o precio.")
 
         sabores_carrito = list(st.session_state.carrito.keys())
         df_carrito = pd.DataFrame({
@@ -1527,12 +1521,12 @@ elif st.session_state.vista == "fabrica":
 
     # Solo admin ve resumen y historial
     if st.session_state.es_admin:
-        raw_resumen_fab = sb_get("ventas", f"select=total,cantidad,vendedor&fecha=eq.{fecha_hoy()}&canal=eq.Fábrica")
-        if raw_resumen_fab:
-            total_fab_dia  = sum(r["total"]    for r in raw_resumen_fab if r["total"] > 0)
-            bolsas_fab_dia = sum(r["cantidad"] for r in raw_resumen_fab if r["cantidad"] > 0)
+        raw_vf = sb_get("ventas", f"select=total,cantidad,vendedor&fecha=eq.{fecha_hoy()}&canal=eq.Fábrica")
+        if raw_vf:
+            total_fab_dia  = sum(r["total"]    for r in raw_vf if r["total"] > 0)
+            bolsas_fab_dia = sum(r["cantidad"] for r in raw_vf if r["cantidad"] > 0)
             por_vendedor = {}
-            for r in raw_resumen_fab:
+            for r in raw_vf:
                 if r["total"] > 0:
                     v = r["vendedor"]
                     por_vendedor[v] = por_vendedor.get(v, 0) + r["total"]
@@ -1548,26 +1542,6 @@ elif st.session_state.vista == "fabrica":
                 f'</div>',
                 unsafe_allow_html=True
             )
-        raw_vf = sb_get("ventas", f"select=fecha,hora,cliente,vendedor,sabor,cantidad,total,factura_id&fecha=eq.{fecha_hoy()}&canal=eq.Fábrica&order=factura_id.asc,hora.asc")
-        if raw_vf:
-            st.markdown('<div class="section-label">Facturas de hoy</div>', unsafe_allow_html=True)
-            df_vf = pd.DataFrame(raw_vf)
-            facturas_ids = df_vf["factura_id"].unique()
-            for fid in facturas_ids:
-                grupo = df_vf[df_vf["factura_id"]==fid]
-                cliente_n = grupo["cliente"].iloc[0]
-                vendedor_n = grupo["vendedor"].iloc[0]
-                hora_n = grupo["hora"].iloc[0]
-                total_n = grupo["total"].sum()
-                st.markdown(f"""
-                <div class="factura-box">
-                    <div class="factura-header">🧾 #{fid} — {cliente_n}</div>
-                    <div style="font-size:0.78rem;color:rgba(255,255,255,0.4);margin-bottom:8px;">{vendedor_n} · {hora_n}</div>
-                """, unsafe_allow_html=True)
-                for _, row in grupo.iterrows():
-                    st.markdown(f'<div class="factura-row"><span>{row["sabor"]} × {row["cantidad"]}</span><span>{fmt(row["total"])}</span></div>', unsafe_allow_html=True)
-                st.markdown(f'<div class="factura-total"><span>TOTAL</span><span>{fmt(total_n)}</span></div>', unsafe_allow_html=True)
-                st.markdown('</div>', unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # VISTA: RESUMEN (solo admin)
