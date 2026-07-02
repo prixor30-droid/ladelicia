@@ -1015,27 +1015,37 @@ elif st.session_state.vista == "carro":
                 for i, row in edited_cg.iterrows():
                     orig = df_cg_full.iloc[i]
                     cambios = {}
-                    if row["Fecha"] != orig["fecha"]:
-                        cambios["fecha"] = row["Fecha"]
-                    if row["Hora"] != orig["hora"]:
-                        cambios["hora"] = row["Hora"]
-                    if row["Sabor"] != orig["sabor"]:
-                        # Cambió el sabor: revertir stock del sabor viejo (devolverlo) y restar del nuevo
-                        agregar_stock(orig["sabor"], orig["cantidad"])
-                        restar_stock(row["Sabor"], int(row["Bolsas"]))
-                        cambios["sabor"] = row["Sabor"]
-                        cambios["cantidad"] = int(row["Bolsas"])
-                    elif int(row["Bolsas"]) != orig["cantidad"]:
-                        diff = int(row["Bolsas"]) - orig["cantidad"]
+
+                    fecha_orig = str(orig["fecha"])
+                    hora_orig  = str(orig["hora"])
+                    sabor_orig = str(orig["sabor"])
+                    cant_orig  = int(orig["cantidad"])
+
+                    fecha_new  = str(row["Fecha"])
+                    hora_new   = str(row["Hora"])
+                    sabor_new  = str(row["Sabor"])
+                    cant_new   = int(row["Bolsas"])
+
+                    if fecha_new != fecha_orig:
+                        cambios["fecha"] = fecha_new
+                    if hora_new != hora_orig:
+                        cambios["hora"] = hora_new
+                    if sabor_new != sabor_orig:
+                        agregar_stock(sabor_orig, cant_orig)
+                        restar_stock(sabor_new, cant_new)
+                        cambios["sabor"] = sabor_new
+                        cambios["cantidad"] = cant_new
+                    elif cant_new != cant_orig:
+                        diff = cant_new - cant_orig
                         if diff > 0:
-                            restar_stock(orig["sabor"], diff)
-                        elif diff < 0:
-                            agregar_stock(orig["sabor"], abs(diff))
-                        cambios["cantidad"] = int(row["Bolsas"])
+                            restar_stock(sabor_orig, diff)
+                        else:
+                            agregar_stock(sabor_orig, abs(diff))
+                        cambios["cantidad"] = cant_new
 
                     if cambios:
                         sb_patch("cargues", f"id=eq.{orig['id']}", cambios)
-                time.sleep(0.3)
+                time.sleep(1)
                 st.rerun()
 
             ids_cg = {f"{r['fecha']} {r['hora']} — {r['sabor']} ({r['cantidad']} bolsas)": r for r in raw_cg_full}
