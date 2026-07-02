@@ -859,28 +859,37 @@ elif st.session_state.vista == "produccion":
             for i, row in edited.iterrows():
                 orig = df_prod.iloc[i]
                 cambios = {}
-                diff_stock = 0
-                sabor_para_stock = orig["sabor"]
 
-                if row["Fecha"] != orig["fecha"]:
-                    cambios["fecha"] = row["Fecha"]
-                if row["Hora"] != orig["hora"]:
-                    cambios["hora"] = row["Hora"]
-                if row["Empleado"] != orig["empleado"]:
-                    cambios["empleado"] = row["Empleado"]
-                if row["Sabor"] != orig["sabor"]:
-                    # Cambió el sabor: revertir stock del sabor viejo, aplicar al nuevo
-                    restar_stock(orig["sabor"], orig["cantidad"])
-                    agregar_stock(row["Sabor"], int(row["Bolsas"]))
-                    cambios["sabor"] = row["Sabor"]
-                    cambios["cantidad"] = int(row["Bolsas"])
-                elif int(row["Bolsas"]) != orig["cantidad"]:
-                    diff = int(row["Bolsas"]) - orig["cantidad"]
+                fecha_orig = str(orig["fecha"])
+                hora_orig  = str(orig["hora"])
+                emp_orig   = str(orig["empleado"])
+                sabor_orig = str(orig["sabor"])
+                cant_orig  = int(orig["cantidad"])
+
+                fecha_new  = str(row["Fecha"])
+                hora_new   = str(row["Hora"])
+                emp_new    = str(row["Empleado"])
+                sabor_new  = str(row["Sabor"])
+                cant_new   = int(row["Bolsas"])
+
+                if fecha_new != fecha_orig:
+                    cambios["fecha"] = fecha_new
+                if hora_new != hora_orig:
+                    cambios["hora"] = hora_new
+                if emp_new != emp_orig:
+                    cambios["empleado"] = emp_new
+                if sabor_new != sabor_orig:
+                    restar_stock(sabor_orig, cant_orig)
+                    agregar_stock(sabor_new, cant_new)
+                    cambios["sabor"] = sabor_new
+                    cambios["cantidad"] = cant_new
+                elif cant_new != cant_orig:
+                    diff = cant_new - cant_orig
                     if diff > 0:
-                        agregar_stock(orig["sabor"], diff)
-                    elif diff < 0:
-                        restar_stock(orig["sabor"], abs(diff))
-                    cambios["cantidad"] = int(row["Bolsas"])
+                        agregar_stock(sabor_orig, diff)
+                    else:
+                        restar_stock(sabor_orig, abs(diff))
+                    cambios["cantidad"] = cant_new
 
                 if cambios:
                     sb_patch("produccion", f"id=eq.{orig['id']}", cambios)
