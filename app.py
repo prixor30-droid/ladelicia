@@ -1111,6 +1111,7 @@ elif st.session_state.vista == "carro":
         st.markdown('<div class="section-label">Nueva venta 🚗</div>', unsafe_allow_html=True)
 
         cliente_vc = st.text_input("Nombre del cliente", placeholder="Ej: Tienda Don Carlos", key="cliente_vc")
+        tipo_pago_vc = st.radio("Tipo de pago", ["💵 Paga ahora", "📋 Crédito (paga después)"], key="tipo_pago_vc", horizontal=True)
 
         st.markdown('<div class="section-label">Agregar al carrito</div>', unsafe_allow_html=True)
 
@@ -1185,8 +1186,7 @@ elif st.session_state.vista == "carro":
 
             # Billete y vuelto
             st.markdown('<div class="section-label">Pago del cliente</div>', unsafe_allow_html=True)
-            tipo_pago_vc = st.radio("Tipo de pago", ["💵 Paga ahora", "📋 Crédito (paga después)"], key="tipo_pago_vc", horizontal=True)
-            es_credito_vc = (tipo_pago_vc == "📋 Crédito (paga después)")
+            es_credito_vc = (st.session_state.get("tipo_pago_vc", "💵 Paga ahora") == "📋 Crédito (paga después)")
 
             if not es_credito_vc:
                 billete_vc = st.number_input("Billete del cliente ($)", min_value=0, value=0,
@@ -1413,7 +1413,7 @@ elif st.session_state.vista == "fabrica":
 
     vendedor_f = st.selectbox("Vendedor", VENDEDORES_FABRICA, key="vend_f")
     cliente_f  = st.text_input("Nombre del cliente", placeholder="Ej: Tienda Don Carlos", key="cliente_f")
-    es_credito_f = False  # se define en la sección de pago
+    tipo_pago_f = st.radio("Tipo de pago", ["💵 Paga ahora", "📋 Crédito (paga después)"], key="tipo_pago_f", horizontal=True)
 
     st.markdown('<div class="section-label">Agregar al carrito</div>', unsafe_allow_html=True)
 
@@ -1490,8 +1490,7 @@ elif st.session_state.vista == "fabrica":
 
         # Billete y vuelto
         st.markdown('<div class="section-label">Pago del cliente</div>', unsafe_allow_html=True)
-        tipo_pago_f = st.radio("Tipo de pago", ["💵 Paga ahora", "📋 Crédito (paga después)"], key="tipo_pago_f", horizontal=True)
-        es_credito_f = (tipo_pago_f == "📋 Crédito (paga después)")
+        es_credito_f = (st.session_state.get("tipo_pago_f", "💵 Paga ahora") == "📋 Crédito (paga después)")
 
         if not es_credito_f:
             billete_f = st.number_input("Billete del cliente ($)", min_value=0, value=0,
