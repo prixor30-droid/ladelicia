@@ -1185,8 +1185,8 @@ elif st.session_state.vista == "carro":
 
             # Billete y vuelto
             st.markdown('<div class="section-label">Pago del cliente</div>', unsafe_allow_html=True)
-            es_credito_vc = st.checkbox("📋 Dejar en crédito (paga después)", key="credito_vc")
-            st.session_state["_credito_vc_val"] = es_credito_vc
+            tipo_pago_vc = st.radio("Tipo de pago", ["💵 Paga ahora", "📋 Crédito (paga después)"], key="tipo_pago_vc", horizontal=True)
+            es_credito_vc = (tipo_pago_vc == "📋 Crédito (paga después)")
 
             if not es_credito_vc:
                 billete_vc = st.number_input("Billete del cliente ($)", min_value=0, value=0,
@@ -1217,7 +1217,7 @@ elif st.session_state.vista == "carro":
                         st.markdown(f'<div class="alert-low">⚠️ Stock insuficiente: <b>{", ".join(sin_stock)}</b>. Ajusta el carrito.</div>', unsafe_allow_html=True)
                     else:
                         # Capturar valor del crédito ANTES de vaciar el carrito
-                        es_cred_vc = bool(st.session_state.get("_credito_vc_val", False) or st.session_state.get("credito_vc", False))
+                        es_cred_vc = (st.session_state.get("tipo_pago_vc", "") == "📋 Crédito (paga después)")
                         fid_vc = str(uuid.uuid4())[:8].upper()
                         total_venta_vc = 0
                         for s, c in st.session_state.carrito_carro.items():
@@ -1413,8 +1413,7 @@ elif st.session_state.vista == "fabrica":
 
     vendedor_f = st.selectbox("Vendedor", VENDEDORES_FABRICA, key="vend_f")
     cliente_f  = st.text_input("Nombre del cliente", placeholder="Ej: Tienda Don Carlos", key="cliente_f")
-    es_credito_f = st.checkbox("📋 Dejar en crédito (paga después)", key="credito_f")
-    st.session_state["_credito_f_val"] = es_credito_f
+    es_credito_f = False  # se define en la sección de pago
 
     st.markdown('<div class="section-label">Agregar al carrito</div>', unsafe_allow_html=True)
 
@@ -1491,6 +1490,8 @@ elif st.session_state.vista == "fabrica":
 
         # Billete y vuelto
         st.markdown('<div class="section-label">Pago del cliente</div>', unsafe_allow_html=True)
+        tipo_pago_f = st.radio("Tipo de pago", ["💵 Paga ahora", "📋 Crédito (paga después)"], key="tipo_pago_f", horizontal=True)
+        es_credito_f = (tipo_pago_f == "📋 Crédito (paga después)")
 
         if not es_credito_f:
             billete_f = st.number_input("Billete del cliente ($)", min_value=0, value=0,
@@ -1515,7 +1516,7 @@ elif st.session_state.vista == "fabrica":
                     st.markdown(f'<div class="alert-low">⚠️ Stock insuficiente: <b>{", ".join(sin_stock_f)}</b>. Ajusta el carrito.</div>', unsafe_allow_html=True)
                 else:
                     fid = str(uuid.uuid4())[:8].upper()
-                    es_cred_f = bool(st.session_state.get("_credito_f_val", False) or st.session_state.get("credito_f", False))
+                    es_cred_f = (st.session_state.get("tipo_pago_f", "") == "📋 Crédito (paga después)")
                     total_venta_f = 0
                     for s, c in st.session_state.carrito.items():
                         precio_final = st.session_state.precios_carrito.get(s, PRODUCTOS[s])
