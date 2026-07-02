@@ -1225,8 +1225,8 @@ elif st.session_state.vista == "carro":
                 sabor_in_vc  = col_b.selectbox("Lleva en cambio", SABORES_LISTA, key="cambio_in_vc")
                 cant_in_vc   = col_b.number_input("Cantidad que lleva", min_value=1, max_value=50, value=1, step=1, key="cant_in_vc")
 
-                valor_out_vc = PRODUCTOS[sabor_out_vc] * cant_out_vc
-                valor_in_vc  = PRODUCTOS[sabor_in_vc] * cant_in_vc
+                valor_out_vc = fac_vc["precios"].get(sabor_out_vc, PRODUCTOS[sabor_out_vc]) * cant_out_vc
+                valor_in_vc  = fac_vc["precios"].get(sabor_in_vc,  PRODUCTOS[sabor_in_vc])  * cant_in_vc
                 dif_vc = valor_in_vc - valor_out_vc
                 if dif_vc > 0:
                     st.markdown(f'<div class="warn-box">💰 El cliente debe pagar <b>{fmt(dif_vc)}</b> adicionales</div>', unsafe_allow_html=True)
@@ -1258,7 +1258,7 @@ elif st.session_state.vista == "carro":
             with tab_agregar_vc:
                 sabor_add_vc = st.selectbox("Sabor a agregar", SABORES_LISTA, key="add_sabor_vc")
                 cant_add_vc  = st.number_input("Cantidad", min_value=1, max_value=50, value=1, step=1, key="add_cant_vc")
-                precio_add_vc = PRODUCTOS[sabor_add_vc] * cant_add_vc
+                precio_add_vc = fac_vc["precios"].get(sabor_add_vc, PRODUCTOS[sabor_add_vc]) * cant_add_vc
                 st.markdown(f'<div class="info-box">💰 A cobrar adicionalmente: <b>{fmt(precio_add_vc)}</b></div>', unsafe_allow_html=True)
 
                 if st.button("➕ Agregar a la factura", key="btn_add_vc"):
@@ -1511,8 +1511,8 @@ elif st.session_state.vista == "fabrica":
             sabor_in  = col_b.selectbox("Lleva en cambio", SABORES_LISTA, key="cambio_in")
             cant_in   = col_b.number_input("Cantidad que lleva", min_value=1, max_value=50, value=1, step=1, key="cant_in")
 
-            valor_out = PRODUCTOS[sabor_out] * cant_out
-            valor_in  = PRODUCTOS[sabor_in] * cant_in
+            valor_out = fac["precios"].get(sabor_out, PRODUCTOS[sabor_out]) * cant_out
+            valor_in  = fac["precios"].get(sabor_in,  PRODUCTOS[sabor_in])  * cant_in
             diferencia = valor_in - valor_out
             if diferencia > 0:
                 st.markdown(f'<div class="warn-box">💰 El cliente debe pagar <b>{fmt(diferencia)}</b> adicionales</div>', unsafe_allow_html=True)
@@ -1539,7 +1539,7 @@ elif st.session_state.vista == "fabrica":
         with tab_agregar_f:
             sabor_add_f = st.selectbox("Sabor a agregar", SABORES_LISTA, key="add_sabor_f")
             cant_add_f  = st.number_input("Cantidad", min_value=1, max_value=50, value=1, step=1, key="add_cant_f")
-            precio_add_f = PRODUCTOS[sabor_add_f] * cant_add_f
+            precio_add_f = fac["precios"].get(sabor_add_f, PRODUCTOS[sabor_add_f]) * cant_add_f
             st.markdown(f'<div class="info-box">💰 A cobrar adicionalmente: <b>{fmt(precio_add_f)}</b></div>', unsafe_allow_html=True)
 
             if st.button("➕ Agregar a la factura", key="btn_add_f"):
@@ -1570,7 +1570,7 @@ elif st.session_state.vista == "fabrica":
 
     # Solo admin ve resumen y historial
     if st.session_state.es_admin:
-        raw_vf = sb_get("ventas", f"select=total,cantidad,vendedor&fecha=eq.{fecha_hoy()}&canal=eq.Fábrica")
+        raw_vf = sb_get("ventas", f"select=total,cantidad,vendedor&fecha=eq.{fecha_hoy()}&canal=in.(Fábrica,Cambio)")
         if raw_vf:
             total_fab_dia  = sum(r["total"]    for r in raw_vf if r["total"] > 0)
             bolsas_fab_dia = sum(r["cantidad"] for r in raw_vf if r["cantidad"] > 0)
