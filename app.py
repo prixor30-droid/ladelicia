@@ -1248,7 +1248,9 @@ elif st.session_state.vista == "carro":
                                 "cliente": cliente_vc.strip(), "factura_id": fid_vc,
                                 "es_credito": es_cred_vc
                             })
-                        if es_cred_vc:
+                        # Guardar crédito siempre que es_credito sea True en ventas
+                        check_cred = sb_get("ventas", f"select=es_credito&factura_id=eq.{fid_vc}&limit=1")
+                        if check_cred and check_cred[0].get("es_credito"):
                             guardar_credito(cliente_vc.strip(), "Javier & Edison", "Carro", fid_vc, total_venta_vc)
                         st.session_state.factura_carro_guardada = {
                             "id": fid_vc, "cliente": cliente_vc.strip(),
@@ -1549,7 +1551,9 @@ elif st.session_state.vista == "fabrica":
                             "factura_id": fid, "es_credito": es_cred_f
                         })
                         restar_stock(s, c)
-                    if es_cred_f:
+                    # Verificar desde ventas si quedó marcado como crédito
+                    check_cred_f = sb_get("ventas", f"select=es_credito&factura_id=eq.{fid}&limit=1")
+                    if check_cred_f and check_cred_f[0].get("es_credito"):
                         guardar_credito(cliente_f.strip(), vendedor_f, "Fábrica", fid, total_venta_f)
                     st.session_state.factura_guardada = {
                         "id": fid, "cliente": cliente_f.strip(),
