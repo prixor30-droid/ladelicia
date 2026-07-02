@@ -1204,25 +1204,28 @@ elif st.session_state.vista == "carro":
                         st.markdown(f'<div class="alert-low">⚠️ Stock insuficiente: <b>{", ".join(sin_stock)}</b>. Ajusta el carrito.</div>', unsafe_allow_html=True)
                     else:
                         fid_vc = str(uuid.uuid4())[:8].upper()
+                        total_venta_vc = 0
                         for s, c in st.session_state.carrito_carro.items():
                             precio_final = st.session_state.precios_carro.get(s, PRODUCTOS[s])
+                            subtotal = precio_final * c
+                            total_venta_vc += subtotal
                             sb_post("ventas", {
                                 "fecha": fecha_hoy(), "hora": ahora(), "canal": "Carro",
                                 "vendedor": "Javier & Edison", "sabor": s,
-                                "cantidad": c, "total": precio_final * c,
+                                "cantidad": c, "total": subtotal,
                                 "cliente": cliente_vc.strip(), "factura_id": fid_vc,
-                                "es_credito": es_credito_vc
+                                "es_credito": st.session_state.get("credito_vc", False)
                             })
-                        if es_credito_vc:
-                            guardar_credito(cliente_vc.strip(), "Javier & Edison", "Carro", fid_vc, total_cc)
+                        if st.session_state.get("credito_vc", False):
+                            guardar_credito(cliente_vc.strip(), "Javier & Edison", "Carro", fid_vc, total_venta_vc)
                         st.session_state.factura_carro_guardada = {
                             "id": fid_vc, "cliente": cliente_vc.strip(),
                             "vendedor": "Javier & Edison",
                             "items": dict(st.session_state.carrito_carro),
                             "precios": dict(st.session_state.precios_carro),
-                            "total": total_cc,
+                            "total": total_venta_vc,
                             "billete": billete_vc,
-                            "es_credito": es_credito_vc
+                            "es_credito": st.session_state.get("credito_vc", False)
                         }
                         st.session_state.carrito_carro = {}
                         st.session_state.precios_carro = {}
@@ -1496,25 +1499,29 @@ elif st.session_state.vista == "fabrica":
                     st.markdown(f'<div class="alert-low">⚠️ Stock insuficiente: <b>{", ".join(sin_stock_f)}</b>. Ajusta el carrito.</div>', unsafe_allow_html=True)
                 else:
                     fid = str(uuid.uuid4())[:8].upper()
+                    es_cred_f = st.session_state.get("credito_f", False)
+                    total_venta_f = 0
                     for s, c in st.session_state.carrito.items():
                         precio_final = st.session_state.precios_carrito.get(s, PRODUCTOS[s])
+                        subtotal = precio_final * c
+                        total_venta_f += subtotal
                         sb_post("ventas", {
                             "fecha": fecha_hoy(), "hora": ahora(), "canal": "Fábrica",
                             "vendedor": vendedor_f, "sabor": s, "cantidad": c,
-                            "total": precio_final * c, "cliente": cliente_f.strip(),
-                            "factura_id": fid, "es_credito": es_credito_f
+                            "total": subtotal, "cliente": cliente_f.strip(),
+                            "factura_id": fid, "es_credito": es_cred_f
                         })
                         restar_stock(s, c)
-                    if es_credito_f:
-                        guardar_credito(cliente_f.strip(), vendedor_f, "Fábrica", fid, total_fac)
+                    if es_cred_f:
+                        guardar_credito(cliente_f.strip(), vendedor_f, "Fábrica", fid, total_venta_f)
                     st.session_state.factura_guardada = {
                         "id": fid, "cliente": cliente_f.strip(),
                         "vendedor": vendedor_f,
                         "items": dict(st.session_state.carrito),
                         "precios": dict(st.session_state.precios_carrito),
-                        "total": total_fac,
+                        "total": total_venta_f,
                         "billete": billete_f,
-                        "es_credito": es_credito_f
+                        "es_credito": es_cred_f
                     }
                     st.session_state.carrito = {}
                     st.session_state.precios_carrito = {}
