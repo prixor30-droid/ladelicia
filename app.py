@@ -1112,6 +1112,7 @@ elif st.session_state.vista == "carro":
 
         cliente_vc = st.text_input("Nombre del cliente", placeholder="Ej: Tienda Don Carlos", key="cliente_vc")
         es_credito_vc = st.checkbox("📋 Dejar en crédito (paga después)", key="credito_vc")
+        st.session_state["_credito_vc_val"] = es_credito_vc
 
         st.markdown('<div class="section-label">Agregar al carrito</div>', unsafe_allow_html=True)
 
@@ -1214,9 +1215,9 @@ elif st.session_state.vista == "carro":
                                 "vendedor": "Javier & Edison", "sabor": s,
                                 "cantidad": c, "total": subtotal,
                                 "cliente": cliente_vc.strip(), "factura_id": fid_vc,
-                                "es_credito": st.session_state.get("credito_vc", False)
+                                "es_credito": st.session_state.get("_credito_vc_val", False)
                             })
-                        if st.session_state.get("credito_vc", False):
+                        if st.session_state.get("_credito_vc_val", False):
                             guardar_credito(cliente_vc.strip(), "Javier & Edison", "Carro", fid_vc, total_venta_vc)
                         st.session_state.factura_carro_guardada = {
                             "id": fid_vc, "cliente": cliente_vc.strip(),
@@ -1225,7 +1226,7 @@ elif st.session_state.vista == "carro":
                             "precios": dict(st.session_state.precios_carro),
                             "total": total_venta_vc,
                             "billete": billete_vc,
-                            "es_credito": st.session_state.get("credito_vc", False)
+                            "es_credito": st.session_state.get("_credito_vc_val", False)
                         }
                         st.session_state.carrito_carro = {}
                         st.session_state.precios_carro = {}
@@ -1399,6 +1400,7 @@ elif st.session_state.vista == "fabrica":
     vendedor_f = st.selectbox("Vendedor", VENDEDORES_FABRICA, key="vend_f")
     cliente_f  = st.text_input("Nombre del cliente", placeholder="Ej: Tienda Don Carlos", key="cliente_f")
     es_credito_f = st.checkbox("📋 Dejar en crédito (paga después)", key="credito_f")
+    st.session_state["_credito_f_val"] = es_credito_f
 
     st.markdown('<div class="section-label">Agregar al carrito</div>', unsafe_allow_html=True)
 
@@ -1499,7 +1501,7 @@ elif st.session_state.vista == "fabrica":
                     st.markdown(f'<div class="alert-low">⚠️ Stock insuficiente: <b>{", ".join(sin_stock_f)}</b>. Ajusta el carrito.</div>', unsafe_allow_html=True)
                 else:
                     fid = str(uuid.uuid4())[:8].upper()
-                    es_cred_f = st.session_state.get("credito_f", False)
+                    es_cred_f = st.session_state.get("_credito_f_val", False)
                     total_venta_f = 0
                     for s, c in st.session_state.carrito.items():
                         precio_final = st.session_state.precios_carrito.get(s, PRODUCTOS[s])
