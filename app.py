@@ -964,7 +964,7 @@ elif st.session_state.vista == "carro":
 
         # Cargue activo hoy
         raw_cg = sb_get("cargues",      f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}")
-        raw_vc = sb_get("ventas",        f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}&canal=eq.Carro")
+        raw_vc = sb_get("ventas",        f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}&canal=in.(Carro,Cambio)")
         raw_dev = sb_get("devoluciones", f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}")
         if raw_cg:
             df_cg = pd.DataFrame(raw_cg).groupby("sabor")["cantidad"].sum().reset_index()
@@ -1070,7 +1070,7 @@ elif st.session_state.vista == "carro":
 
         # Calcular disponible del carro por sabor (cargado - vendido - devuelto)
         raw_cg_check  = sb_get("cargues",      f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}")
-        raw_vc_check  = sb_get("ventas",        f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}&canal=eq.Carro")
+        raw_vc_check  = sb_get("ventas",        f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}&canal=in.(Carro,Cambio)")
         raw_dev_check = sb_get("devoluciones",  f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}")
 
         stock_carro = {}  # disponible por sabor en el carro
@@ -1292,7 +1292,7 @@ elif st.session_state.vista == "carro":
         # Papas disponibles del cargue — lo que lleva el carro pendiente de vender
         st.markdown('<div class="section-label">Papas disponibles del cargue</div>', unsafe_allow_html=True)
         raw_cg2   = sb_get("cargues",      f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}")
-        raw_vc2   = sb_get("ventas",        f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}&canal=eq.Carro")
+        raw_vc2   = sb_get("ventas",        f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}&canal=in.(Carro,Cambio)")
         raw_dev2  = sb_get("devoluciones",  f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}")
         if raw_cg2:
             df_cg2 = pd.DataFrame(raw_cg2).groupby("sabor")["cantidad"].sum().reset_index()
