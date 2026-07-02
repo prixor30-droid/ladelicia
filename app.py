@@ -884,7 +884,7 @@ elif st.session_state.vista == "produccion":
 
                 if cambios:
                     sb_patch("produccion", f"id=eq.{orig['id']}", cambios)
-            time.sleep(0.3)
+            time.sleep(1)
             st.rerun()
 
         # Eliminar fila seleccionada
