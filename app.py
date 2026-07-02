@@ -1119,12 +1119,12 @@ elif st.session_state.vista == "carro":
         cant_vc  = col_c.number_input("Bolsas", min_value=1, max_value=500, value=1, step=1, key="cant_vc")
 
         # Verificar si hay cargue activo hoy
-        raw_cg_check = sb_get("cargues", f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}")
-        raw_vc_check = sb_get("ventas", f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}&canal=eq.Carro")
+        raw_cg_check = sb_get("cargues", f"select=cantidad&fecha=eq.{fecha_hoy()}")
+        raw_vc_check = sb_get("ventas",  f"select=cantidad&fecha=eq.{fecha_hoy()}&canal=eq.Carro")
         hay_cargue = False
         if raw_cg_check:
             total_cargado = sum(r["cantidad"] for r in raw_cg_check)
-            total_vendido = sum(r["cantidad"] for r in raw_vc_check if r["cantidad"] > 0) if raw_vc_check else 0
+            total_vendido = sum(r["cantidad"] for r in raw_vc_check if r.get("cantidad", 0) > 0) if raw_vc_check else 0
             hay_cargue = total_cargado > total_vendido
 
         if not hay_cargue:
@@ -1216,6 +1216,8 @@ elif st.session_state.vista == "carro":
                     if sin_stock:
                         st.markdown(f'<div class="alert-low">⚠️ Stock insuficiente: <b>{", ".join(sin_stock)}</b>. Ajusta el carrito.</div>', unsafe_allow_html=True)
                     else:
+                        # Capturar valor del crédito ANTES de vaciar el carrito
+                        es_cred_vc = bool(st.session_state.get("_credito_vc_val", False) or st.session_state.get("credito_vc", False))
                         fid_vc = str(uuid.uuid4())[:8].upper()
                         total_venta_vc = 0
                         for s, c in st.session_state.carrito_carro.items():
@@ -1227,9 +1229,9 @@ elif st.session_state.vista == "carro":
                                 "vendedor": "Javier & Edison", "sabor": s,
                                 "cantidad": c, "total": subtotal,
                                 "cliente": cliente_vc.strip(), "factura_id": fid_vc,
-                                "es_credito": st.session_state.get("_credito_vc_val", False)
+                                "es_credito": es_cred_vc
                             })
-                        if st.session_state.get("_credito_vc_val", False):
+                        if es_cred_vc:
                             guardar_credito(cliente_vc.strip(), "Javier & Edison", "Carro", fid_vc, total_venta_vc)
                         st.session_state.factura_carro_guardada = {
                             "id": fid_vc, "cliente": cliente_vc.strip(),
@@ -1238,7 +1240,7 @@ elif st.session_state.vista == "carro":
                             "precios": dict(st.session_state.precios_carro),
                             "total": total_venta_vc,
                             "billete": billete_vc,
-                            "es_credito": st.session_state.get("_credito_vc_val", False)
+                            "es_credito": es_cred_vc
                         }
                         st.session_state.carrito_carro = {}
                         st.session_state.precios_carro = {}
@@ -1513,7 +1515,7 @@ elif st.session_state.vista == "fabrica":
                     st.markdown(f'<div class="alert-low">⚠️ Stock insuficiente: <b>{", ".join(sin_stock_f)}</b>. Ajusta el carrito.</div>', unsafe_allow_html=True)
                 else:
                     fid = str(uuid.uuid4())[:8].upper()
-                    es_cred_f = st.session_state.get("_credito_f_val", False)
+                    es_cred_f = bool(st.session_state.get("_credito_f_val", False) or st.session_state.get("credito_f", False))
                     total_venta_f = 0
                     for s, c in st.session_state.carrito.items():
                         precio_final = st.session_state.precios_carrito.get(s, PRODUCTOS[s])
