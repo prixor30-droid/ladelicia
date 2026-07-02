@@ -75,52 +75,6 @@ def sb_delete(tabla, filtro):
     except:
         return False
 
-def guardar_credito(cliente, vendedor, canal, factura_id, total):
-    data = {
-        "fecha": fecha_hoy(),
-        "hora": ahora(),
-        "cliente": str(cliente),
-        "vendedor": str(vendedor),
-        "canal": str(canal),
-        "factura_id": str(factura_id),
-        "total": float(total),
-        "pagado": 0.0,
-        "estado": "pendiente"
-    }
-    headers_insert = {
-        "apikey": SUPABASE_KEY,
-        "Authorization": f"Bearer {SUPABASE_KEY}",
-        "Content-Type": "application/json",
-        "Prefer": "return=minimal"
-    }
-    url = f"{SUPABASE_URL}/rest/v1/creditos"
-    try:
-        r = requests.post(url, headers=headers_insert, json=data, timeout=10)
-        return r.ok
-    except Exception as e:
-        st.error(f"Error guardando crédito: {e}")
-        return False
-
-def get_creditos_pendientes(canal=None):
-    if canal:
-        q = requests.utils.quote(canal)
-        params = f"select=*&estado=eq.pendiente&canal=eq.{q}&order=fecha.desc"
-    else:
-        params = "select=*&estado=eq.pendiente&order=fecha.desc"
-    resultado = sb_get("creditos", params)
-    return resultado if resultado else []
-
-def registrar_pago(credito_id, monto_pago, total_credito):
-    raw = sb_get("creditos", f"select=pagado&id=eq.{credito_id}")
-    if not raw:
-        return
-    ya_pagado = float(raw[0]["pagado"])
-    nuevo_pagado = ya_pagado + float(monto_pago)
-    nuevo_estado = "pagado" if nuevo_pagado >= float(total_credito) else "pendiente"
-    sb_patch("creditos", f"id=eq.{credito_id}", {
-        "pagado": nuevo_pagado,
-        "estado": nuevo_estado
-    })
 
 # ══════════════════════════════════════════════════════════════════════════════
 # DATOS MAESTROS
@@ -230,38 +184,6 @@ def mostrar_facturas_seleccionables(df_canal, key_prefix):
         st.session_state.vista_anterior = st.session_state.vista  # guardar de dónde venimos
         st.session_state.vista = "recibo"
         st.rerun()
-
-def mostrar_creditos_pendientes(canal):
-    """Muestra créditos pendientes de cobro con botón de pago."""
-    creditos = get_creditos_pendientes(canal)
-    if not creditos:
-        return
-    st.markdown('<div class="section-label">💳 Créditos pendientes de cobro</div>', unsafe_allow_html=True)
-    for cred in creditos:
-        falta = float(cred["total"]) - float(cred["pagado"])
-        if falta <= 0:
-            continue
-        cid = cred["id"]
-        st.markdown(
-            '<div class="credito-box">'
-            f'<div class="credito-header">📋 {cred["cliente"]} <span class="badge-credito">Pendiente</span></div>'
-            f'<div class="credito-row"><span>Fecha</span><span>{cred["fecha"]}</span></div>'
-            f'<div class="credito-row"><span>Factura</span><span>FV-{cred["factura_id"]}</span></div>'
-            f'<div class="credito-pendiente"><span>Debe</span><span>{fmt(falta)}</span></div>'
-            '</div>',
-            unsafe_allow_html=True
-        )
-        col_p, col_t = st.columns([3, 1])
-        monto = col_p.number_input(
-            "Monto que paga ($)",
-            min_value=0, max_value=int(falta),
-            value=int(falta), step=1000,
-            key=f"pago_v_{cid}"
-        )
-        if col_t.button("✅ Cobrado", key=f"btn_cobrado_{cid}"):
-            registrar_pago(cid, monto, cred["total"])
-            time.sleep(0.3)
-            st.rerun()
 
 def _recargar_factura_vc(fac_vc):
     """Recarga la factura del carro desde Supabase y actualiza session_state."""
@@ -653,12 +575,6 @@ label,.stSelectbox label,.stNumberInput label,.stDateInput label,.stTextInput la
 .recibo-item-detalle{display:flex;justify-content:space-between;font-size:0.8rem;color:#9C4270;}
 .recibo-total-row{display:flex;justify-content:space-between;font-size:1.05rem;font-weight:700;color:#1B9E5A;}
 .recibo-footer{text-align:center;font-size:0.8rem;color:#9C4270;font-style:italic;}
-.credito-box{background:#FFF8E1;border:1.5px solid #FFB300;border-radius:14px;padding:14px 16px;margin-bottom:10px;}
-.credito-header{font-size:0.88rem;font-weight:700;color:#E65100;margin-bottom:6px;}
-.credito-row{display:flex;justify-content:space-between;font-size:0.83rem;padding:3px 0;color:#4E342E;}
-.credito-pendiente{display:flex;justify-content:space-between;font-size:0.95rem;font-weight:700;color:#E65100;margin-top:6px;}
-.credito-pagado{display:flex;justify-content:space-between;font-size:0.95rem;font-weight:700;color:#1B9E5A;margin-top:6px;}
-.badge-credito{background:#FFB300;color:#4E2800;font-size:0.72rem;font-weight:700;padding:3px 10px;border-radius:20px;display:inline-block;margin-left:6px;}
 .calc-box{background:#FFFFFF;border-radius:14px;padding:14px;margin-bottom:14px;box-shadow:0 2px 10px rgba(216,27,122,0.10);}
 .main-btn{background:#FAF0F5;border:1px solid #E5C5D5;border-radius:14px;padding:20px 16px;margin-bottom:10px;cursor:pointer;display:flex;align-items:center;gap:14px;}
 .main-btn-icon{font-size:2rem;}
@@ -1135,10 +1051,6 @@ elif st.session_state.vista == "carro":
         st.markdown('<div class="section-label">Nueva venta 🚗</div>', unsafe_allow_html=True)
 
         cliente_vc = st.text_input("Nombre del cliente", placeholder="Ej: Tienda Don Carlos", key="cliente_vc")
-        tipo_pago_vc = st.radio("Tipo de pago", ["💵 Paga ahora", "📋 Crédito (paga después)"], key="tipo_pago_vc", horizontal=True)
-        # Guardar en clave separada que NO se resetea al rerun
-        if tipo_pago_vc:
-            st.session_state["_tipo_pago_vc"] = tipo_pago_vc
 
         st.markdown('<div class="section-label">Agregar al carrito</div>', unsafe_allow_html=True)
 
@@ -1213,9 +1125,7 @@ elif st.session_state.vista == "carro":
 
             # Billete y vuelto
             st.markdown('<div class="section-label">Pago del cliente</div>', unsafe_allow_html=True)
-            es_credito_vc = "dito" in st.session_state.get("tipo_pago_vc", "")
-
-            if not es_credito_vc:
+            if True:
                 billete_vc = st.number_input("Billete del cliente ($)", min_value=0, value=0,
                                              step=1000, key="billete_vc")
                 if billete_vc > 0:
@@ -1243,9 +1153,6 @@ elif st.session_state.vista == "carro":
                     if sin_stock:
                         st.markdown(f'<div class="alert-low">⚠️ Stock insuficiente: <b>{", ".join(sin_stock)}</b>. Ajusta el carrito.</div>', unsafe_allow_html=True)
                     else:
-                        # Leer de la clave persistente que sobrevive el rerun
-                        tipo_pago_val = str(st.session_state.get("_tipo_pago_vc", ""))
-                        es_cred_vc = "dito" in tipo_pago_val
                         fid_vc = str(uuid.uuid4())[:8].upper()
                         total_venta_vc = 0
                         for s, c in st.session_state.carrito_carro.items():
@@ -1257,12 +1164,7 @@ elif st.session_state.vista == "carro":
                                 "vendedor": "Javier & Edison", "sabor": s,
                                 "cantidad": c, "total": subtotal,
                                 "cliente": cliente_vc.strip(), "factura_id": fid_vc,
-                                "es_credito": es_cred_vc
                             })
-                        # Guardar crédito siempre que es_credito sea True en ventas
-                        check_cred = sb_get("ventas", f"select=es_credito&factura_id=eq.{fid_vc}&limit=1")
-                        if check_cred and check_cred[0].get("es_credito"):
-                            guardar_credito(cliente_vc.strip(), "Javier & Edison", "Carro", fid_vc, total_venta_vc)
                         st.session_state.factura_carro_guardada = {
                             "id": fid_vc, "cliente": cliente_vc.strip(),
                             "vendedor": "Javier & Edison",
@@ -1270,11 +1172,9 @@ elif st.session_state.vista == "carro":
                             "precios": dict(st.session_state.precios_carro),
                             "total": total_venta_vc,
                             "billete": billete_vc,
-                            "es_credito": es_cred_vc
                         }
                         st.session_state.carrito_carro = {}
                         st.session_state.precios_carro = {}
-                        st.session_state["_tipo_pago_vc"] = ""
                         get_metricas_globales.clear()
                         time.sleep(0.3)
                         st.rerun()
@@ -1364,8 +1264,6 @@ elif st.session_state.vista == "carro":
         else:
             st.caption("Aún no hay ventas registradas hoy.")
 
-        # Créditos pendientes — visible para todos, con botón de cobro
-        mostrar_creditos_pendientes("Carro")
 
         # Papas disponibles del cargue — lo que lleva el carro pendiente de vender
         st.markdown('<div class="section-label">Papas disponibles del cargue</div>', unsafe_allow_html=True)
@@ -1444,9 +1342,6 @@ elif st.session_state.vista == "fabrica":
 
     vendedor_f = st.selectbox("Vendedor", VENDEDORES_FABRICA, key="vend_f")
     cliente_f  = st.text_input("Nombre del cliente", placeholder="Ej: Tienda Don Carlos", key="cliente_f")
-    tipo_pago_f = st.radio("Tipo de pago", ["💵 Paga ahora", "📋 Crédito (paga después)"], key="tipo_pago_f", horizontal=True)
-    if tipo_pago_f:
-        st.session_state["_tipo_pago_f"] = tipo_pago_f
 
     st.markdown('<div class="section-label">Agregar al carrito</div>', unsafe_allow_html=True)
 
@@ -1523,9 +1418,7 @@ elif st.session_state.vista == "fabrica":
 
         # Billete y vuelto
         st.markdown('<div class="section-label">Pago del cliente</div>', unsafe_allow_html=True)
-        es_credito_f = "dito" in st.session_state.get("tipo_pago_f", "")
-
-        if not es_credito_f:
+        if True:
             billete_f = st.number_input("Billete del cliente ($)", min_value=0, value=0,
                                         step=1000, key="billete_fab")
             if billete_f > 0:
@@ -1548,8 +1441,6 @@ elif st.session_state.vista == "fabrica":
                     st.markdown(f'<div class="alert-low">⚠️ Stock insuficiente: <b>{", ".join(sin_stock_f)}</b>. Ajusta el carrito.</div>', unsafe_allow_html=True)
                 else:
                     fid = str(uuid.uuid4())[:8].upper()
-                    tipo_pago_val_f = str(st.session_state.get("_tipo_pago_f", ""))
-                    es_cred_f = "dito" in tipo_pago_val_f
                     total_venta_f = 0
                     for s, c in st.session_state.carrito.items():
                         precio_final = st.session_state.precios_carrito.get(s, PRODUCTOS[s])
@@ -1559,13 +1450,9 @@ elif st.session_state.vista == "fabrica":
                             "fecha": fecha_hoy(), "hora": ahora(), "canal": "Fábrica",
                             "vendedor": vendedor_f, "sabor": s, "cantidad": c,
                             "total": subtotal, "cliente": cliente_f.strip(),
-                            "factura_id": fid, "es_credito": es_cred_f
+                            "factura_id": fid
                         })
                         restar_stock(s, c)
-                    # Verificar desde ventas si quedó marcado como crédito
-                    check_cred_f = sb_get("ventas", f"select=es_credito&factura_id=eq.{fid}&limit=1")
-                    if check_cred_f and check_cred_f[0].get("es_credito"):
-                        guardar_credito(cliente_f.strip(), vendedor_f, "Fábrica", fid, total_venta_f)
                     st.session_state.factura_guardada = {
                         "id": fid, "cliente": cliente_f.strip(),
                         "vendedor": vendedor_f,
@@ -1573,11 +1460,9 @@ elif st.session_state.vista == "fabrica":
                         "precios": dict(st.session_state.precios_carrito),
                         "total": total_venta_f,
                         "billete": billete_f,
-                        "es_credito": es_cred_f
                     }
                     st.session_state.carrito = {}
                     st.session_state.precios_carrito = {}
-                    st.session_state["_tipo_pago_f"] = ""
                     get_metricas_globales.clear()
                     time.sleep(0.3)
                     st.rerun()
@@ -1662,8 +1547,6 @@ elif st.session_state.vista == "fabrica":
     else:
         st.caption("Aún no hay ventas registradas hoy.")
 
-    # Créditos pendientes — visible para todos, con botón de cobro
-    mostrar_creditos_pendientes("Fábrica")
 
     # Solo admin ve resumen y historial
     if st.session_state.es_admin:
@@ -1700,7 +1583,7 @@ elif st.session_state.vista == "recibo":
         st.info("No se encontró la factura seleccionada.")
 
 elif st.session_state.vista == "resumen" and st.session_state.es_admin:
-    sub_r1, sub_r2, sub_r3, sub_r4, sub_r5 = st.tabs(["Hoy", "Por fechas", "📅 Mes", "💳 Créditos", "💾 Exportar"])
+    sub_r1, sub_r2, sub_r3, sub_r4 = st.tabs(["Hoy", "Por fechas", "📅 Mes", "💾 Exportar"])
 
     with sub_r1:
         st.markdown('<div class="section-label">Resumen del día</div>', unsafe_allow_html=True)
@@ -1832,58 +1715,6 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
             st.dataframe(top_sabores, use_container_width=True, hide_index=True)
 
     with sub_r4:
-        st.markdown('<div class="section-label">Créditos pendientes</div>', unsafe_allow_html=True)
-        creditos = get_creditos_pendientes()
-        if not creditos:
-            st.info("No hay créditos pendientes.")
-        else:
-            total_pendiente = sum(c["total"] - c["pagado"] for c in creditos)
-            st.markdown(
-                f'<div class="credito-box"><div class="credito-pendiente"><span>💳 Total pendiente de cobro</span><span>{fmt(total_pendiente)}</span></div></div>',
-                unsafe_allow_html=True
-            )
-            for cred in creditos:
-                falta = cred["total"] - cred["pagado"]
-                st.markdown(
-                    f'<div class="credito-box">'
-                    f'<div class="credito-header">📋 {cred["cliente"]} <span class="badge-credito">Crédito</span></div>'
-                    f'<div class="credito-row"><span>Vendedor</span><span>{cred["vendedor"]}</span></div>'
-                    f'<div class="credito-row"><span>Fecha</span><span>{cred["fecha"]}</span></div>'
-                    f'<div class="credito-row"><span>Factura</span><span>FV-{cred["factura_id"]}</span></div>'
-                    f'<div class="credito-row"><span>Total venta</span><span>{fmt(cred["total"])}</span></div>'
-                    f'<div class="credito-row"><span>Ya pagó</span><span>{fmt(cred["pagado"])}</span></div>'
-                    f'<div class="credito-pendiente"><span>Pendiente</span><span>{fmt(falta)}</span></div>'
-                    f'</div>',
-                    unsafe_allow_html=True
-                )
-                with st.expander(f"💵 Registrar pago de {cred['cliente']}"):
-                    monto_pago = st.number_input(
-                        "Monto que paga ahora ($)",
-                        min_value=0, max_value=int(falta),
-                        value=int(falta), step=1000,
-                        key=f"pago_{cred['id']}"
-                    )
-                    if st.button("✅ Registrar pago", key=f"btn_pago_{cred['id']}"):
-                        registrar_pago(cred["id"], monto_pago, cred["total"])
-                        st.success(f"Pago de {fmt(monto_pago)} registrado para {cred['cliente']}.")
-                        time.sleep(0.3)
-                        st.rerun()
-
-        # Créditos ya pagados (historial)
-        creditos_pagados = sb_get("creditos", "select=*&estado=eq.pagado&order=fecha.desc") or []
-        if creditos_pagados:
-            st.markdown('<div class="section-label">Créditos cobrados</div>', unsafe_allow_html=True)
-            for cred in creditos_pagados[:10]:
-                st.markdown(
-                    f'<div class="factura-box">'
-                    f'<div class="factura-header">✅ {cred["cliente"]} — {fmt(cred["total"])}</div>'
-                    f'<div class="factura-row"><span>Fecha</span><span>{cred["fecha"]}</span></div>'
-                    f'<div class="factura-row"><span>Vendedor</span><span>{cred["vendedor"]}</span></div>'
-                    f'</div>',
-                    unsafe_allow_html=True
-                )
-
-    with sub_r5:
         st.markdown('<div class="section-label">Exportar datos</div>', unsafe_allow_html=True)
         col_e1, col_e2 = st.columns(2)
         f_exp_ini = col_e1.date_input("Desde", value=date(datetime.now(COL_TZ).year, datetime.now(COL_TZ).month, 1), key="f_exp_ini")
