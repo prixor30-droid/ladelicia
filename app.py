@@ -1186,7 +1186,7 @@ elif st.session_state.vista == "carro":
 
             # Billete y vuelto
             st.markdown('<div class="section-label">Pago del cliente</div>', unsafe_allow_html=True)
-            es_credito_vc = (st.session_state.get("tipo_pago_vc", "💵 Paga ahora") == "📋 Crédito (paga después)")
+            es_credito_vc = "dito" in st.session_state.get("tipo_pago_vc", "")
 
             if not es_credito_vc:
                 billete_vc = st.number_input("Billete del cliente ($)", min_value=0, value=0,
@@ -1216,8 +1216,9 @@ elif st.session_state.vista == "carro":
                     if sin_stock:
                         st.markdown(f'<div class="alert-low">⚠️ Stock insuficiente: <b>{", ".join(sin_stock)}</b>. Ajusta el carrito.</div>', unsafe_allow_html=True)
                     else:
-                        # Capturar valor del crédito ANTES de vaciar el carrito
-                        es_cred_vc = (st.session_state.get("tipo_pago_vc", "") == "📋 Crédito (paga después)")
+                        # Capturar valor del crédito — buscar "Crédito" en el valor del radio
+                        tipo_pago_val = st.session_state.get("tipo_pago_vc", "")
+                        es_cred_vc = "dito" in tipo_pago_val  # detecta "Crédito" sin importar el emoji
                         fid_vc = str(uuid.uuid4())[:8].upper()
                         total_venta_vc = 0
                         for s, c in st.session_state.carrito_carro.items():
@@ -1490,7 +1491,7 @@ elif st.session_state.vista == "fabrica":
 
         # Billete y vuelto
         st.markdown('<div class="section-label">Pago del cliente</div>', unsafe_allow_html=True)
-        es_credito_f = (st.session_state.get("tipo_pago_f", "💵 Paga ahora") == "📋 Crédito (paga después)")
+        es_credito_f = "dito" in st.session_state.get("tipo_pago_f", "")
 
         if not es_credito_f:
             billete_f = st.number_input("Billete del cliente ($)", min_value=0, value=0,
@@ -1515,7 +1516,8 @@ elif st.session_state.vista == "fabrica":
                     st.markdown(f'<div class="alert-low">⚠️ Stock insuficiente: <b>{", ".join(sin_stock_f)}</b>. Ajusta el carrito.</div>', unsafe_allow_html=True)
                 else:
                     fid = str(uuid.uuid4())[:8].upper()
-                    es_cred_f = (st.session_state.get("tipo_pago_f", "") == "📋 Crédito (paga después)")
+                    tipo_pago_val_f = st.session_state.get("tipo_pago_f", "")
+                    es_cred_f = "dito" in tipo_pago_val_f
                     total_venta_f = 0
                     for s, c in st.session_state.carrito.items():
                         precio_final = st.session_state.precios_carrito.get(s, PRODUCTOS[s])
