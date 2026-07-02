@@ -76,26 +76,36 @@ def sb_delete(tabla, filtro):
         return False
 
 def guardar_credito(cliente, vendedor, canal, factura_id, total):
-    sb_post("creditos", {
-        "fecha": fecha_hoy(), "hora": ahora(),
-        "cliente": cliente, "vendedor": vendedor,
-        "canal": canal, "factura_id": factura_id,
-        "total": total, "pagado": 0, "estado": "pendiente"
-    })
+    data = {
+        "fecha": fecha_hoy(),
+        "hora": ahora(),
+        "cliente": str(cliente),
+        "vendedor": str(vendedor),
+        "canal": str(canal),
+        "factura_id": str(factura_id),
+        "total": float(total),
+        "pagado": 0,
+        "estado": "pendiente"
+    }
+    ok = sb_post("creditos", data)
+    return ok
 
 def get_creditos_pendientes(canal=None):
-    params = "select=*&estado=eq.pendiente&order=fecha.desc"
     if canal:
-        params += f"&canal=eq.{requests.utils.quote(canal)}"
-    return sb_get("creditos", params) or []
+        q = requests.utils.quote(canal)
+        params = f"select=*&estado=eq.pendiente&canal=eq.{q}&order=fecha.desc"
+    else:
+        params = "select=*&estado=eq.pendiente&order=fecha.desc"
+    resultado = sb_get("creditos", params)
+    return resultado if resultado else []
 
 def registrar_pago(credito_id, monto_pago, total_credito):
-    cred = sb_get("creditos", f"select=pagado,total&id=eq.{credito_id}")
-    if not cred:
+    raw = sb_get("creditos", f"select=pagado&id=eq.{credito_id}")
+    if not raw:
         return
-    ya_pagado = cred[0]["pagado"]
-    nuevo_pagado = ya_pagado + monto_pago
-    nuevo_estado = "pagado" if nuevo_pagado >= total_credito else "pendiente"
+    ya_pagado = float(raw[0]["pagado"])
+    nuevo_pagado = ya_pagado + float(monto_pago)
+    nuevo_estado = "pagado" if nuevo_pagado >= float(total_credito) else "pendiente"
     sb_patch("creditos", f"id=eq.{credito_id}", {
         "pagado": nuevo_pagado,
         "estado": nuevo_estado
@@ -211,31 +221,34 @@ def mostrar_facturas_seleccionables(df_canal, key_prefix):
         st.rerun()
 
 def mostrar_creditos_pendientes(canal):
-    """Muestra créditos pendientes de cobro con botón de pago — visible para vendedores."""
+    """Muestra créditos pendientes de cobro con botón de pago."""
     creditos = get_creditos_pendientes(canal)
     if not creditos:
         return
     st.markdown('<div class="section-label">💳 Créditos pendientes de cobro</div>', unsafe_allow_html=True)
     for cred in creditos:
-        falta = cred["total"] - cred["pagado"]
+        falta = float(cred["total"]) - float(cred["pagado"])
+        if falta <= 0:
+            continue
+        cid = cred["id"]
         st.markdown(
-            f'<div class="credito-box">'
+            '<div class="credito-box">'
             f'<div class="credito-header">📋 {cred["cliente"]} <span class="badge-credito">Pendiente</span></div>'
             f'<div class="credito-row"><span>Fecha</span><span>{cred["fecha"]}</span></div>'
             f'<div class="credito-row"><span>Factura</span><span>FV-{cred["factura_id"]}</span></div>'
             f'<div class="credito-pendiente"><span>Debe</span><span>{fmt(falta)}</span></div>'
-            f'</div>',
+            '</div>',
             unsafe_allow_html=True
         )
         col_p, col_t = st.columns([3, 1])
-        monto_pago = col_p.number_input(
+        monto = col_p.number_input(
             "Monto que paga ($)",
             min_value=0, max_value=int(falta),
             value=int(falta), step=1000,
-            key=f"pago_v_{cred['id']}"
+            key=f"pago_v_{cid}"
         )
-        if col_t.button("✅ Cobrado", key=f"btn_pago_v_{cred['id']}"):
-            registrar_pago(cred["id"], monto_pago, cred["total"])
+        if col_t.button("✅ Cobrado", key=f"btn_cobrado_{cid}"):
+            registrar_pago(cid, monto, cred["total"])
             time.sleep(0.3)
             st.rerun()
 
@@ -1216,9 +1229,9 @@ elif st.session_state.vista == "carro":
                     if sin_stock:
                         st.markdown(f'<div class="alert-low">⚠️ Stock insuficiente: <b>{", ".join(sin_stock)}</b>. Ajusta el carrito.</div>', unsafe_allow_html=True)
                     else:
-                        # Capturar valor del crédito — buscar "Crédito" en el valor del radio
-                        tipo_pago_val = st.session_state.get("tipo_pago_vc", "")
-                        es_cred_vc = "dito" in tipo_pago_val  # detecta "Crédito" sin importar el emoji
+                        # Capturar tipo de pago directamente del session_state del radio
+                        tipo_pago_val = str(st.session_state.get("tipo_pago_vc", ""))
+                        es_cred_vc = "dito" in tipo_pago_val
                         fid_vc = str(uuid.uuid4())[:8].upper()
                         total_venta_vc = 0
                         for s, c in st.session_state.carrito_carro.items():
