@@ -1125,6 +1125,9 @@ elif st.session_state.vista == "carro":
 
         cliente_vc = st.text_input("Nombre del cliente", placeholder="Ej: Tienda Don Carlos", key="cliente_vc")
         tipo_pago_vc = st.radio("Tipo de pago", ["💵 Paga ahora", "📋 Crédito (paga después)"], key="tipo_pago_vc", horizontal=True)
+        # Guardar en clave separada que NO se resetea al rerun
+        if tipo_pago_vc:
+            st.session_state["_tipo_pago_vc"] = tipo_pago_vc
 
         st.markdown('<div class="section-label">Agregar al carrito</div>', unsafe_allow_html=True)
 
@@ -1229,8 +1232,8 @@ elif st.session_state.vista == "carro":
                     if sin_stock:
                         st.markdown(f'<div class="alert-low">⚠️ Stock insuficiente: <b>{", ".join(sin_stock)}</b>. Ajusta el carrito.</div>', unsafe_allow_html=True)
                     else:
-                        # Capturar tipo de pago directamente del session_state del radio
-                        tipo_pago_val = str(st.session_state.get("tipo_pago_vc", ""))
+                        # Leer de la clave persistente que sobrevive el rerun
+                        tipo_pago_val = str(st.session_state.get("_tipo_pago_vc", ""))
                         es_cred_vc = "dito" in tipo_pago_val
                         fid_vc = str(uuid.uuid4())[:8].upper()
                         total_venta_vc = 0
@@ -1258,6 +1261,7 @@ elif st.session_state.vista == "carro":
                         }
                         st.session_state.carrito_carro = {}
                         st.session_state.precios_carro = {}
+                        st.session_state["_tipo_pago_vc"] = ""
                         get_metricas_globales.clear()
                         time.sleep(0.3)
                         st.rerun()
@@ -1428,6 +1432,8 @@ elif st.session_state.vista == "fabrica":
     vendedor_f = st.selectbox("Vendedor", VENDEDORES_FABRICA, key="vend_f")
     cliente_f  = st.text_input("Nombre del cliente", placeholder="Ej: Tienda Don Carlos", key="cliente_f")
     tipo_pago_f = st.radio("Tipo de pago", ["💵 Paga ahora", "📋 Crédito (paga después)"], key="tipo_pago_f", horizontal=True)
+    if tipo_pago_f:
+        st.session_state["_tipo_pago_f"] = tipo_pago_f
 
     st.markdown('<div class="section-label">Agregar al carrito</div>', unsafe_allow_html=True)
 
@@ -1529,7 +1535,7 @@ elif st.session_state.vista == "fabrica":
                     st.markdown(f'<div class="alert-low">⚠️ Stock insuficiente: <b>{", ".join(sin_stock_f)}</b>. Ajusta el carrito.</div>', unsafe_allow_html=True)
                 else:
                     fid = str(uuid.uuid4())[:8].upper()
-                    tipo_pago_val_f = st.session_state.get("tipo_pago_f", "")
+                    tipo_pago_val_f = str(st.session_state.get("_tipo_pago_f", ""))
                     es_cred_f = "dito" in tipo_pago_val_f
                     total_venta_f = 0
                     for s, c in st.session_state.carrito.items():
@@ -1556,6 +1562,7 @@ elif st.session_state.vista == "fabrica":
                     }
                     st.session_state.carrito = {}
                     st.session_state.precios_carrito = {}
+                    st.session_state["_tipo_pago_f"] = ""
                     get_metricas_globales.clear()
                     time.sleep(0.3)
                     st.rerun()
