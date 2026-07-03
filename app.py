@@ -1887,7 +1887,7 @@ elif st.session_state.vista == "materia_prima":
     st.markdown('<div class="section-label">Materia Prima e Insumos 🌽</div>', unsafe_allow_html=True)
     tab_mp1, tab_mp2, tab_mp3, tab_mp4 = st.tabs(["➕ Entrada", "📤 Salida", "💳 Créditos", "📋 Historial"])
 
-    def registrar_entrada_mp(nombre_sel, unidad_sel, cant_mp, prov_mp, precio_mp, abono_mp, saldo_mp):
+    def registrar_entrada_mp(nombre_sel, unidad_sel, cant_mp, prov_mp, precio_mp, abono_mp, saldo_mp, precio_unit_mp=0):
         if not prov_mp.strip():
             st.markdown('<div class="alert-low">⚠️ Escribe el nombre del proveedor.</div>', unsafe_allow_html=True)
             return False
@@ -1899,7 +1899,8 @@ elif st.session_state.vista == "materia_prima":
             "insumo": nombre_sel, "cantidad": float(cant_mp),
             "unidad": unidad_sel, "proveedor": prov_mp.strip(),
             "precio_total": float(precio_mp), "abono": float(abono_mp),
-            "saldo": float(saldo_mp), "estado": "pagado" if saldo_mp == 0 else "pendiente"
+            "saldo": float(saldo_mp), "estado": "pagado" if saldo_mp == 0 else "pendiente",
+            "precio_unitario": float(precio_unit_mp)
         }
         h = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}",
              "Content-Type": "application/json", "Prefer": "return=minimal"}
@@ -1937,6 +1938,9 @@ elif st.session_state.vista == "materia_prima":
             cant_mp   = st.number_input(f"Cantidad ({unidad_sel})", min_value=0.1, max_value=9999.0, value=1.0, step=0.5, key="cant_mp")
             prov_mp   = st.text_input("Proveedor", placeholder="Ej: Distribuidora La 14", key="prov_mp")
             precio_mp = st.number_input("Precio total ($)", min_value=0, value=0, step=1000, key="precio_mp")
+            precio_unit_mp = round(precio_mp / cant_mp, 2) if cant_mp > 0 and precio_mp > 0 else 0
+            if precio_unit_mp > 0:
+                st.markdown(f'<div class="info-box">💰 Precio unitario: <b>{fmt(precio_unit_mp)}</b> por {unidad_sel}</div>', unsafe_allow_html=True)
             if con_credito:
                 abono_mp = st.number_input("Abono inicial ($)", min_value=0, max_value=max(0, precio_mp), value=0, step=1000, key="abono_mp")
                 saldo_mp = max(0, precio_mp - abono_mp)
@@ -1951,7 +1955,7 @@ elif st.session_state.vista == "materia_prima":
                 abono_mp = precio_mp; saldo_mp = 0
             col1, col2 = st.columns(2)
             if col1.button("✅ Registrar", key="btn_mp"):
-                if registrar_entrada_mp(nombre_sel, unidad_sel, cant_mp, prov_mp, precio_mp, abono_mp, saldo_mp):
+                if registrar_entrada_mp(nombre_sel, unidad_sel, cant_mp, prov_mp, precio_mp, abono_mp, saldo_mp, precio_unit_mp):
                     st.session_state.ok_mp = True
                     st.session_state.insumo_sel = None
                     st.session_state.categoria_mp = None
@@ -2077,10 +2081,27 @@ elif st.session_state.vista == "materia_prima":
             if not data and not raw_ent_cat and not raw_sal_cat: return
             st.markdown(f'<div class="section-label">{icono} {titulo}</div>', unsafe_allow_html=True)
             if data:
-                filas_res = [{"Insumo": k, "Entradas": f'{v["entradas"]} {v["unidad"]}',
-                    "Salidas": f'{v["salidas"]} {v["unidad"]}',
-                    "Stock": f'{v["entradas"]-v["salidas"]:.1f} {v["unidad"]}',
-                    "Gasto total": fmt(v["gasto"])} for k, v in data.items()]
+                # Calcular precio unitario promedio ponderado por insumo
+                precio_unit_por_insumo = {}
+                for r in raw_ent_cat:
+                    k = r["insumo"]
+                    pu = float(r.get("precio_unitario", 0))
+                    if pu > 0:
+                        precio_unit_por_insumo[k] = pu
+
+                filas_res = []
+                for k, v in data.items():
+                    pu = precio_unit_por_insumo.get(k, 0)
+                    costo_consumido = v["salidas"] * pu if pu > 0 else 0
+                    filas_res.append({
+                        "Insumo": k,
+                        "Entradas": f'{v["entradas"]} {v["unidad"]}',
+                        "Salidas": f'{v["salidas"]} {v["unidad"]}',
+                        "Stock": f'{v["entradas"]-v["salidas"]:.1f} {v["unidad"]}',
+                        "Precio unitario": fmt(pu) if pu > 0 else "—",
+                        "Costo consumido": fmt(costo_consumido) if costo_consumido > 0 else "—",
+                        "Gasto total entrada": fmt(v["gasto"])
+                    })
                 st.dataframe(pd.DataFrame(filas_res), use_container_width=True, hide_index=True)
             else:
                 st.info("No hay registros en este período.")
