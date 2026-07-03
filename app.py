@@ -679,6 +679,7 @@ defaults = {
     "ok_dev": False,
     "ok_mp":  False,
     "insumo_sel": None,
+    "categoria_mp": None,
     "ok_stock": False,
     "mostrar_calc": False,
 }
@@ -1823,10 +1824,10 @@ elif st.session_state.vista == "recibo":
             body > * { display: none !important; }
             .recibo-wrap { display: flex !important; }
             .recibo-ticket {
-                width: 80mm !important;
+                width: 58mm !important;
                 margin: 0 auto !important;
                 box-shadow: none !important;
-                font-size: 12px !important;
+                font-size: 11px !important;
             }
             /* Ocultar botones de Streamlit */
             .stButton, .stApp header, footer, [data-testid="stToolbar"] {
@@ -1853,13 +1854,37 @@ elif st.session_state.vista == "materia_prima":
             ("Chicharrón (bulto)",     "🥩", "bulto"),
             ("Tocineta (bulto)",       "🥓", "bulto"),
         ]
+        SABORIZANTES_INFO = [(s, "🧂", "bolsa") for s in SABORES_LISTA]
 
-        if not st.session_state.insumo_sel:
-            st.markdown('<div class="section-label">¿Qué insumo ingresó?</div>', unsafe_allow_html=True)
-            for nombre, icono, unidad in INSUMOS_INFO:
-                if st.button(f"{icono}  {nombre}", key=f"btn_ins_{nombre}", use_container_width=True):
-                    st.session_state.insumo_sel = (nombre, unidad)
-                    st.rerun()
+        # Nivel 1 — categoría
+        if not st.session_state.categoria_mp:
+            st.markdown('<div class="section-label">¿Qué categoría ingresó?</div>', unsafe_allow_html=True)
+            if st.button("🌽  Materia Prima\nPapa, aceite, ACPM, plátano...", key="btn_cat_mp", use_container_width=True):
+                st.session_state.categoria_mp = "mp"
+                st.rerun()
+            if st.button("🧪  Saborizantes\nSabores de las papas", key="btn_cat_sab", use_container_width=True):
+                st.session_state.categoria_mp = "sab"
+                st.rerun()
+
+        # Nivel 2 — insumo específico
+        elif not st.session_state.insumo_sel:
+            if st.session_state.categoria_mp == "mp":
+                st.markdown('<div class="section-label">¿Qué insumo ingresó?</div>', unsafe_allow_html=True)
+                for nombre, icono, unidad in INSUMOS_INFO:
+                    if st.button(f"{icono}  {nombre}", key=f"btn_ins_{nombre}", use_container_width=True):
+                        st.session_state.insumo_sel = (nombre, unidad)
+                        st.rerun()
+            else:
+                st.markdown('<div class="section-label">¿Qué saborizante ingresó?</div>', unsafe_allow_html=True)
+                for nombre, icono, unidad in SABORIZANTES_INFO:
+                    if st.button(f"{icono}  {nombre}", key=f"btn_sab_{nombre}", use_container_width=True):
+                        st.session_state.insumo_sel = (nombre, unidad)
+                        st.rerun()
+            if st.button("← Volver", key="btn_volver_cat", use_container_width=False):
+                st.session_state.categoria_mp = None
+                st.rerun()
+
+        # Nivel 3 — formulario de registro
         else:
             nombre_sel, unidad_sel = st.session_state.insumo_sel
             st.markdown(f'<div class="section-label">Registrar entrada — {nombre_sel}</div>', unsafe_allow_html=True)
@@ -1908,6 +1933,7 @@ elif st.session_state.vista == "materia_prima":
                         if r_mp.ok:
                             st.session_state.ok_mp = True
                             st.session_state.insumo_sel = None
+                            st.session_state.categoria_mp = None
                             time.sleep(0.3)
                             st.rerun()
                         else:
@@ -1915,7 +1941,7 @@ elif st.session_state.vista == "materia_prima":
                     except Exception as e:
                         st.error(f"Error de conexión: {e}")
 
-            if col_reg2.button("← Cambiar insumo", key="btn_cambiar_ins"):
+            if col_reg2.button("← Cambiar", key="btn_cambiar_ins"):
                 st.session_state.insumo_sel = None
                 st.rerun()
 
