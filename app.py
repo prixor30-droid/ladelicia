@@ -1857,18 +1857,34 @@ elif st.session_state.vista == "materia_prima":
                     st.markdown('<div class="alert-low">⚠️ Ingresa el precio total.</div>', unsafe_allow_html=True)
                 else:
                     estado_mp = "pagado" if saldo_mp == 0 else "pendiente"
-                    sb_post("materia_prima", {
+                    data_mp = {
                         "fecha": fecha_hoy(), "hora": ahora(),
-                        "insumo": nombre_sel, "cantidad": cant_mp,
+                        "insumo": nombre_sel, "cantidad": float(cant_mp),
                         "unidad": unidad_sel,
                         "proveedor": prov_mp.strip(),
-                        "precio_total": precio_mp, "abono": abono_mp,
-                        "saldo": saldo_mp, "estado": estado_mp
-                    })
-                    st.session_state.ok_mp = True
-                    st.session_state.insumo_sel = None
-                    time.sleep(0.3)
-                    st.rerun()
+                        "precio_total": float(precio_mp), "abono": float(abono_mp),
+                        "saldo": float(saldo_mp), "estado": estado_mp
+                    }
+                    headers_mp = {
+                        "apikey": SUPABASE_KEY,
+                        "Authorization": f"Bearer {SUPABASE_KEY}",
+                        "Content-Type": "application/json",
+                        "Prefer": "return=minimal"
+                    }
+                    try:
+                        r_mp = requests.post(
+                            f"{SUPABASE_URL}/rest/v1/materia_prima",
+                            headers=headers_mp, json=data_mp, timeout=10
+                        )
+                        if r_mp.ok:
+                            st.session_state.ok_mp = True
+                            st.session_state.insumo_sel = None
+                            time.sleep(0.3)
+                            st.rerun()
+                        else:
+                            st.error(f"Error al guardar: {r_mp.status_code} — {r_mp.text}")
+                    except Exception as e:
+                        st.error(f"Error de conexión: {e}")
 
             if col_reg2.button("← Cambiar insumo", key="btn_cambiar_ins"):
                 st.session_state.insumo_sel = None
