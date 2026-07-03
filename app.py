@@ -8,6 +8,7 @@ import time
 import uuid
 from pathlib import Path
 from datetime import date, datetime, timezone, timedelta
+from concurrent.futures import ThreadPoolExecutor
 
 COL_TZ = timezone(timedelta(hours=-5))
 def fecha_hoy():
@@ -715,10 +716,14 @@ st.markdown(f"""
 # MÉTRICAS
 # ══════════════════════════════════════════════════════════════════════════════
 def get_metricas_globales(fecha):
-    _inv   = sb_get("inventario", "select=sabor,stock")
-    _prod  = sb_get("produccion", f"select=cantidad&fecha=eq.{fecha}")
-    _venta = sb_get("ventas",     f"select=total&fecha=eq.{fecha}")
-    return _inv, _prod, _venta
+    def q_inv():   return sb_get("inventario", "select=sabor,stock")
+    def q_prod():  return sb_get("produccion", f"select=cantidad&fecha=eq.{fecha}")
+    def q_venta(): return sb_get("ventas",     f"select=total&fecha=eq.{fecha}")
+    with ThreadPoolExecutor(max_workers=3) as ex:
+        f_inv   = ex.submit(q_inv)
+        f_prod  = ex.submit(q_prod)
+        f_venta = ex.submit(q_venta)
+    return f_inv.result(), f_prod.result(), f_venta.result()
 
 _inv, _prod, _venta = get_metricas_globales(fecha_hoy())
 total_inv  = sum(r["stock"]    for r in _inv)   if _inv   else 0
@@ -1008,9 +1013,13 @@ elif st.session_state.vista == "carro":
             st.session_state.ok_cargue = False
 
         # Cargue activo hoy
-        raw_cg = sb_get("cargues",      f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}")
-        raw_vc = sb_get("ventas",        f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}&canal=in.(Carro,Cambio)")
-        raw_dev = sb_get("devoluciones", f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}")
+        with ThreadPoolExecutor(max_workers=3) as ex:
+            f_cg  = ex.submit(sb_get, "cargues",      f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}")
+            f_vc  = ex.submit(sb_get, "ventas",        f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}&canal=in.(Carro,Cambio)")
+            f_dev = ex.submit(sb_get, "devoluciones",  f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}")
+        raw_cg = f_cg.result()
+        raw_vc = f_vc.result()
+        raw_dev = f_dev.result()
         if raw_cg:
             df_cg = pd.DataFrame(raw_cg).groupby("sabor")["cantidad"].sum().reset_index()
             df_cg.columns = ["sabor","cargado"]
@@ -1114,9 +1123,13 @@ elif st.session_state.vista == "carro":
         cant_vc  = col_c.number_input("Bolsas", min_value=1, max_value=500, value=1, step=1, key="cant_vc")
 
         # Calcular disponible del carro por sabor (cargado - vendido - devuelto)
-        raw_cg_check  = sb_get("cargues",      f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}")
-        raw_vc_check  = sb_get("ventas",        f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}&canal=in.(Carro,Cambio)")
-        raw_dev_check = sb_get("devoluciones",  f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}")
+        with ThreadPoolExecutor(max_workers=3) as ex:
+            f_cg2  = ex.submit(sb_get, "cargues",     f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}")
+            f_vc2  = ex.submit(sb_get, "ventas",       f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}&canal=in.(Carro,Cambio)")
+            f_dev2 = ex.submit(sb_get, "devoluciones", f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}")
+        raw_cg_check  = f_cg2.result()
+        raw_vc_check  = f_vc2.result()
+        raw_dev_check = f_dev2.result()
 
         stock_carro = {}  # disponible por sabor en el carro
         if raw_cg_check:
@@ -1378,9 +1391,13 @@ elif st.session_state.vista == "carro":
 
         # Papas disponibles del cargue — lo que lleva el carro pendiente de vender
         st.markdown('<div class="section-label">Papas disponibles del cargue</div>', unsafe_allow_html=True)
-        raw_cg2   = sb_get("cargues",      f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}")
-        raw_vc2   = sb_get("ventas",        f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}&canal=in.(Carro,Cambio)")
-        raw_dev2  = sb_get("devoluciones",  f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}")
+        with ThreadPoolExecutor(max_workers=3) as ex:
+            f_cg3  = ex.submit(sb_get, "cargues",     f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}")
+            f_vc3  = ex.submit(sb_get, "ventas",       f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}&canal=in.(Carro,Cambio)")
+            f_dev3 = ex.submit(sb_get, "devoluciones", f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}")
+        raw_cg2  = f_cg3.result()
+        raw_vc2  = f_vc3.result()
+        raw_dev2 = f_dev3.result()
         if raw_cg2:
             df_cg2 = pd.DataFrame(raw_cg2).groupby("sabor")["cantidad"].sum().reset_index()
             df_cg2.columns = ["sabor","cargado"]
