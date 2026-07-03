@@ -688,10 +688,9 @@ for k, v in defaults.items():
 # LOGIN
 # ══════════════════════════════════════════════════════════════════════════════
 ADMINS = {
-    "jorge":  "096f6432e029084963ccb57b61a5b46dd3188f9d4fe73333d7be8289ffeb7057",
-    "andrea": "55739c3876b1b91c8ef3712eda72ec732cd187f1c31f59f14ab187fe3cd04b5f",
+    "1": "49bd2aab5ca8c640d9461d138268eaba3a12831bd634ce9e65c013425460de1b",
 }
-NOMBRES_ADMIN = {"jorge": "Jorge", "andrea": "Andrea"}
+NOMBRES_ADMIN = {"1": "Admin"}
 
 def check_login(usuario, pw):
     u = usuario.lower().strip()
