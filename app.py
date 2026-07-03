@@ -1854,7 +1854,17 @@ elif st.session_state.vista == "materia_prima":
             ("Chicharrón (bulto)",     "🥩", "bulto"),
             ("Tocineta (bulto)",       "🥓", "bulto"),
         ]
-        SABORIZANTES_INFO = [(s, "🧂", "bolsa") for s in SABORES_LISTA]
+        SABORIZANTES_INFO = [
+            ("BBQ",          "🧂", "bolsa"),
+            ("Limón",        "🧂", "bolsa"),
+            ("Sal",          "🧂", "bolsa"),
+            ("Pollo",        "🧂", "bolsa"),
+            ("Parrillada",   "🧂", "bolsa"),
+            ("Chorizo Limón","🧂", "bolsa"),
+            ("Mayonesa",     "🧂", "bolsa"),
+            ("Queso",        "🧂", "bolsa"),
+            ("Picante",      "🧂", "bolsa"),
+        ]
 
         # Nivel 1 — categoría
         if not st.session_state.categoria_mp:
