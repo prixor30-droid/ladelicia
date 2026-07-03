@@ -2067,10 +2067,13 @@ elif st.session_state.vista == "materia_prima":
         resumen = {}
         for r in raw_ent:
             k = r["insumo"]
+            pu = float(r.get("precio_unitario", 0))
+            cant = float(r["cantidad"])
+            gasto_calc = pu * cant if pu > 0 else float(r.get("precio_total", 0))
             if k not in resumen:
                 resumen[k] = {"entradas": 0, "salidas": 0, "unidad": r["unidad"], "gasto": 0}
-            resumen[k]["entradas"] += float(r["cantidad"])
-            resumen[k]["gasto"]    += float(r["precio_total"])
+            resumen[k]["entradas"] += cant
+            resumen[k]["gasto"]    += gasto_calc
         for r in raw_sal:
             k = r["insumo"]
             if k not in resumen:
@@ -2081,18 +2084,28 @@ elif st.session_state.vista == "materia_prima":
             if not data and not raw_ent_cat and not raw_sal_cat: return
             st.markdown(f'<div class="section-label">{icono} {titulo}</div>', unsafe_allow_html=True)
             if data:
-                # Calcular precio unitario promedio ponderado por insumo
-                precio_unit_por_insumo = {}
+                # Precio unitario promedio ponderado y gasto total real por insumo
+                gasto_real = {}
+                precio_unit_pond = {}
                 for r in raw_ent_cat:
                     k = r["insumo"]
                     pu = float(r.get("precio_unitario", 0))
-                    if pu > 0:
-                        precio_unit_por_insumo[k] = pu
+                    pt = float(r.get("precio_total", 0))
+                    cant = float(r.get("cantidad", 0))
+                    if k not in gasto_real:
+                        gasto_real[k] = 0
+                        precio_unit_pond[k] = {"total_costo": 0, "total_cant": 0}
+                    gasto_real[k] += pt
+                    if pu > 0 and cant > 0:
+                        precio_unit_pond[k]["total_costo"] += pu * cant
+                        precio_unit_pond[k]["total_cant"]  += cant
 
                 filas_res = []
                 for k, v in data.items():
-                    pu = precio_unit_por_insumo.get(k, 0)
-                    costo_consumido = v["salidas"] * pu if pu > 0 else 0
+                    d = precio_unit_pond.get(k, {"total_costo": 0, "total_cant": 0})
+                    pu = round(d["total_costo"] / d["total_cant"]) if d["total_cant"] > 0 else 0
+                    costo_consumido = round(v["salidas"] * pu) if pu > 0 else 0
+                    gasto = gasto_real.get(k, v["gasto"])
                     filas_res.append({
                         "Insumo": k,
                         "Entradas": v["entradas"],
@@ -2100,7 +2113,7 @@ elif st.session_state.vista == "materia_prima":
                         "Stock": round(v["entradas"]-v["salidas"], 1),
                         "Precio unitario": fmt(pu) if pu > 0 else "—",
                         "Costo consumido": fmt(costo_consumido) if costo_consumido > 0 else "—",
-                        "Gasto total": fmt(v["gasto"])
+                        "Gasto total": fmt(gasto)
                     })
                 st.dataframe(pd.DataFrame(filas_res), use_container_width=True, hide_index=True)
             else:
