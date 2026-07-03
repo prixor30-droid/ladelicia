@@ -2095,12 +2095,12 @@ elif st.session_state.vista == "materia_prima":
                     costo_consumido = v["salidas"] * pu if pu > 0 else 0
                     filas_res.append({
                         "Insumo": k,
-                        "Entradas": f'{v["entradas"]} {v["unidad"]}',
-                        "Salidas": f'{v["salidas"]} {v["unidad"]}',
-                        "Stock": f'{v["entradas"]-v["salidas"]:.1f} {v["unidad"]}',
+                        "Entradas": v["entradas"],
+                        "Salidas": v["salidas"],
+                        "Stock": round(v["entradas"]-v["salidas"], 1),
                         "Precio unitario": fmt(pu) if pu > 0 else "—",
                         "Costo consumido": fmt(costo_consumido) if costo_consumido > 0 else "—",
-                        "Gasto total entrada": fmt(v["gasto"])
+                        "Gasto total": fmt(v["gasto"])
                     })
                 st.dataframe(pd.DataFrame(filas_res), use_container_width=True, hide_index=True)
             else:
