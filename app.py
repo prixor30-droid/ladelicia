@@ -29,7 +29,7 @@ st.markdown("""
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="La Delicia">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="theme-color" content="#D81B7A">
+<meta name="theme-color" content="#1565C0">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 """, unsafe_allow_html=True)
 
@@ -335,7 +335,7 @@ def grafica_barras_sabor(labels, valores, titulo="bolsas"):
     labels_json = _json.dumps(labels, ensure_ascii=False)
     valores_json = _json.dumps(valores)
     html = f"""
-    <div style="position:relative;width:100%;height:{altura}px;background:#FFFFFF;border-radius:14px;padding:12px;box-shadow:0 2px 10px rgba(216,27,122,0.10);">
+    <div style="position:relative;width:100%;height:{altura}px;background:#FFFFFF;border-radius:14px;padding:12px;box-shadow:0 2px 10px rgba(21,101,192,0.10);">
         <canvas id="chartBarras" role="img" aria-label="Gráfica de {titulo} por sabor"></canvas>
     </div>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
@@ -347,7 +347,7 @@ def grafica_barras_sabor(labels, valores, titulo="bolsas"):
             datasets: [{{
                 label: '{titulo}',
                 data: {valores_json},
-                backgroundColor: '#D81B7A',
+                backgroundColor: '#1565C0',
                 borderRadius: 6,
                 barThickness: 22
             }}]
@@ -358,8 +358,8 @@ def grafica_barras_sabor(labels, valores, titulo="bolsas"):
             maintainAspectRatio: false,
             plugins: {{ legend: {{ display: false }} }},
             scales: {{
-                x: {{ grid: {{ color: '#F0E0E8' }}, ticks: {{ color: '#9C4270', font: {{ size: 11 }} }} }},
-                y: {{ grid: {{ display: false }}, ticks: {{ color: '#1A0A12', font: {{ size: 12, weight: '600' }} }} }}
+                x: {{ grid: {{ color: '#DCEEFB' }}, ticks: {{ color: '#1565C0', font: {{ size: 11 }} }} }},
+                y: {{ grid: {{ display: false }}, ticks: {{ color: '#0D1B2A', font: {{ size: 12, weight: '600' }} }} }}
             }}
         }}
     }});
@@ -373,14 +373,14 @@ def grafica_linea_ventas(fechas, valores):
     fechas_json = _json.dumps(fechas, ensure_ascii=False)
     valores_json = _json.dumps(valores)
     html = f"""
-    <div style="position:relative;width:100%;height:260px;background:#FFFFFF;border-radius:14px;padding:14px;box-shadow:0 2px 10px rgba(216,27,122,0.10);">
+    <div style="position:relative;width:100%;height:260px;background:#FFFFFF;border-radius:14px;padding:14px;box-shadow:0 2px 10px rgba(21,101,192,0.10);">
         <canvas id="chartLinea" role="img" aria-label="Gráfica de evolución de ventas en el mes"></canvas>
     </div>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
     <script>
     const ctx = document.getElementById('chartLinea').getContext('2d');
     const gradiente = ctx.createLinearGradient(0,0,0,220);
-    gradiente.addColorStop(0, 'rgba(216,27,122,0.25)');
+    gradiente.addColorStop(0, 'rgba(21,101,192,0.25)');
     gradiente.addColorStop(1, 'rgba(216,27,122,0.02)');
     new Chart(ctx, {{
         type: 'line',
@@ -389,11 +389,11 @@ def grafica_linea_ventas(fechas, valores):
             datasets: [{{
                 label: 'Ventas',
                 data: {valores_json},
-                borderColor: '#D81B7A',
+                borderColor: '#1565C0',
                 backgroundColor: gradiente,
                 fill: true,
                 tension: 0.35,
-                pointBackgroundColor: '#D81B7A',
+                pointBackgroundColor: '#1565C0',
                 pointBorderColor: '#FFFFFF',
                 pointBorderWidth: 2,
                 pointRadius: 4,
@@ -405,8 +405,8 @@ def grafica_linea_ventas(fechas, valores):
             maintainAspectRatio: false,
             plugins: {{ legend: {{ display: false }} }},
             scales: {{
-                x: {{ grid: {{ display: false }}, ticks: {{ color: '#9C4270', font: {{ size: 10 }}, maxRotation: 45 }} }},
-                y: {{ grid: {{ color: '#F0E0E8' }}, ticks: {{ color: '#9C4270', font: {{ size: 11 }} }} }}
+                x: {{ grid: {{ display: false }}, ticks: {{ color: '#1565C0', font: {{ size: 10 }}, maxRotation: 45 }} }},
+                y: {{ grid: {{ color: '#DCEEFB' }}, ticks: {{ color: '#1565C0', font: {{ size: 11 }} }} }}
             }}
         }}
     }});
@@ -507,7 +507,7 @@ logo_html = (
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-html,body,[class*="css"],.stApp{font-family:'Inter',sans-serif !important;background-color:#FFF8FB !important;color:#1A0A12 !important;}
+html,body,[class*="css"],.stApp{font-family:'Inter',sans-serif !important;background-color:#F0F4FF !important;color:#0D1B2A !important;}
 #MainMenu,footer,header{visibility:hidden;}
 .block-container{padding-top:1rem;padding-bottom:3rem;max-width:500px;margin:0 auto;}
 @media (min-width: 768px){
@@ -526,49 +526,49 @@ html,body,[class*="css"],.stApp{font-family:'Inter',sans-serif !important;backgr
   .metric-box .val{font-size:1.9rem;}
   .stButton>button{font-size:1.25rem !important;padding:20px !important;}
 }
-[data-baseweb="base-input"],[data-baseweb="base-input"] *,[data-baseweb="select"],[data-baseweb="select"]>div,[data-baseweb="select"]>div>div{background-color:#FFFFFF !important;color:#1A0A12 !important;border-color:#E5C5D5 !important;}
-[data-baseweb="base-input"] input,[data-baseweb="base-input"] textarea,input[type="number"],input[type="text"],input[type="date"]{background-color:#FFFFFF !important;color:#1A0A12 !important;-webkit-text-fill-color:#1A0A12 !important;}
-[data-testid="stNumberInputStepDown"],[data-testid="stNumberInputStepUp"]{background-color:#FCE4EC !important;color:#D81B7A !important;border:none !important;border-radius:7px !important;}
-[data-testid="stNumberInputStepDown"]:hover,[data-testid="stNumberInputStepUp"]:hover{background-color:#D81B7A !important;color:white !important;}
-[data-baseweb="select"]>div,[data-baseweb="base-input"]{border-radius:10px !important;border:1.5px solid #E5C5D5 !important;}
+[data-baseweb="base-input"],[data-baseweb="base-input"] *,[data-baseweb="select"],[data-baseweb="select"]>div,[data-baseweb="select"]>div>div{background-color:#FFFFFF !important;color:#0D1B2A !important;border-color:#BBDEFB !important;}
+[data-baseweb="base-input"] input,[data-baseweb="base-input"] textarea,input[type="number"],input[type="text"],input[type="date"]{background-color:#FFFFFF !important;color:#0D1B2A !important;-webkit-text-fill-color:#0D1B2A !important;}
+[data-testid="stNumberInputStepDown"],[data-testid="stNumberInputStepUp"]{background-color:#FCE4EC !important;color:#1565C0 !important;border:none !important;border-radius:7px !important;}
+[data-testid="stNumberInputStepDown"]:hover,[data-testid="stNumberInputStepUp"]:hover{background-color:#1565C0 !important;color:white !important;}
+[data-baseweb="select"]>div,[data-baseweb="base-input"]{border-radius:10px !important;border:1.5px solid #BBDEFB !important;}
 [data-baseweb="select"] input{caret-color:transparent !important;cursor:pointer !important;}
 [data-baseweb="select"] input:focus{caret-color:transparent !important;}
-[data-baseweb="select"]>div:focus-within,[data-baseweb="base-input"]:focus-within{border-color:#D81B7A !important;box-shadow:0 0 0 3px rgba(216,27,122,0.15) !important;}
-[data-baseweb="popover"],[data-baseweb="popover"] *,[data-baseweb="menu"],[data-baseweb="menu"] *,ul[data-testid="stSelectboxVirtualDropdown"],ul[data-testid="stSelectboxVirtualDropdown"] *{background-color:#FFFFFF !important;color:#1A0A12 !important;}
-[data-baseweb="menu"] li:hover,[role="option"]:hover,[aria-selected="true"][role="option"]{background-color:#FCE4EC !important;color:#D81B7A !important;}
-[data-baseweb="calendar"],[data-baseweb="calendar"] *{background-color:#FFFFFF !important;color:#1A0A12 !important;}
-[data-baseweb="calendar"] button{color:#1A0A12 !important;background-color:transparent !important;}
-[data-baseweb="calendar"] button:hover{background-color:#FCE4EC !important;color:#D81B7A !important;}
-[data-baseweb="calendar"] [aria-selected="true"]{background-color:#D81B7A !important;color:white !important;}
+[data-baseweb="select"]>div:focus-within,[data-baseweb="base-input"]:focus-within{border-color:#1565C0 !important;box-shadow:0 0 0 3px rgba(21,101,192,0.15) !important;}
+[data-baseweb="popover"],[data-baseweb="popover"] *,[data-baseweb="menu"],[data-baseweb="menu"] *,ul[data-testid="stSelectboxVirtualDropdown"],ul[data-testid="stSelectboxVirtualDropdown"] *{background-color:#FFFFFF !important;color:#0D1B2A !important;}
+[data-baseweb="menu"] li:hover,[role="option"]:hover,[aria-selected="true"][role="option"]{background-color:#FCE4EC !important;color:#1565C0 !important;}
+[data-baseweb="calendar"],[data-baseweb="calendar"] *{background-color:#FFFFFF !important;color:#0D1B2A !important;}
+[data-baseweb="calendar"] button{color:#0D1B2A !important;background-color:transparent !important;}
+[data-baseweb="calendar"] button:hover{background-color:#FCE4EC !important;color:#1565C0 !important;}
+[data-baseweb="calendar"] [aria-selected="true"]{background-color:#1565C0 !important;color:white !important;}
 [data-baseweb="calendar"] tbody tr:last-child td{background-color:#FFFFFF !important;}
-label,.stSelectbox label,.stNumberInput label,.stDateInput label,.stTextInput label{color:#D81B7A !important;font-weight:600 !important;font-size:0.85rem !important;}
-.stTabs [data-baseweb="tab-list"]{background:#FFFFFF;border-radius:12px;padding:4px;gap:2px;box-shadow:0 1px 4px rgba(216,27,122,0.10);margin-bottom:16px;}
+label,.stSelectbox label,.stNumberInput label,.stDateInput label,.stTextInput label{color:#1565C0 !important;font-weight:600 !important;font-size:0.85rem !important;}
+.stTabs [data-baseweb="tab-list"]{background:#FFFFFF;border-radius:12px;padding:4px;gap:2px;box-shadow:0 1px 4px rgba(21,101,192,0.10);margin-bottom:16px;}
 .stTabs [data-baseweb="tab"]{border-radius:10px;font-size:0.78rem;font-weight:600;padding:8px 4px;color:#7A2050 !important;flex:1;justify-content:center;background:transparent !important;}
-.stTabs [aria-selected="true"]{background-color:#D81B7A !important;color:white !important;}
-.brand-header{background:linear-gradient(135deg,#D81B7A,#F06292);border-radius:0 0 22px 22px;padding:22px 20px 18px;margin:-1rem -1rem 16px -1rem;text-align:center;}
+.stTabs [aria-selected="true"]{background-color:#1565C0 !important;color:white !important;}
+.brand-header{background:linear-gradient(135deg,#1565C0,#1E88E5);border-radius:0 0 22px 22px;padding:22px 20px 18px;margin:-1rem -1rem 16px -1rem;text-align:center;}
 .brand-header p{color:rgba(255,255,255,0.85);font-size:0.78rem;margin:0;}
 .metric-row{display:flex;gap:9px;margin-bottom:16px;}
-.metric-box{flex:1;background:#FFFFFF;border-radius:14px;padding:14px 8px;text-align:center;box-shadow:0 2px 8px rgba(216,27,122,0.12);}
+.metric-box{flex:1;background:#FFFFFF;border-radius:14px;padding:14px 8px;text-align:center;box-shadow:0 2px 8px rgba(21,101,192,0.12);}
 .metric-box .val{font-size:1.2rem;font-weight:700;line-height:1.1;}
-.metric-box .lbl{font-size:0.65rem;color:#9C4270;margin-top:3px;}
-.metric-pink .val{color:#D81B7A;}.metric-green .val{color:#1B9E5A;}.metric-red .val{color:#D32F2F;}.metric-yellow .val{color:#E68900;}
+.metric-box .lbl{font-size:0.65rem;color:#1565C0;margin-top:3px;}
+.metric-blue .val{color:#1565C0;}.metric-green .val{color:#1B9E5A;}.metric-red .val{color:#D32F2F;}.metric-yellow .val{color:#E68900;}
 .alert-low{background:#FFEBEE;border-left:3px solid #D32F2F;border-radius:0 10px 10px 0;padding:10px 14px;margin-bottom:9px;font-size:0.83rem;color:#B71C1C;}
 .info-box{background:#FFFFFF;border-left:3px solid #1B9E5A;border-radius:10px;padding:12px 14px;margin:8px 0 14px;font-size:0.82rem;color:#1B5E20;box-shadow:0 1px 6px rgba(0,0,0,0.05);}
 .warn-box{background:#FFFFFF;border-left:3px solid #E68900;border-radius:10px;padding:12px 14px;margin:8px 0 14px;font-size:0.82rem;color:#8D6E00;box-shadow:0 1px 6px rgba(0,0,0,0.05);}
 .success-toast{background:#E8F5E9;border:1px solid #A5D6A7;border-radius:12px;padding:14px 16px;text-align:center;font-weight:600;color:#1B5E20;font-size:0.95rem;margin-top:10px;}
 .section-label{font-size:0.69rem;font-weight:700;text-transform:uppercase;letter-spacing:0.7px;color:#B0185F;margin:16px 0 6px;}
-.stButton>button{width:100%;background:#D81B7A !important;color:white !important;-webkit-text-fill-color:white !important;border:none !important;border-radius:12px !important;padding:14px !important;font-size:1rem !important;font-weight:700 !important;cursor:pointer;margin-top:4px;box-shadow:0 4px 16px rgba(216,27,122,0.25);white-space:pre-line !important;line-height:1.4 !important;}
+.stButton>button{width:100%;background:#1565C0 !important;color:white !important;-webkit-text-fill-color:white !important;border:none !important;border-radius:12px !important;padding:14px !important;font-size:1rem !important;font-weight:700 !important;cursor:pointer;margin-top:4px;box-shadow:0 4px 16px rgba(21,101,192,0.25);white-space:pre-line !important;line-height:1.4 !important;}
 .stButton>button:hover{opacity:0.88;}
 [data-testid="stButton-btn_produccion"] button,
 [data-testid="stButton-btn_carro"] button,
 [data-testid="stButton-btn_fabrica"] button,
 [data-testid="stButton-btn_resumen"] button{
-  background:linear-gradient(135deg,#FFFFFF,#FCEEF4) !important;
-  color:#1A0A12 !important;
-  -webkit-text-fill-color:#1A0A12 !important;
+  background:linear-gradient(135deg,#FFFFFF,#EEF4FF) !important;
+  color:#0D1B2A !important;
+  -webkit-text-fill-color:#0D1B2A !important;
   border:none !important;
   border-radius:18px !important;
-  box-shadow:0 3px 12px rgba(216,27,122,0.18) !important;
+  box-shadow:0 3px 12px rgba(21,101,192,0.18) !important;
   min-height:90px !important;
   padding:18px 20px !important;
   font-size:1rem !important;
@@ -581,47 +581,47 @@ label,.stSelectbox label,.stNumberInput label,.stDateInput label,.stTextInput la
 [data-testid="stButton-btn_carro"] button:hover,
 [data-testid="stButton-btn_fabrica"] button:hover,
 [data-testid="stButton-btn_resumen"] button:hover{
-  box-shadow:0 5px 16px rgba(216,27,122,0.25) !important;
+  box-shadow:0 5px 16px rgba(21,101,192,0.25) !important;
   opacity:1 !important;
 }
 
-[data-testid="stMetricLabel"] p{color:#9C4270 !important;}
-[data-testid="stMetricValue"]{color:#1A0A12 !important;}
-.stDataFrame{border-radius:12px;overflow:hidden;font-size:0.83rem;border:1px solid #E5C5D5;}
-.stCaption,small{color:#9C4270 !important;}
-.stAlert{background:#FAF0F5 !important;color:#1A0A12 !important;border-color:#E5C5D5 !important;}
-.factura-box{background:#FFFFFF;border-radius:16px;padding:16px;margin-bottom:14px;box-shadow:0 2px 10px rgba(216,27,122,0.10);}
-.factura-header{font-size:0.9rem;font-weight:700;color:#D81B7A;margin-bottom:8px;}
-.factura-row{display:flex;justify-content:space-between;font-size:0.85rem;padding:4px 0;border-bottom:1px solid #E5C5D5;color:#1A0A12;}
+[data-testid="stMetricLabel"] p{color:#1565C0 !important;}
+[data-testid="stMetricValue"]{color:#0D1B2A !important;}
+.stDataFrame{border-radius:12px;overflow:hidden;font-size:0.83rem;border:1px solid #BBDEFB;}
+.stCaption,small{color:#1565C0 !important;}
+.stAlert{background:#F0F7FF !important;color:#0D1B2A !important;border-color:#BBDEFB !important;}
+.factura-box{background:#FFFFFF;border-radius:16px;padding:16px;margin-bottom:14px;box-shadow:0 2px 10px rgba(21,101,192,0.10);}
+.factura-header{font-size:0.9rem;font-weight:700;color:#1565C0;margin-bottom:8px;}
+.factura-row{display:flex;justify-content:space-between;font-size:0.85rem;padding:4px 0;border-bottom:1px solid #BBDEFB;color:#0D1B2A;}
 .factura-total{display:flex;justify-content:space-between;font-size:1rem;font-weight:700;color:#1B9E5A;margin-top:8px;}
 .factura-cambio{font-size:0.9rem;color:#E68900;margin-top:6px;text-align:center;}
-.tabla-fact-wrap{overflow-x:auto;border-radius:10px;box-shadow:0 2px 10px rgba(216,27,122,0.10);margin-bottom:14px;}
+.tabla-fact-wrap{overflow-x:auto;border-radius:10px;box-shadow:0 2px 10px rgba(21,101,192,0.10);margin-bottom:14px;}
 .tabla-fact{width:100%;border-collapse:collapse;font-size:0.78rem;background:#FFFFFF;}
-.tabla-fact thead{background:#D81B7A;}
+.tabla-fact thead{background:#1565C0;}
 .tabla-fact thead th{color:white;font-weight:600;padding:10px 8px;text-align:left;white-space:nowrap;}
-.tabla-fact tbody td{padding:9px 8px;border-bottom:1px solid #F0E0E8;color:#1A0A12;white-space:nowrap;}
-.tabla-fact tbody tr:hover{background:#FAF0F5;}
-.tabla-fact .num-comp{color:#D81B7A;font-weight:600;}
+.tabla-fact tbody td{padding:9px 8px;border-bottom:1px solid #DCEEFB;color:#0D1B2A;white-space:nowrap;}
+.tabla-fact tbody tr:hover{background:#F0F7FF;}
+.tabla-fact .num-comp{color:#1565C0;font-weight:600;}
 .tabla-fact .estado-ok{color:#1B9E5A;font-weight:600;}
 .tabla-fact .total-col{text-align:right;font-weight:600;}
 .recibo-wrap{display:flex;justify-content:center;padding:20px 0;}
 .recibo-ticket{background:#FFFFFF;width:100%;max-width:380px;padding:24px 20px;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,0.12);font-family:'Courier New',monospace;}
 .recibo-logo{text-align:center;margin-bottom:6px;}
 .recibo-logo img{height:60px !important;}
-.recibo-titulo{text-align:center;font-weight:700;font-size:1rem;color:#1A0A12;}
-.recibo-sub{text-align:center;font-size:0.78rem;color:#9C4270;}
-.recibo-linea-punteada{border-top:1.5px dashed #D8B5C8;margin:12px 0;}
-.recibo-dato{font-size:0.82rem;color:#1A0A12;margin-bottom:4px;}
+.recibo-titulo{text-align:center;font-weight:700;font-size:1rem;color:#0D1B2A;}
+.recibo-sub{text-align:center;font-size:0.78rem;color:#1565C0;}
+.recibo-linea-punteada{border-top:1.5px dashed #BBDEFB;margin:12px 0;}
+.recibo-dato{font-size:0.82rem;color:#0D1B2A;margin-bottom:4px;}
 .recibo-item{margin-bottom:8px;}
-.recibo-item-nombre{font-size:0.85rem;font-weight:600;color:#1A0A12;}
-.recibo-item-detalle{display:flex;justify-content:space-between;font-size:0.8rem;color:#9C4270;}
+.recibo-item-nombre{font-size:0.85rem;font-weight:600;color:#0D1B2A;}
+.recibo-item-detalle{display:flex;justify-content:space-between;font-size:0.8rem;color:#1565C0;}
 .recibo-total-row{display:flex;justify-content:space-between;font-size:1.05rem;font-weight:700;color:#1B9E5A;}
-.recibo-footer{text-align:center;font-size:0.8rem;color:#9C4270;font-style:italic;}
-.calc-box{background:#FFFFFF;border-radius:14px;padding:14px;margin-bottom:14px;box-shadow:0 2px 10px rgba(216,27,122,0.10);}
-.main-btn{background:#FAF0F5;border:1px solid #E5C5D5;border-radius:14px;padding:20px 16px;margin-bottom:10px;cursor:pointer;display:flex;align-items:center;gap:14px;}
+.recibo-footer{text-align:center;font-size:0.8rem;color:#1565C0;font-style:italic;}
+.calc-box{background:#FFFFFF;border-radius:14px;padding:14px;margin-bottom:14px;box-shadow:0 2px 10px rgba(21,101,192,0.10);}
+.main-btn{background:#F0F7FF;border:1px solid #BBDEFB;border-radius:14px;padding:20px 16px;margin-bottom:10px;cursor:pointer;display:flex;align-items:center;gap:14px;}
 .main-btn-icon{font-size:2rem;}
-.main-btn-text{font-size:1.1rem;font-weight:700;color:#1A0A12;}
-.main-btn-sub{font-size:0.78rem;color:#9C4270;}
+.main-btn-text{font-size:1.1rem;font-weight:700;color:#0D1B2A;}
+.main-btn-sub{font-size:0.78rem;color:#1565C0;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -737,7 +737,7 @@ else:
 
 st.markdown(f"""
 <div class="metric-row">
-    <div class="metric-box metric-pink"><div class="val">{total_inv}</div><div class="lbl">En inventario</div></div>
+    <div class="metric-box metric-blue"><div class="val">{total_inv}</div><div class="lbl">En inventario</div></div>
     <div class="metric-box metric-yellow"><div class="val">{total_prod}</div><div class="lbl">Producidas hoy</div></div>
     {tarjeta_ventas}
 </div>
@@ -1752,7 +1752,7 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
             total_carro = int(df_vt[df_vt["canal"]=="Carro"]["total"].sum())   if "canal" in df_vt.columns else 0
             st.markdown(f"""
             <div class="metric-row">
-                <div class="metric-box metric-pink"><div class="val">{fmt(total_fab)}</div><div class="lbl">Fábrica</div></div>
+                <div class="metric-box metric-blue"><div class="val">{fmt(total_fab)}</div><div class="lbl">Fábrica</div></div>
                 <div class="metric-box metric-yellow"><div class="val">{fmt(total_carro)}</div><div class="lbl">Carro</div></div>
                 <div class="metric-box metric-green"><div class="val">{fmt(total_fab+total_carro)}</div><div class="lbl">Total</div></div>
             </div>""", unsafe_allow_html=True)
@@ -1797,7 +1797,7 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
             st.markdown(f"""
             <div class="metric-row">
                 <div class="metric-box metric-green"><div class="val">{fmt(total_r)}</div><div class="lbl">Ingresos</div></div>
-                <div class="metric-box metric-pink"><div class="val">{bolsas_r}</div><div class="lbl">Bolsas</div></div>
+                <div class="metric-box metric-blue"><div class="val">{bolsas_r}</div><div class="lbl">Bolsas</div></div>
                 <div class="metric-box metric-yellow"><div class="val">{dias_r}</div><div class="lbl">Días</div></div>
             </div>""", unsafe_allow_html=True)
 
@@ -1850,7 +1850,7 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
             st.markdown(f"""
             <div class="metric-row">
                 <div class="metric-box metric-green"><div class="val">{fmt(total_mes)}</div><div class="lbl">Ingresos del mes</div></div>
-                <div class="metric-box metric-pink"><div class="val">{bolsas_mes}</div><div class="lbl">Bolsas vendidas</div></div>
+                <div class="metric-box metric-blue"><div class="val">{bolsas_mes}</div><div class="lbl">Bolsas vendidas</div></div>
                 <div class="metric-box metric-yellow"><div class="val">{fmt(promedio_dia)}</div><div class="lbl">Promedio diario</div></div>
             </div>""", unsafe_allow_html=True)
 
