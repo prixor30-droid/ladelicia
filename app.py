@@ -497,7 +497,7 @@ def get_logo_b64():
 
 logo_b64 = get_logo_b64()
 logo_html = (
-    f'<img src="data:image/png;base64,{logo_b64}" style="height:720px;object-fit:contain;margin-bottom:6px;">'
+    f'<img src="data:image/png;base64,{logo_b64}" style="height:120px;object-fit:contain;margin-bottom:6px;">'
     if logo_b64 else "🍟"
 )
 
@@ -987,7 +987,7 @@ elif st.session_state.vista == "produccion":
 elif st.session_state.vista == "carro":
     mostrar_calculadora()
 
-    sub1, sub2, sub3 = st.tabs(["🚗 Nuevo cargue", "💵 Registrar venta", "🔄 Devolución"])
+    sub1, sub2, sub3, sub4 = st.tabs(["🚗 Nuevo cargue", "💵 Registrar venta", "🔄 Devolución", "🎁 Regalar"])
 
     with sub1:
         st.markdown('<div class="section-label">Cargue del carro</div>', unsafe_allow_html=True)
@@ -1014,7 +1014,7 @@ elif st.session_state.vista == "carro":
         # Cargue activo hoy
         with ThreadPoolExecutor(max_workers=3) as ex:
             f_cg  = ex.submit(sb_get, "cargues",      f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}")
-            f_vc  = ex.submit(sb_get, "ventas",        f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}&canal=in.(Carro,Cambio)")
+            f_vc  = ex.submit(sb_get, "ventas",        f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}&canal=in.(Carro,Cambio,Regalo)")
             f_dev = ex.submit(sb_get, "devoluciones",  f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}")
         raw_cg = f_cg.result()
         raw_vc = f_vc.result()
@@ -1124,7 +1124,7 @@ elif st.session_state.vista == "carro":
         # Calcular disponible del carro por sabor (cargado - vendido - devuelto)
         with ThreadPoolExecutor(max_workers=3) as ex:
             f_cg2  = ex.submit(sb_get, "cargues",     f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}")
-            f_vc2  = ex.submit(sb_get, "ventas",       f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}&canal=in.(Carro,Cambio)")
+            f_vc2  = ex.submit(sb_get, "ventas",       f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}&canal=in.(Carro,Cambio,Regalo)")
             f_dev2 = ex.submit(sb_get, "devoluciones", f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}")
         raw_cg_check  = f_cg2.result()
         raw_vc_check  = f_vc2.result()
@@ -1392,7 +1392,7 @@ elif st.session_state.vista == "carro":
         st.markdown('<div class="section-label">Papas disponibles del cargue</div>', unsafe_allow_html=True)
         with ThreadPoolExecutor(max_workers=3) as ex:
             f_cg3  = ex.submit(sb_get, "cargues",     f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}")
-            f_vc3  = ex.submit(sb_get, "ventas",       f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}&canal=in.(Carro,Cambio)")
+            f_vc3  = ex.submit(sb_get, "ventas",       f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}&canal=in.(Carro,Cambio,Regalo)")
             f_dev3 = ex.submit(sb_get, "devoluciones", f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}")
         raw_cg2  = f_cg3.result()
         raw_vc2  = f_vc3.result()
@@ -1466,6 +1466,75 @@ elif st.session_state.vista == "carro":
         if st.session_state.ok_dev:
             st.markdown('<div class="success-toast">✅ Devolución registrada. Stock actualizado.</div>', unsafe_allow_html=True)
             st.session_state.ok_dev = False
+
+    with sub4:
+        st.markdown('<div class="section-label">Regalar bolsa 🎁</div>', unsafe_allow_html=True)
+        st.caption("Registra las bolsas que se regalan — se descuentan del carro pero no cuentan como venta.")
+
+        # Solo sabores disponibles en el carro
+        with ThreadPoolExecutor(max_workers=3) as ex:
+            f_cg_r  = ex.submit(sb_get, "cargues",     f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}")
+            f_vc_r  = ex.submit(sb_get, "ventas",       f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}&canal=in.(Carro,Cambio,Regalo)")
+            f_dev_r = ex.submit(sb_get, "devoluciones", f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}")
+        raw_cg_r  = f_cg_r.result()
+        raw_vc_r  = f_vc_r.result()
+        raw_dev_r = f_dev_r.result()
+
+        stock_carro_r = {}
+        if raw_cg_r:
+            for r in raw_cg_r:
+                stock_carro_r[r["sabor"]] = stock_carro_r.get(r["sabor"], 0) + r["cantidad"]
+        if raw_vc_r:
+            for r in raw_vc_r:
+                if r.get("cantidad", 0) > 0:
+                    stock_carro_r[r["sabor"]] = stock_carro_r.get(r["sabor"], 0) - r["cantidad"]
+        if raw_dev_r:
+            for r in raw_dev_r:
+                stock_carro_r[r["sabor"]] = stock_carro_r.get(r["sabor"], 0) - r.get("cantidad", 0)
+
+        sabores_disp_r = [s for s, v in stock_carro_r.items() if v > 0]
+
+        if not sabores_disp_r:
+            st.markdown('<div class="warn-box">⚠️ No hay papas disponibles en el carro para regalar.</div>', unsafe_allow_html=True)
+        else:
+            sabor_reg = st.selectbox("Sabor", sabores_disp_r, key="sabor_reg")
+            disp_reg = int(stock_carro_r.get(sabor_reg, 0))
+            cant_reg = st.number_input("Cantidad", min_value=1, max_value=disp_reg, value=1, step=1, key="cant_reg")
+            motivo_reg = st.text_input("Motivo (opcional)", placeholder="Ej: Cliente especial, muestra", key="motivo_reg")
+            st.markdown(f'<div class="info-box">🎁 Regalando <b>{cant_reg}</b> bolsas de <b>{sabor_reg}</b> · Quedan: <b>{disp_reg - cant_reg}</b></div>', unsafe_allow_html=True)
+
+            if st.button("🎁 Registrar regalo", key="btn_reg"):
+                sb_post("ventas", {
+                    "fecha": fecha_hoy(), "hora": ahora(), "canal": "Regalo",
+                    "vendedor": "Javier & Edison", "sabor": sabor_reg,
+                    "cantidad": cant_reg, "total": 0,
+                    "cliente": motivo_reg.strip() if motivo_reg.strip() else "Regalo",
+                    "factura_id": str(uuid.uuid4())[:8].upper(),
+                    "abono": 0, "saldo": 0
+                })
+                st.session_state.ok_reg = True
+                time.sleep(0.3)
+                st.rerun()
+
+        if st.session_state.get("ok_reg"):
+            st.markdown('<div class="success-toast">✅ Regalo registrado. Descontado del carro.</div>', unsafe_allow_html=True)
+            st.session_state.ok_reg = False
+
+        # Historial de regalos del día
+        raw_reg = sb_get("ventas", f"select=hora,sabor,cantidad,cliente&fecha=eq.{fecha_hoy()}&canal=eq.Regalo&order=hora.desc")
+        if raw_reg:
+            st.markdown('<div class="section-label">Regalos de hoy</div>', unsafe_allow_html=True)
+            filas_reg = "".join(
+                f'<div class="factura-row"><span>{r["hora"]} · {r["sabor"]} × {r["cantidad"]}</span><span>{r["cliente"]}</span></div>'
+                for r in raw_reg
+            )
+            total_regalado = sum(r["cantidad"] for r in raw_reg)
+            st.markdown(
+                f'<div class="factura-box">{filas_reg}'
+                f'<div class="factura-total"><span>Total regalado hoy</span><span>{total_regalado} bolsas</span></div>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
 
 # ══════════════════════════════════════════════════════════════════════════════
 # VISTA: FÁBRICA
