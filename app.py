@@ -2113,7 +2113,7 @@ elif st.session_state.vista == "materia_prima":
                         "Stock": round(v["entradas"]-v["salidas"], 1),
                         "Precio unitario": fmt(pu) if pu > 0 else "—",
                         "Costo consumido": fmt(costo_consumido) if costo_consumido > 0 else "—",
-                        "Gasto total": fmt(gasto)
+                        "Inventario total": fmt(round((v["entradas"]-v["salidas"]) * pu)) if pu > 0 else "—",
                     })
                 st.dataframe(pd.DataFrame(filas_res), use_container_width=True, hide_index=True)
             else:
