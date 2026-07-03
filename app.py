@@ -185,6 +185,51 @@ def mostrar_facturas_seleccionables(df_canal, key_prefix):
         st.session_state.vista = "recibo"
         st.rerun()
 
+def mostrar_creditos_pendientes(canal):
+    """Muestra facturas con saldo pendiente y permite registrar abonos."""
+    raw = sb_get("ventas", f"select=factura_id,cliente,vendedor,total,abono,saldo&fecha=gte.2024-01-01&canal=eq.{requests.utils.quote(canal)}&saldo=gt.0")
+    if not raw:
+        return
+    # Agrupar por factura para no repetir
+    facturas = {}
+    for r in raw:
+        fid = r["factura_id"]
+        if fid and fid not in facturas:
+            facturas[fid] = {
+                "cliente": r["cliente"],
+                "vendedor": r["vendedor"],
+                "saldo": float(r["saldo"]),
+                "total": float(r["total"]),
+                "abono": float(r["abono"]),
+            }
+    if not facturas:
+        return
+    st.markdown('<div class="section-label">💳 Créditos pendientes de cobro</div>', unsafe_allow_html=True)
+    for fid, datos in facturas.items():
+        saldo = datos["saldo"]
+        st.markdown(
+            f'<div class="warn-box">'
+            f'<b>{datos["cliente"]}</b> · FV-{fid}<br>'
+            f'Total: {fmt(datos["total"])} · Abonado: {fmt(datos["abono"])} · '
+            f'<b>Debe: {fmt(saldo)}</b>'
+            f'</div>',
+            unsafe_allow_html=True
+        )
+        col_m, col_b = st.columns([3, 1])
+        nuevo_abono = col_m.number_input(
+            "Abono ($)", min_value=0, max_value=int(saldo),
+            value=int(saldo), step=1000, key=f"abono_pend_{fid}"
+        )
+        if col_b.button("✅ Cobrar", key=f"btn_cobrar_{fid}"):
+            nuevo_saldo = max(0, saldo - nuevo_abono)
+            nuevo_total_abono = datos["abono"] + nuevo_abono
+            sb_patch("ventas", f"factura_id=eq.{fid}", {
+                "abono": nuevo_total_abono,
+                "saldo": nuevo_saldo
+            })
+            time.sleep(0.3)
+            st.rerun()
+
 def _recargar_factura_vc(fac_vc):
     """Recarga la factura del carro desde Supabase y actualiza session_state."""
     registros_act = sb_get("ventas", f"select=sabor,cantidad,total&factura_id=eq.{fac_vc['id']}")
@@ -1153,19 +1198,15 @@ elif st.session_state.vista == "carro":
 
             # Billete y vuelto
             st.markdown('<div class="section-label">Pago del cliente</div>', unsafe_allow_html=True)
-            if True:
-                billete_vc = st.number_input("Billete del cliente ($)", min_value=0, value=0,
-                                             step=1000, key="billete_vc")
-                if billete_vc > 0:
-                    if billete_vc >= total_cc:
-                        st.markdown(f'<div class="info-box">💰 Total: <b>{fmt(total_cc)}</b> · Devolver: <b>{fmt(billete_vc - total_cc)}</b></div>', unsafe_allow_html=True)
-                    else:
-                        st.markdown(f'<div class="alert-low">⚠️ Total: {fmt(total_cc)} · Falta: {fmt(total_cc - billete_vc)}</div>', unsafe_allow_html=True)
+            abono_vc = st.number_input("Abono del cliente ($)", min_value=0, value=0, step=1000, key="abono_vc")
+            if abono_vc > 0:
+                if abono_vc >= total_cc:
+                    st.markdown(f'<div class="info-box">💰 Total: <b>{fmt(total_cc)}</b> · Devolver: <b>{fmt(abono_vc - total_cc)}</b></div>', unsafe_allow_html=True)
                 else:
-                    st.markdown(f'<div class="info-box">💰 Total a cobrar: <b>{fmt(total_cc)}</b></div>', unsafe_allow_html=True)
+                    saldo_mostrar = total_cc - abono_vc
+                    st.markdown(f'<div class="warn-box">📋 Abono: <b>{fmt(abono_vc)}</b> · Queda debiendo: <b>{fmt(saldo_mostrar)}</b></div>', unsafe_allow_html=True)
             else:
-                billete_vc = 0
-                st.markdown(f'<div class="credito-box"><div class="credito-header">📋 Crédito — pago pendiente</div><div class="credito-pendiente"><span>Total a cobrar después</span><span>{fmt(total_cc)}</span></div></div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="warn-box">📋 Sin abono — queda debiendo: <b>{fmt(total_cc)}</b></div>', unsafe_allow_html=True)
 
             col_clr2, col_conf = st.columns(2)
             if col_clr2.button("🗑️ Vaciar carrito", key="btn_clr_cc"):
@@ -1183,6 +1224,7 @@ elif st.session_state.vista == "carro":
                     else:
                         fid_vc = str(uuid.uuid4())[:8].upper()
                         total_venta_vc = 0
+                        abono_val = int(st.session_state.get("abono_vc", 0))
                         for s, c in st.session_state.carrito_carro.items():
                             precio_final = st.session_state.precios_carro.get(s, PRODUCTOS[s])
                             subtotal = precio_final * c
@@ -1192,14 +1234,19 @@ elif st.session_state.vista == "carro":
                                 "vendedor": "Javier & Edison", "sabor": s,
                                 "cantidad": c, "total": subtotal,
                                 "cliente": cliente_vc.strip(), "factura_id": fid_vc,
+                                "abono": abono_val, "saldo": max(0, total_venta_vc - abono_val)
                             })
+                        # Actualizar saldo en todos los registros de la factura
+                        saldo_final = max(0, total_venta_vc - abono_val)
+                        sb_patch("ventas", f"factura_id=eq.{fid_vc}", {"abono": abono_val, "saldo": saldo_final})
                         st.session_state.factura_carro_guardada = {
                             "id": fid_vc, "cliente": cliente_vc.strip(),
                             "vendedor": "Javier & Edison",
                             "items": dict(st.session_state.carrito_carro),
                             "precios": dict(st.session_state.precios_carro),
                             "total": total_venta_vc,
-                            "billete": billete_vc,
+                            "billete": abono_val,
+                            "saldo": saldo_final,
                         }
                         st.session_state.carrito_carro = {}
                         st.session_state.precios_carro = {}
@@ -1209,10 +1256,14 @@ elif st.session_state.vista == "carro":
         # Opciones post-venta — solo si hay una factura activa en esta sesión
         if st.session_state.factura_carro_guardada:
             fac_vc = st.session_state.factura_carro_guardada
-            st.markdown(
-                f'<div class="success-toast">✅ Venta registrada — <b>#{fac_vc["id"]}</b> · {fac_vc["cliente"]} · {fmt(fac_vc["total"])}</div>',
-                unsafe_allow_html=True
-            )
+            vuelto_vc = fac_vc["billete"] - fac_vc["total"] if fac_vc["billete"] >= fac_vc["total"] and fac_vc["billete"] > 0 else 0
+            saldo_vc = fac_vc.get("saldo", 0)
+            msg = f'✅ Venta registrada — <b>#{fac_vc["id"]}</b> · {fac_vc["cliente"]} · {fmt(fac_vc["total"])}'
+            if vuelto_vc > 0:
+                msg += f'<br>💵 Devolver: <b>{fmt(vuelto_vc)}</b>'
+            if saldo_vc > 0:
+                msg += f'<br>📋 Queda debiendo: <b>{fmt(saldo_vc)}</b>'
+            st.markdown(f'<div class="success-toast">{msg}</div>', unsafe_allow_html=True)
 
             # Modificar factura post-venta
             st.markdown('<div class="section-label">¿El cliente quiere algo más?</div>', unsafe_allow_html=True)
@@ -1287,6 +1338,8 @@ elif st.session_state.vista == "carro":
             mostrar_facturas_seleccionables(df_fact_vc, "carro_todos")
         else:
             st.caption("Aún no hay ventas registradas hoy.")
+
+        mostrar_creditos_pendientes("Carro")
 
 
         # Papas disponibles del cargue — lo que lleva el carro pendiente de vender
@@ -1441,19 +1494,14 @@ elif st.session_state.vista == "fabrica":
 
         # Billete y vuelto
         st.markdown('<div class="section-label">Pago del cliente</div>', unsafe_allow_html=True)
-        if True:
-            billete_f = st.number_input("Billete del cliente ($)", min_value=0, value=0,
-                                        step=1000, key="billete_fab")
-            if billete_f > 0:
-                if billete_f >= total_fac:
-                    st.markdown(f'<div class="info-box">💰 Total: <b>{fmt(total_fac)}</b> · Devolver: <b>{fmt(billete_f - total_fac)}</b></div>', unsafe_allow_html=True)
-                else:
-                    st.markdown(f'<div class="alert-low">⚠️ Total: {fmt(total_fac)} · Falta: {fmt(total_fac - billete_f)}</div>', unsafe_allow_html=True)
+        abono_f = st.number_input("Abono del cliente ($)", min_value=0, value=0, step=1000, key="abono_f")
+        if abono_f > 0:
+            if abono_f >= total_fac:
+                st.markdown(f'<div class="info-box">💰 Total: <b>{fmt(total_fac)}</b> · Devolver: <b>{fmt(abono_f - total_fac)}</b></div>', unsafe_allow_html=True)
             else:
-                st.markdown(f'<div class="info-box">💰 Total a cobrar: <b>{fmt(total_fac)}</b></div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="warn-box">📋 Abono: <b>{fmt(abono_f)}</b> · Queda debiendo: <b>{fmt(total_fac - abono_f)}</b></div>', unsafe_allow_html=True)
         else:
-            billete_f = 0
-            st.markdown(f'<div class="credito-box"><div class="credito-header">📋 Crédito — pago pendiente</div><div class="credito-pendiente"><span>Total a cobrar después</span><span>{fmt(total_fac)}</span></div></div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="warn-box">📋 Sin abono — queda debiendo: <b>{fmt(total_fac)}</b></div>', unsafe_allow_html=True)
 
         if st.button("✅ Confirmar venta", key="btn_vf"):
             if not cliente_f.strip():
@@ -1465,6 +1513,7 @@ elif st.session_state.vista == "fabrica":
                 else:
                     fid = str(uuid.uuid4())[:8].upper()
                     total_venta_f = 0
+                    abono_val_f = int(st.session_state.get("abono_f", 0))
                     for s, c in st.session_state.carrito.items():
                         precio_final = st.session_state.precios_carrito.get(s, PRODUCTOS[s])
                         subtotal = precio_final * c
@@ -1473,16 +1522,19 @@ elif st.session_state.vista == "fabrica":
                             "fecha": fecha_hoy(), "hora": ahora(), "canal": "Fábrica",
                             "vendedor": vendedor_f, "sabor": s, "cantidad": c,
                             "total": subtotal, "cliente": cliente_f.strip(),
-                            "factura_id": fid
+                            "factura_id": fid, "abono": abono_val_f, "saldo": 0
                         })
                         restar_stock(s, c)
+                    saldo_final_f = max(0, total_venta_f - abono_val_f)
+                    sb_patch("ventas", f"factura_id=eq.{fid}", {"abono": abono_val_f, "saldo": saldo_final_f})
                     st.session_state.factura_guardada = {
                         "id": fid, "cliente": cliente_f.strip(),
                         "vendedor": vendedor_f,
                         "items": dict(st.session_state.carrito),
                         "precios": dict(st.session_state.precios_carrito),
                         "total": total_venta_f,
-                        "billete": billete_f,
+                        "billete": abono_val_f,
+                        "saldo": saldo_final_f,
                     }
                     st.session_state.carrito = {}
                     st.session_state.precios_carrito = {}
@@ -1492,13 +1544,14 @@ elif st.session_state.vista == "fabrica":
     # Opciones post-venta — solo si hay una factura activa en esta sesión
     if st.session_state.factura_guardada:
         fac = st.session_state.factura_guardada
-        vuelto = fac["billete"] - fac["total"] if fac["billete"] > 0 else 0
-        st.markdown(
-            f'<div class="success-toast">✅ Venta registrada — <b>#{fac["id"]}</b> · {fac["cliente"]} · {fmt(fac["total"])}'
-            + (f'<br>💵 Devolver: <b>{fmt(vuelto)}</b>' if vuelto > 0 else '')
-            + '</div>',
-            unsafe_allow_html=True
-        )
+        vuelto = fac["billete"] - fac["total"] if fac["billete"] >= fac["total"] and fac["billete"] > 0 else 0
+        saldo_fac = fac.get("saldo", 0)
+        msg_f = f'✅ Venta registrada — <b>#{fac["id"]}</b> · {fac["cliente"]} · {fmt(fac["total"])}'
+        if vuelto > 0:
+            msg_f += f'<br>💵 Devolver: <b>{fmt(vuelto)}</b>'
+        if saldo_fac > 0:
+            msg_f += f'<br>📋 Queda debiendo: <b>{fmt(saldo_fac)}</b>'
+        st.markdown(f'<div class="success-toast">{msg_f}</div>', unsafe_allow_html=True)
 
         # Modificar factura post-venta
         st.markdown('<div class="section-label">¿El cliente quiere algo más?</div>', unsafe_allow_html=True)
@@ -1566,6 +1619,8 @@ elif st.session_state.vista == "fabrica":
         mostrar_facturas_seleccionables(df_fact_f, "fabrica_todos")
     else:
         st.caption("Aún no hay ventas registradas hoy.")
+
+    mostrar_creditos_pendientes("Fábrica")
 
 
     # Solo admin ve resumen y historial
