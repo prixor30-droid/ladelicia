@@ -497,7 +497,7 @@ def get_logo_b64():
 
 logo_b64 = get_logo_b64()
 logo_html = (
-    f'<img src="data:image/png;base64,{logo_b64}" style="height:620px;object-fit:contain;margin-bottom:6px;">'
+    f'<img src="data:image/png;base64,{logo_b64}" style="height:120px;object-fit:contain;margin-bottom:6px;">'
     if logo_b64 else "🍟"
 )
 
@@ -507,12 +507,12 @@ logo_html = (
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-html,body,[class*="css"],.stApp{font-family:'Inter',sans-serif !important;background-color:#F0F4FF !important;color:#0D1B2A !important;}
+html,body,[class*="css"],.stApp{font-family:'Inter',sans-serif !important;background-color:#F0F4FF !important;color:#0D1B2A !important;font-size:18px;}
 #MainMenu,footer,header{visibility:hidden;}
 .block-container{padding-top:1rem;padding-bottom:3rem;max-width:500px;margin:0 auto;}
 @media (min-width: 768px){
   .block-container{max-width:900px;}
-  html,body{font-size:17px;}
+  html,body{font-size:19px;}
   .brand-header p{font-size:0.95rem;}
   .metric-box .val{font-size:1.6rem;}
   .metric-box .lbl{font-size:0.8rem;}
@@ -522,7 +522,7 @@ html,body,[class*="css"],.stApp{font-family:'Inter',sans-serif !important;backgr
 }
 @media (min-width: 1200px){
   .block-container{max-width:1100px;}
-  html,body{font-size:18px;}
+  html,body{font-size:20px;}
   .metric-box .val{font-size:1.9rem;}
   .stButton>button{font-size:1.25rem !important;padding:20px !important;}
 }
