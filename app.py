@@ -1839,205 +1839,243 @@ elif st.session_state.vista == "recibo":
     else:
         st.info("No se encontró la factura seleccionada.")
 
+
 elif st.session_state.vista == "materia_prima":
 
+    INSUMOS_INFO = [
+        ("Papa (bulto)",           "🥔", "bulto",   "mp"),
+        ("Aceite (caneca)",        "🛢️", "caneca", "mp"),
+        ("ACPM (caneca)",          "⛽", "caneca",  "mp"),
+        ("Plátano (bolsa/caja)",   "🍌", "caja",    "mp"),
+        ("Salsa de tomate (caja)", "🍅", "caja",    "mp"),
+        ("Chicharrón (bulto)",     "🥩", "bulto",   "mp"),
+        ("Tocineta (bulto)",       "🥓", "bulto",   "mp"),
+    ]
+    SABORIZANTES_INFO = [
+        ("BBQ",           "🧂", "bolsa", "sab"),
+        ("Limón",         "🧂", "bolsa", "sab"),
+        ("Sal",           "🧂", "bolsa", "sab"),
+        ("Pollo",         "🧂", "bolsa", "sab"),
+        ("Parrillada",    "🧂", "bolsa", "sab"),
+        ("Chorizo Limón", "🧂", "bolsa", "sab"),
+        ("Mayonesa",      "🧂", "bolsa", "sab"),
+        ("Queso",         "🧂", "bolsa", "sab"),
+        ("Picante",       "🧂", "bolsa", "sab"),
+    ]
+    EMPAQUES_INFO = [
+        ("BBQ emp",            "📦", "kg", "emp"),
+        ("Limón emp",          "📦", "kg", "emp"),
+        ("Natural",            "📦", "kg", "emp"),
+        ("Pollo emp",          "📦", "kg", "emp"),
+        ("Chorizo Limón emp",  "📦", "kg", "emp"),
+        ("Mayoneza emp",       "📦", "kg", "emp"),
+        ("Parrillada emp",     "📦", "kg", "emp"),
+        ("Queso emp",          "📦", "kg", "emp"),
+        ("Almuerzo Limón emp", "📦", "kg", "emp"),
+        ("Almuerzo Pollo emp", "📦", "kg", "emp"),
+        ("Almuerzo Picante emp","📦", "kg", "emp"),
+        ("Picante emp",        "📦", "kg", "emp"),
+        ("Mega emp",           "📦", "kg", "emp"),
+        ("Mega Familiar",      "📦", "kg", "emp"),
+        ("Fósforo 70g emp",    "📦", "kg", "emp"),
+        ("Fósforo 140g emp",   "📦", "kg", "emp"),
+        ("Funda Endocenar",    "📦", "kg", "emp"),
+    ]
+    SABORIZANTES_NAMES = {n for n,_,_,_ in SABORIZANTES_INFO}
+    EMPAQUES_NAMES     = {n for n,_,_,_ in EMPAQUES_INFO}
+
     st.markdown('<div class="section-label">Materia Prima e Insumos 🌽</div>', unsafe_allow_html=True)
-    tab_mp1, tab_mp2, tab_mp3 = st.tabs(["➕ Registrar entrada", "💳 Créditos pendientes", "📋 Historial"])
+    tab_mp1, tab_mp2, tab_mp3, tab_mp4 = st.tabs(["➕ Entrada", "📤 Salida", "💳 Créditos", "📋 Historial"])
+
+    def registrar_entrada_mp(nombre_sel, unidad_sel, cant_mp, prov_mp, precio_mp, abono_mp, saldo_mp):
+        if not prov_mp.strip():
+            st.markdown('<div class="alert-low">⚠️ Escribe el nombre del proveedor.</div>', unsafe_allow_html=True)
+            return False
+        if precio_mp == 0:
+            st.markdown('<div class="alert-low">⚠️ Ingresa el precio total.</div>', unsafe_allow_html=True)
+            return False
+        data_mp = {
+            "fecha": fecha_hoy(), "hora": ahora(),
+            "insumo": nombre_sel, "cantidad": float(cant_mp),
+            "unidad": unidad_sel, "proveedor": prov_mp.strip(),
+            "precio_total": float(precio_mp), "abono": float(abono_mp),
+            "saldo": float(saldo_mp), "estado": "pagado" if saldo_mp == 0 else "pendiente"
+        }
+        h = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}",
+             "Content-Type": "application/json", "Prefer": "return=minimal"}
+        try:
+            r = requests.post(f"{SUPABASE_URL}/rest/v1/materia_prima", headers=h, json=data_mp, timeout=10)
+            if r.ok: return True
+            else: st.error(f"Error: {r.status_code} — {r.text}"); return False
+        except Exception as e:
+            st.error(f"Error: {e}"); return False
 
     with tab_mp1:
-        INSUMOS_INFO = [
-            ("Papa (bulto)",           "🥔", "bulto"),
-            ("Aceite (caneca)",        "🛢️", "caneca"),
-            ("ACPM (caneca)",          "⛽", "caneca"),
-            ("Plátano (bolsa/caja)",   "🍌", "caja"),
-            ("Salsa de tomate (caja)", "🍅", "caja"),
-            ("Chicharrón (bulto)",     "🥩", "bulto"),
-            ("Tocineta (bulto)",       "🥓", "bulto"),
-        ]
-        SABORIZANTES_INFO = [
-            ("BBQ",          "🧂", "bolsa"),
-            ("Limón",        "🧂", "bolsa"),
-            ("Sal",          "🧂", "bolsa"),
-            ("Pollo",        "🧂", "bolsa"),
-            ("Parrillada",   "🧂", "bolsa"),
-            ("Chorizo Limón","🧂", "bolsa"),
-            ("Mayonesa",     "🧂", "bolsa"),
-            ("Queso",        "🧂", "bolsa"),
-            ("Picante",      "🧂", "bolsa"),
-        ]
-
-        # Nivel 1 — categoría
         if not st.session_state.categoria_mp:
             st.markdown('<div class="section-label">¿Qué categoría ingresó?</div>', unsafe_allow_html=True)
             if st.button("🌽  Materia Prima\nPapa, aceite, ACPM, plátano...", key="btn_cat_mp", use_container_width=True):
-                st.session_state.categoria_mp = "mp"
-                st.rerun()
+                st.session_state.categoria_mp = "mp"; st.rerun()
             if st.button("🧪  Saborizantes\nSabores de las papas", key="btn_cat_sab", use_container_width=True):
-                st.session_state.categoria_mp = "sab"
-                st.rerun()
+                st.session_state.categoria_mp = "sab"; st.rerun()
+            if st.button("📦  Empaque\nBolsas y fundas en kg", key="btn_cat_emp", use_container_width=True):
+                st.session_state.categoria_mp = "emp"; st.rerun()
 
-        # Nivel 2 — insumo específico
         elif not st.session_state.insumo_sel:
-            if st.session_state.categoria_mp == "mp":
-                st.markdown('<div class="section-label">¿Qué insumo ingresó?</div>', unsafe_allow_html=True)
-                for nombre, icono, unidad in INSUMOS_INFO:
-                    if st.button(f"{icono}  {nombre}", key=f"btn_ins_{nombre}", use_container_width=True):
-                        st.session_state.insumo_sel = (nombre, unidad)
-                        st.rerun()
-            else:
-                st.markdown('<div class="section-label">¿Qué saborizante ingresó?</div>', unsafe_allow_html=True)
-                for nombre, icono, unidad in SABORIZANTES_INFO:
-                    if st.button(f"{icono}  {nombre}", key=f"btn_sab_{nombre}", use_container_width=True):
-                        st.session_state.insumo_sel = (nombre, unidad)
-                        st.rerun()
-            if st.button("← Volver", key="btn_volver_cat", use_container_width=False):
-                st.session_state.categoria_mp = None
-                st.rerun()
+            cats = {"mp": INSUMOS_INFO, "sab": SABORIZANTES_INFO, "emp": EMPAQUES_INFO}
+            labels = {"mp": "Materia Prima", "sab": "Saborizantes", "emp": "Empaque"}
+            st.markdown(f'<div class="section-label">¿Qué {labels[st.session_state.categoria_mp]} ingresó?</div>', unsafe_allow_html=True)
+            for nombre, icono, unidad, cat in cats[st.session_state.categoria_mp]:
+                if st.button(f"{icono}  {nombre}", key=f"btn_ins_{nombre}", use_container_width=True):
+                    st.session_state.insumo_sel = (nombre, unidad, cat); st.rerun()
+            if st.button("← Volver", key="btn_volver_cat"):
+                st.session_state.categoria_mp = None; st.rerun()
 
-        # Nivel 3 — formulario de registro
         else:
-            nombre_sel, unidad_sel = st.session_state.insumo_sel
-            st.markdown(f'<div class="section-label">Registrar entrada — {nombre_sel}</div>', unsafe_allow_html=True)
-
-            cant_mp   = st.number_input(f"Cantidad ({unidad_sel}s)", min_value=1, max_value=500, value=1, step=1, key="cant_mp")
+            nombre_sel, unidad_sel, cat_sel = st.session_state.insumo_sel
+            con_credito = cat_sel != "emp"
+            st.markdown(f'<div class="section-label">Entrada — {nombre_sel}</div>', unsafe_allow_html=True)
+            cant_mp   = st.number_input(f"Cantidad ({unidad_sel})", min_value=0.1, max_value=9999.0, value=1.0, step=0.5, key="cant_mp")
             prov_mp   = st.text_input("Proveedor", placeholder="Ej: Distribuidora La 14", key="prov_mp")
             precio_mp = st.number_input("Precio total ($)", min_value=0, value=0, step=1000, key="precio_mp")
-            abono_mp  = st.number_input("Abono inicial ($)", min_value=0, value=0, step=1000, key="abono_mp")
-            saldo_mp  = max(0, precio_mp - abono_mp)
-
-            if precio_mp > 0:
-                if abono_mp >= precio_mp:
-                    st.markdown(f'<div class="info-box">✅ Pago completo · Vuelto: <b>{fmt(abono_mp - precio_mp)}</b></div>', unsafe_allow_html=True)
-                elif abono_mp > 0:
-                    st.markdown(f'<div class="warn-box">📋 Abono: <b>{fmt(abono_mp)}</b> · Queda debiendo: <b>{fmt(saldo_mp)}</b></div>', unsafe_allow_html=True)
-                else:
-                    st.markdown(f'<div class="warn-box">📋 Fiado completo — debe: <b>{fmt(precio_mp)}</b></div>', unsafe_allow_html=True)
-
-            col_reg1, col_reg2 = st.columns(2)
-            if col_reg1.button("✅ Registrar entrada", key="btn_mp"):
-                if not prov_mp.strip():
-                    st.markdown('<div class="alert-low">⚠️ Escribe el nombre del proveedor.</div>', unsafe_allow_html=True)
-                elif precio_mp == 0:
-                    st.markdown('<div class="alert-low">⚠️ Ingresa el precio total.</div>', unsafe_allow_html=True)
-                else:
-                    estado_mp = "pagado" if saldo_mp == 0 else "pendiente"
-                    data_mp = {
-                        "fecha": fecha_hoy(), "hora": ahora(),
-                        "insumo": nombre_sel, "cantidad": float(cant_mp),
-                        "unidad": unidad_sel,
-                        "proveedor": prov_mp.strip(),
-                        "precio_total": float(precio_mp), "abono": float(abono_mp),
-                        "saldo": float(saldo_mp), "estado": estado_mp
-                    }
-                    headers_mp = {
-                        "apikey": SUPABASE_KEY,
-                        "Authorization": f"Bearer {SUPABASE_KEY}",
-                        "Content-Type": "application/json",
-                        "Prefer": "return=minimal"
-                    }
-                    try:
-                        r_mp = requests.post(
-                            f"{SUPABASE_URL}/rest/v1/materia_prima",
-                            headers=headers_mp, json=data_mp, timeout=10
-                        )
-                        if r_mp.ok:
-                            st.session_state.ok_mp = True
-                            st.session_state.insumo_sel = None
-                            st.session_state.categoria_mp = None
-                            time.sleep(0.3)
-                            st.rerun()
-                        else:
-                            st.error(f"Error al guardar: {r_mp.status_code} — {r_mp.text}")
-                    except Exception as e:
-                        st.error(f"Error de conexión: {e}")
-
-            if col_reg2.button("← Cambiar", key="btn_cambiar_ins"):
-                st.session_state.insumo_sel = None
-                st.rerun()
+            if con_credito:
+                abono_mp = st.number_input("Abono inicial ($)", min_value=0, value=0, step=1000, key="abono_mp")
+                saldo_mp = max(0, precio_mp - abono_mp)
+                if precio_mp > 0:
+                    if abono_mp >= precio_mp:
+                        st.markdown(f'<div class="info-box">✅ Pago completo</div>', unsafe_allow_html=True)
+                    elif abono_mp > 0:
+                        st.markdown(f'<div class="warn-box">📋 Debe: <b>{fmt(saldo_mp)}</b></div>', unsafe_allow_html=True)
+                    else:
+                        st.markdown(f'<div class="warn-box">📋 Fiado: <b>{fmt(precio_mp)}</b></div>', unsafe_allow_html=True)
+            else:
+                abono_mp = precio_mp; saldo_mp = 0
+            col1, col2 = st.columns(2)
+            if col1.button("✅ Registrar", key="btn_mp"):
+                if registrar_entrada_mp(nombre_sel, unidad_sel, cant_mp, prov_mp, precio_mp, abono_mp, saldo_mp):
+                    st.session_state.ok_mp = True
+                    st.session_state.insumo_sel = None
+                    st.session_state.categoria_mp = None
+                    time.sleep(0.3); st.rerun()
+            if col2.button("← Cambiar", key="btn_cambiar_ins"):
+                st.session_state.insumo_sel = None; st.rerun()
 
         if st.session_state.get("ok_mp"):
-            st.markdown('<div class="success-toast">✅ Entrada registrada correctamente.</div>', unsafe_allow_html=True)
+            st.markdown('<div class="success-toast">✅ Entrada registrada.</div>', unsafe_allow_html=True)
             st.session_state.ok_mp = False
 
     with tab_mp2:
-        SABORIZANTES_NAMES = {"BBQ", "Limón", "Sal", "Pollo", "Parrillada", "Chorizo Limón", "Mayonesa", "Queso", "Picante"}
+        st.markdown('<div class="section-label">Registrar salida (uso en producción)</div>', unsafe_allow_html=True)
+        cat_sal = st.selectbox("Categoría", ["🌽 Materia Prima", "🧪 Saborizantes", "📦 Empaque"], key="cat_sal")
+        if "Materia Prima" in cat_sal:
+            opciones_sal = [n for n,_,_,_ in INSUMOS_INFO]
+            unidades_sal = {n: u for n,_,u,_ in INSUMOS_INFO}
+            cat_key = "mp"
+        elif "Saborizantes" in cat_sal:
+            opciones_sal = [n for n,_,_,_ in SABORIZANTES_INFO]
+            unidades_sal = {n: u for n,_,u,_ in SABORIZANTES_INFO}
+            cat_key = "sab"
+        else:
+            opciones_sal = [n for n,_,_,_ in EMPAQUES_INFO]
+            unidades_sal = {n: u for n,_,u,_ in EMPAQUES_INFO}
+            cat_key = "emp"
+        insumo_sal = st.selectbox("Insumo", opciones_sal, key="insumo_sal")
+        unidad_sal = unidades_sal[insumo_sal]
+        cant_sal   = st.number_input(f"Cantidad ({unidad_sal})", min_value=0.1, max_value=9999.0, value=1.0, step=0.5, key="cant_sal")
+        motivo_sal = st.text_input("Motivo", value="Producción", key="motivo_sal")
+        if st.button("📤 Registrar salida", key="btn_sal"):
+            h = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}",
+                 "Content-Type": "application/json", "Prefer": "return=minimal"}
+            data_sal = {"fecha": fecha_hoy(), "hora": ahora(), "insumo": insumo_sal,
+                        "categoria": cat_key, "cantidad": float(cant_sal),
+                        "unidad": unidad_sal, "motivo": motivo_sal.strip() or "Producción"}
+            try:
+                r = requests.post(f"{SUPABASE_URL}/rest/v1/salidas_mp", headers=h, json=data_sal, timeout=10)
+                if r.ok:
+                    st.markdown('<div class="success-toast">✅ Salida registrada.</div>', unsafe_allow_html=True)
+                    time.sleep(0.3); st.rerun()
+                else:
+                    st.error(f"Error: {r.status_code} — {r.text}")
+            except Exception as e:
+                st.error(f"Error: {e}")
 
-        raw_pend_mp = sb_get("materia_prima", "select=*&estado=eq.pendiente&order=fecha.desc")
-        pend_mp  = [r for r in raw_pend_mp if r["insumo"] not in SABORIZANTES_NAMES] if raw_pend_mp else []
-        pend_sab = [r for r in raw_pend_mp if r["insumo"] in SABORIZANTES_NAMES] if raw_pend_mp else []
+    with tab_mp3:
+        raw_pend = sb_get("materia_prima", "select=*&estado=eq.pendiente&order=fecha.desc") or []
+        pend_mp  = [r for r in raw_pend if r["insumo"] not in SABORIZANTES_NAMES and r["insumo"] not in EMPAQUES_NAMES]
+        pend_sab = [r for r in raw_pend if r["insumo"] in SABORIZANTES_NAMES]
 
         def mostrar_creditos_mp(lista, icono):
             if not lista:
-                st.info("No hay créditos pendientes.")
-                return
+                st.info("No hay créditos pendientes."); return
             total = sum(float(r["saldo"]) for r in lista)
             st.markdown(f'<div class="warn-box">💳 Total pendiente: <b>{fmt(total)}</b></div>', unsafe_allow_html=True)
             for r in lista:
                 saldo_r = float(r["saldo"])
                 st.markdown(
-                    f'<div class="factura-box">'
-                    f'<div class="factura-header">{icono} {r["insumo"]} · {r["proveedor"]}</div>'
+                    f'<div class="factura-box"><div class="factura-header">{icono} {r["insumo"]} · {r["proveedor"]}</div>'
                     f'<div class="factura-row"><span>Fecha</span><span>{r["fecha"]}</span></div>'
                     f'<div class="factura-row"><span>Cantidad</span><span>{r["cantidad"]} {r["unidad"]}</span></div>'
-                    f'<div class="factura-row"><span>Precio total</span><span>{fmt(r["precio_total"])}</span></div>'
-                    f'<div class="factura-row"><span>Ya abonado</span><span>{fmt(r["abono"])}</span></div>'
-                    f'<div class="factura-total"><span>Saldo pendiente</span><span>{fmt(saldo_r)}</span></div>'
-                    f'</div>',
+                    f'<div class="factura-row"><span>Total</span><span>{fmt(r["precio_total"])}</span></div>'
+                    f'<div class="factura-row"><span>Abonado</span><span>{fmt(r["abono"])}</span></div>'
+                    f'<div class="factura-total"><span>Saldo</span><span>{fmt(saldo_r)}</span></div></div>',
                     unsafe_allow_html=True
                 )
                 col_a, col_b = st.columns([3, 1])
-                nuevo_abono_mp = col_a.number_input(
-                    "Abono ($)", min_value=0, max_value=int(saldo_r),
-                    value=int(saldo_r), step=1000, key=f"abono_pend_mp_{r['id']}"
-                )
+                nv = col_a.number_input("Abono ($)", min_value=0, max_value=int(saldo_r), value=int(saldo_r), step=1000, key=f"abono_pend_mp_{r['id']}")
                 if col_b.button("✅ Pagar", key=f"btn_pagar_mp_{r['id']}"):
-                    nuevo_saldo = max(0, saldo_r - nuevo_abono_mp)
-                    nuevo_total_abono = float(r["abono"]) + nuevo_abono_mp
-                    nuevo_estado = "pagado" if nuevo_saldo == 0 else "pendiente"
-                    sb_patch("materia_prima", f"id=eq.{r['id']}", {
-                        "abono": nuevo_total_abono,
-                        "saldo": nuevo_saldo,
-                        "estado": nuevo_estado
-                    })
-                    time.sleep(0.3)
-                    st.rerun()
+                    ns = max(0, saldo_r - nv)
+                    sb_patch("materia_prima", f"id=eq.{r['id']}", {"abono": float(r["abono"])+nv, "saldo": ns, "estado": "pagado" if ns==0 else "pendiente"})
+                    time.sleep(0.3); st.rerun()
 
-        sub_c1, sub_c2 = st.tabs(["🌽 Materia Prima", "🧪 Saborizantes"])
-        with sub_c1:
-            st.markdown('<div class="section-label">Créditos pendientes — Materia Prima</div>', unsafe_allow_html=True)
+        sc1, sc2 = st.tabs(["🌽 Materia Prima", "🧪 Saborizantes"])
+        with sc1:
+            st.markdown('<div class="section-label">Créditos — Materia Prima</div>', unsafe_allow_html=True)
             mostrar_creditos_mp(pend_mp, "🌽")
-        with sub_c2:
-            st.markdown('<div class="section-label">Créditos pendientes — Saborizantes</div>', unsafe_allow_html=True)
+        with sc2:
+            st.markdown('<div class="section-label">Créditos — Saborizantes</div>', unsafe_allow_html=True)
             mostrar_creditos_mp(pend_sab, "🧂")
 
-    with tab_mp3:
-        st.markdown('<div class="section-label">Historial de entradas</div>', unsafe_allow_html=True)
+    with tab_mp4:
+        st.markdown('<div class="section-label">Resumen del período</div>', unsafe_allow_html=True)
         col_f1, col_f2 = st.columns(2)
         f_ini_mp = col_f1.date_input("Desde", value=datetime.now(COL_TZ).date().replace(day=1), key="f_ini_mp")
         f_fin_mp = col_f2.date_input("Hasta", value=datetime.now(COL_TZ).date(), key="f_fin_mp")
-        raw_hist_mp = sb_get("materia_prima", f"select=*&fecha=gte.{f_ini_mp}&fecha=lte.{f_fin_mp}&order=fecha.desc")
-        if not raw_hist_mp:
-            st.info("No hay registros en ese período.")
-        else:
-            total_compras = sum(float(r["precio_total"]) for r in raw_hist_mp)
-            total_pagado  = sum(float(r["abono"]) for r in raw_hist_mp)
-            total_saldo   = sum(float(r["saldo"]) for r in raw_hist_mp)
-            st.markdown(
-                f'<div class="factura-box">'
-                f'<div class="factura-row"><span>Total compras</span><span><b>{fmt(total_compras)}</b></span></div>'
-                f'<div class="factura-row"><span>Total pagado</span><span><b>{fmt(total_pagado)}</b></span></div>'
-                f'<div class="factura-total"><span>Total pendiente</span><span>{fmt(total_saldo)}</span></div>'
-                f'</div>',
-                unsafe_allow_html=True
+
+        raw_ent = sb_get("materia_prima", f"select=*&fecha=gte.{f_ini_mp}&fecha=lte.{f_fin_mp}&order=fecha.desc") or []
+        raw_sal = sb_get("salidas_mp",    f"select=*&fecha=gte.{f_ini_mp}&fecha=lte.{f_fin_mp}&order=fecha.desc") or []
+
+        resumen = {}
+        for r in raw_ent:
+            k = r["insumo"]
+            if k not in resumen:
+                resumen[k] = {"entradas": 0, "salidas": 0, "unidad": r["unidad"], "gasto": 0}
+            resumen[k]["entradas"] += float(r["cantidad"])
+            resumen[k]["gasto"]    += float(r["precio_total"])
+        for r in raw_sal:
+            k = r["insumo"]
+            if k not in resumen:
+                resumen[k] = {"entradas": 0, "salidas": 0, "unidad": r["unidad"], "gasto": 0}
+            resumen[k]["salidas"] += float(r["cantidad"])
+
+        def tabla_resumen(data, titulo, icono):
+            if not data: return
+            st.markdown(f'<div class="section-label">{icono} {titulo}</div>', unsafe_allow_html=True)
+            filas = "".join(
+                f'<div class="factura-row"><span>{k}</span>'
+                f'<span>Entrada: {v["entradas"]} {v["unidad"]} · Salida: {v["salidas"]} {v["unidad"]} · Stock: <b>{v["entradas"]-v["salidas"]:.1f}</b> · Gasto: {fmt(v["gasto"])}</span></div>'
+                for k, v in data.items()
             )
-            df_mp = pd.DataFrame(raw_hist_mp)
-            df_mp["Estado"] = df_mp["estado"].apply(lambda x: "✅ Pagado" if x == "pagado" else "📋 Pendiente")
-            df_show = df_mp[["fecha","insumo","cantidad","unidad","proveedor","precio_total","abono","saldo","Estado"]].copy()
-            df_show.columns = ["Fecha","Insumo","Cantidad","Unidad","Proveedor","Total","Abonado","Saldo","Estado"]
-            df_show["Total"]   = df_show["Total"].apply(fmt)
-            df_show["Abonado"] = df_show["Abonado"].apply(fmt)
-            df_show["Saldo"]   = df_show["Saldo"].apply(fmt)
-            st.dataframe(df_show, use_container_width=True, hide_index=True)
+            total_g = sum(v["gasto"] for v in data.values())
+            st.markdown(f'<div class="factura-box">{filas}<div class="factura-total"><span>Total gastado</span><span>{fmt(total_g)}</span></div></div>', unsafe_allow_html=True)
+
+        if resumen:
+            res_mp  = {k: v for k, v in resumen.items() if k not in SABORIZANTES_NAMES and k not in EMPAQUES_NAMES}
+            res_sab = {k: v for k, v in resumen.items() if k in SABORIZANTES_NAMES}
+            res_emp = {k: v for k, v in resumen.items() if k in EMPAQUES_NAMES}
+            tabla_resumen(res_mp,  "Materia Prima", "🌽")
+            tabla_resumen(res_sab, "Saborizantes",  "🧂")
+            tabla_resumen(res_emp, "Empaque",       "📦")
+        else:
+            st.info("No hay registros en ese período.")
 
 elif st.session_state.vista == "resumen" and st.session_state.es_admin:
     sub_r1, sub_r2, sub_r3, sub_r4 = st.tabs(["Hoy", "Por fechas", "📅 Mes", "💾 Exportar"])
