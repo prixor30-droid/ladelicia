@@ -2065,22 +2065,10 @@ elif st.session_state.vista == "materia_prima":
                     "Stock": f'{v["entradas"]-v["salidas"]:.1f} {v["unidad"]}',
                     "Gasto total": fmt(v["gasto"])} for k, v in data.items()]
                 st.dataframe(pd.DataFrame(filas_res), use_container_width=True, hide_index=True)
-            if raw_ent_cat:
-                st.caption("Entradas:")
-                df_ent = pd.DataFrame(raw_ent_cat)[["fecha","hora","insumo","cantidad","unidad","proveedor","precio_total","abono","saldo","estado"]].copy()
-                df_ent.columns = ["Fecha","Hora","Insumo","Cantidad","Unidad","Proveedor","Total","Abonado","Saldo","Estado"]
-                df_ent["Total"]   = df_ent["Total"].apply(fmt)
-                df_ent["Abonado"] = df_ent["Abonado"].apply(fmt)
-                df_ent["Saldo"]   = df_ent["Saldo"].apply(fmt)
-                df_ent["Estado"]  = df_ent["Estado"].apply(lambda x: "✅ Pagado" if x == "pagado" else "📋 Pendiente")
-                st.dataframe(df_ent, use_container_width=True, hide_index=True)
-            if raw_sal_cat:
-                st.caption("Salidas:")
-                df_sal = pd.DataFrame(raw_sal_cat)[["fecha","hora","insumo","cantidad","unidad","motivo"]].copy()
-                df_sal.columns = ["Fecha","Hora","Insumo","Cantidad","Unidad","Motivo"]
-                st.dataframe(df_sal, use_container_width=True, hide_index=True)
+            else:
+                st.info("No hay registros en este período.")
 
-        if resumen:
+        if resumen or raw_ent or raw_sal:
             res_mp  = {k: v for k, v in resumen.items() if k not in SABORIZANTES_NAMES and k not in EMPAQUES_NAMES}
             res_sab = {k: v for k, v in resumen.items() if k in SABORIZANTES_NAMES}
             res_emp = {k: v for k, v in resumen.items() if k in EMPAQUES_NAMES}
@@ -2090,9 +2078,14 @@ elif st.session_state.vista == "materia_prima":
             sal_mp  = [r for r in raw_sal if r["categoria"] == "mp"]
             sal_sab = [r for r in raw_sal if r["categoria"] == "sab"]
             sal_emp = [r for r in raw_sal if r["categoria"] == "emp"]
-            tabla_resumen(res_mp,  "Materia Prima", "🌽", ent_mp,  sal_mp)
-            tabla_resumen(res_sab, "Saborizantes",  "🧂", ent_sab, sal_sab)
-            tabla_resumen(res_emp, "Empaque",       "📦", ent_emp, sal_emp)
+
+            sh1, sh2, sh3 = st.tabs(["🌽 Materia Prima", "🧪 Saborizantes", "📦 Empaque"])
+            with sh1:
+                tabla_resumen(res_mp,  "Materia Prima", "🌽", ent_mp,  sal_mp)
+            with sh2:
+                tabla_resumen(res_sab, "Saborizantes",  "🧂", ent_sab, sal_sab)
+            with sh3:
+                tabla_resumen(res_emp, "Empaque",       "📦", ent_emp, sal_emp)
         else:
             st.info("No hay registros en ese período.")
 
