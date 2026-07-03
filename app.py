@@ -993,8 +993,8 @@ elif st.session_state.vista == "carro":
     with sub1:
         st.markdown('<div class="section-label">Cargue del carro</div>', unsafe_allow_html=True)
         sabor_cg = st.selectbox("Sabor", sabores_por_frecuencia("Carro"), key="sabor_cg")
-        cant_cg  = st.number_input("Bolsas a cargar", min_value=1, max_value=500, value=10, step=5, key="cant_cg")
         stock_cg = get_stock(sabor_cg)
+        cant_cg  = st.number_input("Bolsas a cargar", min_value=1, max_value=max(1, stock_cg), value=min(10, max(1, stock_cg)), step=5, key="cant_cg")
 
         if stock_cg < cant_cg:
             st.markdown(f'<div class="alert-low">⚠️ Solo hay {stock_cg} bolsas de {sabor_cg}.</div>', unsafe_allow_html=True)
