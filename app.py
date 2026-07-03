@@ -846,7 +846,7 @@ elif st.session_state.vista == "produccion":
 
     empleado   = st.selectbox("¿Quién registra?", EMPLEADOS, key="emp")
     sabor_p    = st.selectbox("Sabor producido", sabores_produccion_frecuente(), key="sabor_p")
-    cantidad_p = st.number_input("Bolsas producidas", min_value=1, max_value=5000, value=50, step=10, key="cant_p")
+    cantidad_p = st.number_input("Bolsas producidas", min_value=1, max_value=2000, value=50, step=10, key="cant_p")
 
     stock_act = get_stock(sabor_p)
     st.markdown(f'<div class="info-box">📦 Stock actual de <b>{sabor_p}</b>: {stock_act} → quedará en <b>{stock_act + cantidad_p}</b></div>', unsafe_allow_html=True)
@@ -1170,7 +1170,7 @@ elif st.session_state.vista == "carro":
                 column_config={
                     "Sabor":    st.column_config.TextColumn("Sabor", disabled=True),
                     "Cantidad": st.column_config.NumberColumn("Cantidad", min_value=1, step=1),
-                    "Precio":   st.column_config.NumberColumn("Precio", min_value=0, step=100),
+                    "Precio":   st.column_config.NumberColumn("Precio", min_value=100, step=100),
                     "Subtotal": st.column_config.NumberColumn("Subtotal", disabled=True),
                 },
                 key="carro_cart_editor"
@@ -1428,8 +1428,17 @@ elif st.session_state.vista == "carro":
         st.markdown('<div class="section-label">Devolución al inventario 🔄</div>', unsafe_allow_html=True)
         st.caption("Registra las bolsas que regresan al inventario.")
         sabor_dev = st.selectbox("Sabor a devolver", SABORES_LISTA, key="sabor_dev")
-        cant_dev  = st.number_input("Bolsas devueltas", min_value=1, max_value=500, value=1, step=1, key="cant_dev")
+
+        # Máximo a devolver = lo que cargaron de ese sabor hoy - lo ya devuelto
+        raw_cg_dev = sb_get("cargues", f"select=cantidad&fecha=eq.{fecha_hoy()}&sabor=eq.{requests.utils.quote(sabor_dev)}")
+        raw_dev_ya = sb_get("devoluciones", f"select=cantidad&fecha=eq.{fecha_hoy()}&sabor=eq.{requests.utils.quote(sabor_dev)}")
+        max_cargado = sum(r["cantidad"] for r in raw_cg_dev) if raw_cg_dev else 500
+        ya_devuelto = sum(r["cantidad"] for r in raw_dev_ya) if raw_dev_ya else 0
+        max_dev = max(1, max_cargado - ya_devuelto)
+
+        cant_dev  = st.number_input("Bolsas devueltas", min_value=1, max_value=max_dev, value=1, step=1, key="cant_dev")
         fecha_dev = st.date_input("Fecha de devolución", value=datetime.now(COL_TZ).date(), key="fecha_dev")
+        st.markdown(f'<div class="info-box">📦 Máximo a devolver de <b>{sabor_dev}</b> hoy: <b>{max_dev}</b> bolsas</div>', unsafe_allow_html=True)
 
         if st.button("🔄 Registrar devolución", key="btn_dev"):
             sb_post("devoluciones", {"fecha": str(fecha_dev), "sabor": sabor_dev, "cantidad": cant_dev})
@@ -1499,7 +1508,7 @@ elif st.session_state.vista == "fabrica":
             column_config={
                 "Sabor":    st.column_config.TextColumn("Sabor", disabled=True),
                 "Cantidad": st.column_config.NumberColumn("Cantidad", min_value=1, step=1),
-                "Precio":   st.column_config.NumberColumn("Precio", min_value=0, step=100),
+                "Precio":   st.column_config.NumberColumn("Precio", min_value=100, step=100),
                 "Subtotal": st.column_config.NumberColumn("Subtotal", disabled=True),
             },
             key="carrito_editor"
@@ -1593,10 +1602,13 @@ elif st.session_state.vista == "fabrica":
 
         with tab_cambio_f:
             col_a, col_b = st.columns(2)
-            sabor_out = col_a.selectbox("Devuelve", SABORES_LISTA, key="cambio_out")
-            cant_out  = col_a.number_input("Cantidad que devuelve", min_value=1, max_value=50, value=1, step=1, key="cant_out")
+            sabores_en_fac = list(fac["items"].keys())
+            sabor_out = col_a.selectbox("Devuelve", sabores_en_fac, key="cambio_out")
+            max_out_f = fac["items"].get(sabor_out, 1)
+            cant_out  = col_a.number_input("Cantidad que devuelve", min_value=1, max_value=max_out_f, value=1, step=1, key="cant_out")
             sabor_in  = col_b.selectbox("Lleva en cambio", SABORES_LISTA, key="cambio_in")
-            cant_in   = col_b.number_input("Cantidad que lleva", min_value=1, max_value=50, value=1, step=1, key="cant_in")
+            max_in_f  = max(1, get_stock(sabor_in))
+            cant_in   = col_b.number_input("Cantidad que lleva", min_value=1, max_value=max_in_f, value=1, step=1, key="cant_in")
 
             valor_out = fac["precios"].get(sabor_out, PRODUCTOS[sabor_out]) * cant_out
             valor_in  = fac["precios"].get(sabor_in,  PRODUCTOS[sabor_in])  * cant_in
