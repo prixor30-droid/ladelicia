@@ -1960,21 +1960,23 @@ elif st.session_state.vista == "materia_prima":
             st.session_state.ok_mp = False
 
     with tab_mp2:
-        st.markdown('<div class="section-label">Créditos pendientes con proveedores</div>', unsafe_allow_html=True)
+        SABORIZANTES_NAMES = {"BBQ", "Limón", "Sal", "Pollo", "Parrillada", "Chorizo Limón", "Mayonesa", "Queso", "Picante"}
+
         raw_pend_mp = sb_get("materia_prima", "select=*&estado=eq.pendiente&order=fecha.desc")
-        if not raw_pend_mp:
-            st.info("No hay créditos pendientes con proveedores.")
-        else:
-            total_deuda = sum(float(r["saldo"]) for r in raw_pend_mp)
-            st.markdown(
-                f'<div class="warn-box">💳 Total pendiente con proveedores: <b>{fmt(total_deuda)}</b></div>',
-                unsafe_allow_html=True
-            )
-            for r in raw_pend_mp:
+        pend_mp  = [r for r in raw_pend_mp if r["insumo"] not in SABORIZANTES_NAMES] if raw_pend_mp else []
+        pend_sab = [r for r in raw_pend_mp if r["insumo"] in SABORIZANTES_NAMES] if raw_pend_mp else []
+
+        def mostrar_creditos_mp(lista, icono):
+            if not lista:
+                st.info("No hay créditos pendientes.")
+                return
+            total = sum(float(r["saldo"]) for r in lista)
+            st.markdown(f'<div class="warn-box">💳 Total pendiente: <b>{fmt(total)}</b></div>', unsafe_allow_html=True)
+            for r in lista:
                 saldo_r = float(r["saldo"])
                 st.markdown(
                     f'<div class="factura-box">'
-                    f'<div class="factura-header">🌽 {r["insumo"]} · {r["proveedor"]}</div>'
+                    f'<div class="factura-header">{icono} {r["insumo"]} · {r["proveedor"]}</div>'
                     f'<div class="factura-row"><span>Fecha</span><span>{r["fecha"]}</span></div>'
                     f'<div class="factura-row"><span>Cantidad</span><span>{r["cantidad"]} {r["unidad"]}</span></div>'
                     f'<div class="factura-row"><span>Precio total</span><span>{fmt(r["precio_total"])}</span></div>'
@@ -1999,6 +2001,14 @@ elif st.session_state.vista == "materia_prima":
                     })
                     time.sleep(0.3)
                     st.rerun()
+
+        sub_c1, sub_c2 = st.tabs(["🌽 Materia Prima", "🧪 Saborizantes"])
+        with sub_c1:
+            st.markdown('<div class="section-label">Créditos pendientes — Materia Prima</div>', unsafe_allow_html=True)
+            mostrar_creditos_mp(pend_mp, "🌽")
+        with sub_c2:
+            st.markdown('<div class="section-label">Créditos pendientes — Saborizantes</div>', unsafe_allow_html=True)
+            mostrar_creditos_mp(pend_sab, "🧂")
 
     with tab_mp3:
         st.markdown('<div class="section-label">Historial de entradas</div>', unsafe_allow_html=True)
