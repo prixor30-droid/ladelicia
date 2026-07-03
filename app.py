@@ -678,6 +678,7 @@ defaults = {
     "ok_cargue": False,
     "ok_dev": False,
     "ok_mp":  False,
+    "insumo_sel": None,
     "ok_stock": False,
     "mostrar_calc": False,
 }
@@ -1809,46 +1810,68 @@ elif st.session_state.vista == "recibo":
         st.info("No se encontró la factura seleccionada.")
 
 elif st.session_state.vista == "materia_prima":
-    INSUMOS = ["Papa (bulto)", "Aceite (caneca)", "ACPM (caneca)", "Plátano (bolsa/caja)", "Salsa de tomate (caja)", "Chicharrón (bulto)", "Tocineta (bulto)"]
 
     st.markdown('<div class="section-label">Materia Prima e Insumos 🌽</div>', unsafe_allow_html=True)
     tab_mp1, tab_mp2, tab_mp3 = st.tabs(["➕ Registrar entrada", "💳 Créditos pendientes", "📋 Historial"])
 
     with tab_mp1:
-        st.markdown('<div class="section-label">Nueva entrada de insumo</div>', unsafe_allow_html=True)
-        insumo_mp  = st.selectbox("Insumo", INSUMOS, key="insumo_mp")
-        cant_mp    = st.number_input("Cantidad", min_value=1, max_value=500, value=1, step=1, key="cant_mp")
-        prov_mp    = st.text_input("Proveedor", placeholder="Ej: Distribuidora La 14", key="prov_mp")
-        precio_mp  = st.number_input("Precio total ($)", min_value=0, value=0, step=1000, key="precio_mp")
+        INSUMOS_INFO = [
+            ("Papa (bulto)",           "🥔", "bulto"),
+            ("Aceite (caneca)",        "🛢️", "caneca"),
+            ("ACPM (caneca)",          "⛽", "caneca"),
+            ("Plátano (bolsa/caja)",   "🍌", "caja"),
+            ("Salsa de tomate (caja)", "🍅", "caja"),
+            ("Chicharrón (bulto)",     "🥩", "bulto"),
+            ("Tocineta (bulto)",       "🥓", "bulto"),
+        ]
 
-        abono_mp = st.number_input("Abono inicial ($)", min_value=0, value=0, step=1000, key="abono_mp")
-        saldo_mp = max(0, precio_mp - abono_mp)
+        if not st.session_state.insumo_sel:
+            st.markdown('<div class="section-label">¿Qué insumo ingresó?</div>', unsafe_allow_html=True)
+            for nombre, icono, unidad in INSUMOS_INFO:
+                if st.button(f"{icono}  {nombre}", key=f"btn_ins_{nombre}", use_container_width=True):
+                    st.session_state.insumo_sel = (nombre, unidad)
+                    st.rerun()
+        else:
+            nombre_sel, unidad_sel = st.session_state.insumo_sel
+            st.markdown(f'<div class="section-label">Registrar entrada — {nombre_sel}</div>', unsafe_allow_html=True)
 
-        if precio_mp > 0:
-            if abono_mp >= precio_mp:
-                st.markdown(f'<div class="info-box">✅ Pago completo · Vuelto: <b>{fmt(abono_mp - precio_mp)}</b></div>', unsafe_allow_html=True)
-            elif abono_mp > 0:
-                st.markdown(f'<div class="warn-box">📋 Abono: <b>{fmt(abono_mp)}</b> · Queda debiendo: <b>{fmt(saldo_mp)}</b></div>', unsafe_allow_html=True)
-            else:
-                st.markdown(f'<div class="warn-box">📋 Fiado completo — debe: <b>{fmt(precio_mp)}</b></div>', unsafe_allow_html=True)
+            cant_mp   = st.number_input(f"Cantidad ({unidad_sel}s)", min_value=1, max_value=500, value=1, step=1, key="cant_mp")
+            prov_mp   = st.text_input("Proveedor", placeholder="Ej: Distribuidora La 14", key="prov_mp")
+            precio_mp = st.number_input("Precio total ($)", min_value=0, value=0, step=1000, key="precio_mp")
+            abono_mp  = st.number_input("Abono inicial ($)", min_value=0, value=0, step=1000, key="abono_mp")
+            saldo_mp  = max(0, precio_mp - abono_mp)
 
-        if st.button("✅ Registrar entrada", key="btn_mp"):
-            if not prov_mp.strip():
-                st.markdown('<div class="alert-low">⚠️ Escribe el nombre del proveedor.</div>', unsafe_allow_html=True)
-            elif precio_mp == 0:
-                st.markdown('<div class="alert-low">⚠️ Ingresa el precio total.</div>', unsafe_allow_html=True)
-            else:
-                estado_mp = "pagado" if saldo_mp == 0 else "pendiente"
-                sb_post("materia_prima", {
-                    "fecha": fecha_hoy(), "hora": ahora(),
-                    "insumo": insumo_mp, "cantidad": cant_mp,
-                    "unidad": insumo_mp.split("(")[-1].replace(")", "").strip(),
-                    "proveedor": prov_mp.strip(),
-                    "precio_total": precio_mp, "abono": abono_mp,
-                    "saldo": saldo_mp, "estado": estado_mp
-                })
-                st.session_state.ok_mp = True
-                time.sleep(0.3)
+            if precio_mp > 0:
+                if abono_mp >= precio_mp:
+                    st.markdown(f'<div class="info-box">✅ Pago completo · Vuelto: <b>{fmt(abono_mp - precio_mp)}</b></div>', unsafe_allow_html=True)
+                elif abono_mp > 0:
+                    st.markdown(f'<div class="warn-box">📋 Abono: <b>{fmt(abono_mp)}</b> · Queda debiendo: <b>{fmt(saldo_mp)}</b></div>', unsafe_allow_html=True)
+                else:
+                    st.markdown(f'<div class="warn-box">📋 Fiado completo — debe: <b>{fmt(precio_mp)}</b></div>', unsafe_allow_html=True)
+
+            col_reg1, col_reg2 = st.columns(2)
+            if col_reg1.button("✅ Registrar entrada", key="btn_mp"):
+                if not prov_mp.strip():
+                    st.markdown('<div class="alert-low">⚠️ Escribe el nombre del proveedor.</div>', unsafe_allow_html=True)
+                elif precio_mp == 0:
+                    st.markdown('<div class="alert-low">⚠️ Ingresa el precio total.</div>', unsafe_allow_html=True)
+                else:
+                    estado_mp = "pagado" if saldo_mp == 0 else "pendiente"
+                    sb_post("materia_prima", {
+                        "fecha": fecha_hoy(), "hora": ahora(),
+                        "insumo": nombre_sel, "cantidad": cant_mp,
+                        "unidad": unidad_sel,
+                        "proveedor": prov_mp.strip(),
+                        "precio_total": precio_mp, "abono": abono_mp,
+                        "saldo": saldo_mp, "estado": estado_mp
+                    })
+                    st.session_state.ok_mp = True
+                    st.session_state.insumo_sel = None
+                    time.sleep(0.3)
+                    st.rerun()
+
+            if col_reg2.button("← Cambiar insumo", key="btn_cambiar_ins"):
+                st.session_state.insumo_sel = None
                 st.rerun()
 
         if st.session_state.get("ok_mp"):
