@@ -1935,21 +1935,12 @@ elif st.session_state.vista == "materia_prima":
             nombre_sel, unidad_sel, cat_sel = st.session_state.insumo_sel
             con_credito = cat_sel != "emp"
             st.markdown(f'<div class="section-label">Entrada — {nombre_sel}</div>', unsafe_allow_html=True)
-            cant_mp   = st.number_input(f"Cantidad ({unidad_sel})", min_value=0.1, max_value=9999.0, value=1.0, step=0.5, key="cant_mp")
-            prov_mp   = st.text_input("Proveedor", placeholder="Ej: Distribuidora La 14", key="prov_mp")
-            precio_mp = st.number_input("Precio total ($)", min_value=0, value=0, step=1000, key="precio_mp")
-            # Precio unitario — se calcula automático pero se puede editar
-            precio_unit_sugerido = round(precio_mp / cant_mp) if cant_mp > 0 and precio_mp > 0 else 0
-            precio_unit_mp = st.number_input(
-                f"Precio unitario ($ por {unidad_sel})",
-                min_value=0, value=precio_unit_sugerido, step=100, key="precio_unit_mp"
-            )
-            if precio_unit_mp > 0 and cant_mp > 0:
-                total_calc = precio_unit_mp * cant_mp
-                if abs(total_calc - precio_mp) > 1:
-                    st.markdown(f'<div class="warn-box">⚠️ {cant_mp} × {fmt(precio_unit_mp)} = <b>{fmt(total_calc)}</b> (difiere del precio total ingresado)</div>', unsafe_allow_html=True)
-                else:
-                    st.markdown(f'<div class="info-box">✅ {cant_mp} × {fmt(precio_unit_mp)} = <b>{fmt(total_calc)}</b></div>', unsafe_allow_html=True)
+            cant_mp        = st.number_input(f"Cantidad ({unidad_sel})", min_value=0.1, max_value=9999.0, value=1.0, step=0.5, key="cant_mp")
+            prov_mp        = st.text_input("Proveedor", placeholder="Ej: Distribuidora La 14", key="prov_mp")
+            precio_unit_mp = st.number_input(f"Precio unitario ($ por {unidad_sel})", min_value=0, value=0, step=1000, key="precio_unit_mp")
+            precio_mp      = round(precio_unit_mp * cant_mp)
+            if precio_mp > 0:
+                st.markdown(f'<div class="info-box">💰 {cant_mp} × {fmt(precio_unit_mp)} = <b>{fmt(precio_mp)}</b> total</div>', unsafe_allow_html=True)
             if con_credito:
                 abono_mp = st.number_input("Abono inicial ($)", min_value=0, max_value=max(0, precio_mp), value=0, step=1000, key="abono_mp")
                 saldo_mp = max(0, precio_mp - abono_mp)
