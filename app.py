@@ -677,6 +677,7 @@ defaults = {
     "ok_prod": False,
     "ok_cargue": False,
     "ok_dev": False,
+    "ok_mp":  False,
     "ok_stock": False,
     "mostrar_calc": False,
 }
@@ -829,9 +830,10 @@ def mostrar_calculadora():
 # ══════════════════════════════════════════════════════════════════════════════
 if st.session_state.vista == "menu":
     opciones = [
-        ("produccion", "📦", "Producción", "Registrar bolsas fabricadas"),
-        ("carro",      "🚗", "Edison & Javier", "Cargues y ventas del carro"),
-        ("fabrica",    "🏭", "Fábrica", "Ventas de Sofía y Andrea"),
+        ("produccion",    "📦", "Producción",      "Registrar bolsas fabricadas"),
+        ("carro",         "🚗", "Edison & Javier", "Cargues y ventas del carro"),
+        ("fabrica",       "🏭", "Fábrica",          "Ventas de Sofía y Andrea"),
+        ("materia_prima", "🌽", "Materia Prima",    "Insumos y proveedores"),
     ]
     if st.session_state.es_admin:
         opciones.append(("resumen", "📊", "Resumen", "Ventas, facturas y exportar"))
@@ -1805,6 +1807,123 @@ elif st.session_state.vista == "recibo":
         st.markdown(render_recibo(registros_recibo), unsafe_allow_html=True)
     else:
         st.info("No se encontró la factura seleccionada.")
+
+elif st.session_state.vista == "materia_prima":
+    INSUMOS = ["Papa (bulto)", "Aceite (caneca)", "ACPM (caneca)", "Plátano (bolsa/caja)", "Salsa de tomate (caja)", "Chicharrón (bulto)", "Tocineta (bulto)"]
+
+    st.markdown('<div class="section-label">Materia Prima e Insumos 🌽</div>', unsafe_allow_html=True)
+    tab_mp1, tab_mp2, tab_mp3 = st.tabs(["➕ Registrar entrada", "💳 Créditos pendientes", "📋 Historial"])
+
+    with tab_mp1:
+        st.markdown('<div class="section-label">Nueva entrada de insumo</div>', unsafe_allow_html=True)
+        insumo_mp  = st.selectbox("Insumo", INSUMOS, key="insumo_mp")
+        cant_mp    = st.number_input("Cantidad", min_value=1, max_value=500, value=1, step=1, key="cant_mp")
+        prov_mp    = st.text_input("Proveedor", placeholder="Ej: Distribuidora La 14", key="prov_mp")
+        precio_mp  = st.number_input("Precio total ($)", min_value=0, value=0, step=1000, key="precio_mp")
+
+        abono_mp = st.number_input("Abono inicial ($)", min_value=0, value=0, step=1000, key="abono_mp")
+        saldo_mp = max(0, precio_mp - abono_mp)
+
+        if precio_mp > 0:
+            if abono_mp >= precio_mp:
+                st.markdown(f'<div class="info-box">✅ Pago completo · Vuelto: <b>{fmt(abono_mp - precio_mp)}</b></div>', unsafe_allow_html=True)
+            elif abono_mp > 0:
+                st.markdown(f'<div class="warn-box">📋 Abono: <b>{fmt(abono_mp)}</b> · Queda debiendo: <b>{fmt(saldo_mp)}</b></div>', unsafe_allow_html=True)
+            else:
+                st.markdown(f'<div class="warn-box">📋 Fiado completo — debe: <b>{fmt(precio_mp)}</b></div>', unsafe_allow_html=True)
+
+        if st.button("✅ Registrar entrada", key="btn_mp"):
+            if not prov_mp.strip():
+                st.markdown('<div class="alert-low">⚠️ Escribe el nombre del proveedor.</div>', unsafe_allow_html=True)
+            elif precio_mp == 0:
+                st.markdown('<div class="alert-low">⚠️ Ingresa el precio total.</div>', unsafe_allow_html=True)
+            else:
+                estado_mp = "pagado" if saldo_mp == 0 else "pendiente"
+                sb_post("materia_prima", {
+                    "fecha": fecha_hoy(), "hora": ahora(),
+                    "insumo": insumo_mp, "cantidad": cant_mp,
+                    "unidad": insumo_mp.split("(")[-1].replace(")", "").strip(),
+                    "proveedor": prov_mp.strip(),
+                    "precio_total": precio_mp, "abono": abono_mp,
+                    "saldo": saldo_mp, "estado": estado_mp
+                })
+                st.session_state.ok_mp = True
+                time.sleep(0.3)
+                st.rerun()
+
+        if st.session_state.get("ok_mp"):
+            st.markdown('<div class="success-toast">✅ Entrada registrada correctamente.</div>', unsafe_allow_html=True)
+            st.session_state.ok_mp = False
+
+    with tab_mp2:
+        st.markdown('<div class="section-label">Créditos pendientes con proveedores</div>', unsafe_allow_html=True)
+        raw_pend_mp = sb_get("materia_prima", "select=*&estado=eq.pendiente&order=fecha.desc")
+        if not raw_pend_mp:
+            st.info("No hay créditos pendientes con proveedores.")
+        else:
+            total_deuda = sum(float(r["saldo"]) for r in raw_pend_mp)
+            st.markdown(
+                f'<div class="warn-box">💳 Total pendiente con proveedores: <b>{fmt(total_deuda)}</b></div>',
+                unsafe_allow_html=True
+            )
+            for r in raw_pend_mp:
+                saldo_r = float(r["saldo"])
+                st.markdown(
+                    f'<div class="factura-box">'
+                    f'<div class="factura-header">🌽 {r["insumo"]} · {r["proveedor"]}</div>'
+                    f'<div class="factura-row"><span>Fecha</span><span>{r["fecha"]}</span></div>'
+                    f'<div class="factura-row"><span>Cantidad</span><span>{r["cantidad"]} {r["unidad"]}</span></div>'
+                    f'<div class="factura-row"><span>Precio total</span><span>{fmt(r["precio_total"])}</span></div>'
+                    f'<div class="factura-row"><span>Ya abonado</span><span>{fmt(r["abono"])}</span></div>'
+                    f'<div class="factura-total"><span>Saldo pendiente</span><span>{fmt(saldo_r)}</span></div>'
+                    f'</div>',
+                    unsafe_allow_html=True
+                )
+                col_a, col_b = st.columns([3, 1])
+                nuevo_abono_mp = col_a.number_input(
+                    "Abono ($)", min_value=0, max_value=int(saldo_r),
+                    value=int(saldo_r), step=1000, key=f"abono_pend_mp_{r['id']}"
+                )
+                if col_b.button("✅ Pagar", key=f"btn_pagar_mp_{r['id']}"):
+                    nuevo_saldo = max(0, saldo_r - nuevo_abono_mp)
+                    nuevo_total_abono = float(r["abono"]) + nuevo_abono_mp
+                    nuevo_estado = "pagado" if nuevo_saldo == 0 else "pendiente"
+                    sb_patch("materia_prima", f"id=eq.{r['id']}", {
+                        "abono": nuevo_total_abono,
+                        "saldo": nuevo_saldo,
+                        "estado": nuevo_estado
+                    })
+                    time.sleep(0.3)
+                    st.rerun()
+
+    with tab_mp3:
+        st.markdown('<div class="section-label">Historial de entradas</div>', unsafe_allow_html=True)
+        col_f1, col_f2 = st.columns(2)
+        f_ini_mp = col_f1.date_input("Desde", value=datetime.now(COL_TZ).date().replace(day=1), key="f_ini_mp")
+        f_fin_mp = col_f2.date_input("Hasta", value=datetime.now(COL_TZ).date(), key="f_fin_mp")
+        raw_hist_mp = sb_get("materia_prima", f"select=*&fecha=gte.{f_ini_mp}&fecha=lte.{f_fin_mp}&order=fecha.desc")
+        if not raw_hist_mp:
+            st.info("No hay registros en ese período.")
+        else:
+            total_compras = sum(float(r["precio_total"]) for r in raw_hist_mp)
+            total_pagado  = sum(float(r["abono"]) for r in raw_hist_mp)
+            total_saldo   = sum(float(r["saldo"]) for r in raw_hist_mp)
+            st.markdown(
+                f'<div class="factura-box">'
+                f'<div class="factura-row"><span>Total compras</span><span><b>{fmt(total_compras)}</b></span></div>'
+                f'<div class="factura-row"><span>Total pagado</span><span><b>{fmt(total_pagado)}</b></span></div>'
+                f'<div class="factura-total"><span>Total pendiente</span><span>{fmt(total_saldo)}</span></div>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
+            df_mp = pd.DataFrame(raw_hist_mp)
+            df_mp["Estado"] = df_mp["estado"].apply(lambda x: "✅ Pagado" if x == "pagado" else "📋 Pendiente")
+            df_show = df_mp[["fecha","insumo","cantidad","unidad","proveedor","precio_total","abono","saldo","Estado"]].copy()
+            df_show.columns = ["Fecha","Insumo","Cantidad","Unidad","Proveedor","Total","Abonado","Saldo","Estado"]
+            df_show["Total"]   = df_show["Total"].apply(fmt)
+            df_show["Abonado"] = df_show["Abonado"].apply(fmt)
+            df_show["Saldo"]   = df_show["Saldo"].apply(fmt)
+            st.dataframe(df_show, use_container_width=True, hide_index=True)
 
 elif st.session_state.vista == "resumen" and st.session_state.es_admin:
     sub_r1, sub_r2, sub_r3, sub_r4 = st.tabs(["Hoy", "Por fechas", "📅 Mes", "💾 Exportar"])
