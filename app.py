@@ -1938,7 +1938,7 @@ elif st.session_state.vista == "materia_prima":
             prov_mp   = st.text_input("Proveedor", placeholder="Ej: Distribuidora La 14", key="prov_mp")
             precio_mp = st.number_input("Precio total ($)", min_value=0, value=0, step=1000, key="precio_mp")
             if con_credito:
-                abono_mp = st.number_input("Abono inicial ($)", min_value=0, value=0, step=1000, key="abono_mp")
+                abono_mp = st.number_input("Abono inicial ($)", min_value=0, max_value=max(0, precio_mp), value=0, step=1000, key="abono_mp")
                 saldo_mp = max(0, precio_mp - abono_mp)
                 if precio_mp > 0:
                     if abono_mp >= precio_mp:
@@ -1980,9 +1980,26 @@ elif st.session_state.vista == "materia_prima":
             cat_key = "emp"
         insumo_sal = st.selectbox("Insumo", opciones_sal, key="insumo_sal")
         unidad_sal = unidades_sal[insumo_sal]
-        cant_sal   = st.number_input(f"Cantidad ({unidad_sal})", min_value=0.1, max_value=9999.0, value=1.0, step=0.5, key="cant_sal")
+
+        # Calcular stock disponible de ese insumo
+        raw_ent_sal = sb_get("materia_prima", f"select=cantidad&insumo=eq.{requests.utils.quote(insumo_sal)}") or []
+        raw_sal_sal = sb_get("salidas_mp",    f"select=cantidad&insumo=eq.{requests.utils.quote(insumo_sal)}") or []
+        total_ent_sal = sum(float(r["cantidad"]) for r in raw_ent_sal)
+        total_sal_sal = sum(float(r["cantidad"]) for r in raw_sal_sal)
+        stock_disp_sal = max(0, total_ent_sal - total_sal_sal)
+
+        if stock_disp_sal == 0:
+            st.markdown(f'<div class="alert-low">🔴 No hay stock disponible de <b>{insumo_sal}</b>. Registra una entrada primero.</div>', unsafe_allow_html=True)
+        else:
+            st.markdown(f'<div class="info-box">📦 Stock disponible de <b>{insumo_sal}</b>: <b>{stock_disp_sal:.1f} {unidad_sal}</b></div>', unsafe_allow_html=True)
+
+        cant_sal = st.number_input(f"Cantidad ({unidad_sal})", min_value=0.1,
+                                    max_value=max(0.1, stock_disp_sal),
+                                    value=min(1.0, max(0.1, stock_disp_sal)),
+                                    step=0.5, key="cant_sal")
         motivo_sal = st.text_input("Motivo", value="Producción", key="motivo_sal")
-        if st.button("📤 Registrar salida", key="btn_sal"):
+
+        if st.button("📤 Registrar salida", key="btn_sal", disabled=(stock_disp_sal == 0)):
             h = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}",
                  "Content-Type": "application/json", "Prefer": "return=minimal"}
             data_sal = {"fecha": fecha_hoy(), "hora": ahora(), "insumo": insumo_sal,
