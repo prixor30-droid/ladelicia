@@ -1806,6 +1806,35 @@ elif st.session_state.vista == "recibo":
     registros_recibo = st.session_state.get("recibo_canal_df", [])
     if registros_recibo:
         st.markdown(render_recibo(registros_recibo), unsafe_allow_html=True)
+
+        # Botón imprimir
+        components.html("""
+        <div style="text-align:center;margin-top:12px;">
+            <button onclick="window.print()" style="
+                background:#1565C0;color:white;border:none;
+                border-radius:12px;padding:14px 32px;
+                font-size:1rem;font-weight:700;cursor:pointer;
+                box-shadow:0 4px 12px rgba(21,101,192,0.3);
+            ">🖨️ Imprimir recibo</button>
+        </div>
+        <style>
+        @media print {
+            /* Ocultar todo excepto el recibo */
+            body > * { display: none !important; }
+            .recibo-wrap { display: flex !important; }
+            .recibo-ticket {
+                width: 80mm !important;
+                margin: 0 auto !important;
+                box-shadow: none !important;
+                font-size: 12px !important;
+            }
+            /* Ocultar botones de Streamlit */
+            .stButton, .stApp header, footer, [data-testid="stToolbar"] {
+                display: none !important;
+            }
+        }
+        </style>
+        """, height=80)
     else:
         st.info("No se encontró la factura seleccionada.")
 
