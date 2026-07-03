@@ -1271,10 +1271,21 @@ elif st.session_state.vista == "carro":
 
             with tab_cambio_vc:
                 col_a, col_b = st.columns(2)
-                sabor_out_vc = col_a.selectbox("Devuelve", SABORES_LISTA, key="cambio_out_vc")
-                cant_out_vc  = col_a.number_input("Cantidad que devuelve", min_value=1, max_value=50, value=1, step=1, key="cant_out_vc")
-                sabor_in_vc  = col_b.selectbox("Lleva en cambio", SABORES_LISTA, key="cambio_in_vc")
-                cant_in_vc   = col_b.number_input("Cantidad que lleva", min_value=1, max_value=50, value=1, step=1, key="cant_in_vc")
+
+                # Devuelve: solo sabores que están en la factura actual
+                sabores_en_factura = list(fac_vc["items"].keys())
+                sabor_out_vc = col_a.selectbox("Devuelve", sabores_en_factura, key="cambio_out_vc")
+                max_out = fac_vc["items"].get(sabor_out_vc, 1)
+                cant_out_vc = col_a.number_input("Cantidad que devuelve", min_value=1, max_value=max_out, value=1, step=1, key="cant_out_vc")
+
+                # Lleva en cambio: solo sabores disponibles en el carro
+                # Al devolver, ese sabor vuelve al carro — sumarlo temporalmente
+                stock_carro_cambio = dict(stock_carro)
+                stock_carro_cambio[sabor_out_vc] = stock_carro_cambio.get(sabor_out_vc, 0) + cant_out_vc
+                sabores_disp_cambio = [s for s, v in stock_carro_cambio.items() if v > 0]
+                sabor_in_vc = col_b.selectbox("Lleva en cambio", sabores_disp_cambio, key="cambio_in_vc")
+                max_in = int(stock_carro_cambio.get(sabor_in_vc, 1))
+                cant_in_vc = col_b.number_input("Cantidad que lleva", min_value=1, max_value=max_in, value=1, step=1, key="cant_in_vc")
 
                 valor_out_vc = fac_vc["precios"].get(sabor_out_vc, PRODUCTOS[sabor_out_vc]) * cant_out_vc
                 valor_in_vc  = fac_vc["precios"].get(sabor_in_vc,  PRODUCTOS[sabor_in_vc])  * cant_in_vc
@@ -1291,15 +1302,27 @@ elif st.session_state.vista == "carro":
                         "fecha": fecha_hoy(), "hora": ahora(), "canal": "Cambio",
                         "vendedor": fac_vc["vendedor"], "sabor": sabor_out_vc,
                         "cantidad": -cant_out_vc, "total": -valor_out_vc,
-                        "cliente": fac_vc["cliente"], "factura_id": fac_vc["id"]
+                        "cliente": fac_vc["cliente"], "factura_id": fac_vc["id"],
+                        "abono": 0, "saldo": 0
                     })
-                    # Carro: NO tocar inventario general, el stock ya se descontó en el cargue
                     sb_post("ventas", {
                         "fecha": fecha_hoy(), "hora": ahora(), "canal": "Cambio",
                         "vendedor": fac_vc["vendedor"], "sabor": sabor_in_vc,
                         "cantidad": cant_in_vc, "total": valor_in_vc,
-                        "cliente": fac_vc["cliente"], "factura_id": fac_vc["id"]
+                        "cliente": fac_vc["cliente"], "factura_id": fac_vc["id"],
+                        "abono": 0, "saldo": 0
                     })
+                    # Actualizar saldo de la factura si hay diferencia
+                    if dif_vc > 0:
+                        raw_saldo = sb_get("ventas", f"select=saldo&factura_id=eq.{fac_vc['id']}&canal=eq.Carro&limit=1")
+                        saldo_actual = float(raw_saldo[0]["saldo"]) if raw_saldo else 0
+                        nuevo_saldo = saldo_actual + dif_vc
+                        sb_patch("ventas", f"factura_id=eq.{fac_vc['id']}&canal=eq.Carro", {"saldo": nuevo_saldo})
+                    elif dif_vc < 0:
+                        raw_saldo = sb_get("ventas", f"select=saldo&factura_id=eq.{fac_vc['id']}&canal=eq.Carro&limit=1")
+                        saldo_actual = float(raw_saldo[0]["saldo"]) if raw_saldo else 0
+                        nuevo_saldo = max(0, saldo_actual + dif_vc)
+                        sb_patch("ventas", f"factura_id=eq.{fac_vc['id']}&canal=eq.Carro", {"saldo": nuevo_saldo})
                     time.sleep(0.3)
                     todos_vc = sb_get("ventas", f"select=*&factura_id=eq.{fac_vc['id']}")
                     st.session_state.recibo_canal_df = todos_vc or []
@@ -1307,22 +1330,33 @@ elif st.session_state.vista == "carro":
                     st.rerun()
 
             with tab_agregar_vc:
-                sabor_add_vc = st.selectbox("Sabor a agregar", SABORES_LISTA, key="add_sabor_vc")
-                cant_add_vc  = st.number_input("Cantidad", min_value=1, max_value=50, value=1, step=1, key="add_cant_vc")
-                precio_add_vc = fac_vc["precios"].get(sabor_add_vc, PRODUCTOS[sabor_add_vc]) * cant_add_vc
-                st.markdown(f'<div class="info-box">💰 A cobrar adicionalmente: <b>{fmt(precio_add_vc)}</b></div>', unsafe_allow_html=True)
+                # Solo mostrar sabores disponibles en el carro
+                sabores_disponibles_vc = [s for s, v in stock_carro.items() if v > 0]
+                if not sabores_disponibles_vc:
+                    st.markdown('<div class="warn-box">⚠️ No hay papas disponibles en el carro para agregar.</div>', unsafe_allow_html=True)
+                else:
+                    sabor_add_vc = st.selectbox("Sabor a agregar", sabores_disponibles_vc, key="add_sabor_vc")
+                    disp_add_vc = int(stock_carro.get(sabor_add_vc, 0))
+                    cant_add_vc = st.number_input("Cantidad", min_value=1, max_value=disp_add_vc, value=1, step=1, key="add_cant_vc")
+                    precio_add_vc = fac_vc["precios"].get(sabor_add_vc, PRODUCTOS[sabor_add_vc]) * cant_add_vc
+                    st.markdown(f'<div class="info-box">📦 Disponible: <b>{disp_add_vc}</b> · 💰 A cobrar: <b>{fmt(precio_add_vc)}</b></div>', unsafe_allow_html=True)
 
-                if st.button("➕ Agregar a la factura", key="btn_add_vc"):
-                    sb_post("ventas", {
-                        "fecha": fecha_hoy(), "hora": ahora(), "canal": "Cambio",
-                        "vendedor": fac_vc["vendedor"], "sabor": sabor_add_vc,
-                        "cantidad": cant_add_vc, "total": precio_add_vc,
-                        "cliente": fac_vc["cliente"], "factura_id": fac_vc["id"]
-                    })
-                    # Carro: NO tocar inventario general
-                    time.sleep(0.3)
-                    _recargar_factura_vc(fac_vc)
-                    st.rerun()
+                    if st.button("➕ Agregar a la factura", key="btn_add_vc"):
+                        sb_post("ventas", {
+                            "fecha": fecha_hoy(), "hora": ahora(), "canal": "Cambio",
+                            "vendedor": fac_vc["vendedor"], "sabor": sabor_add_vc,
+                            "cantidad": cant_add_vc, "total": precio_add_vc,
+                            "cliente": fac_vc["cliente"], "factura_id": fac_vc["id"],
+                            "abono": 0, "saldo": 0
+                        })
+                        # Actualizar saldo — el cliente debe más
+                        raw_saldo = sb_get("ventas", f"select=saldo&factura_id=eq.{fac_vc['id']}&canal=eq.Carro&limit=1")
+                        saldo_actual = float(raw_saldo[0]["saldo"]) if raw_saldo else 0
+                        nuevo_saldo = saldo_actual + precio_add_vc
+                        sb_patch("ventas", f"factura_id=eq.{fac_vc['id']}&canal=eq.Carro", {"saldo": nuevo_saldo})
+                        time.sleep(0.3)
+                        _recargar_factura_vc(fac_vc)
+                        st.rerun()
 
             if st.button("🧾 Nueva venta", key="btn_nueva_vc"):
                 st.session_state.factura_carro_guardada = None
@@ -1578,12 +1612,23 @@ elif st.session_state.vista == "fabrica":
                 sb_post("ventas", {"fecha": fecha_hoy(), "hora": ahora(), "canal": "Cambio",
                     "vendedor": fac["vendedor"], "sabor": sabor_out,
                     "cantidad": -cant_out, "total": -valor_out,
-                    "cliente": fac["cliente"], "factura_id": fac["id"]})
+                    "cliente": fac["cliente"], "factura_id": fac["id"],
+                    "abono": 0, "saldo": 0})
                 agregar_stock(sabor_out, cant_out)
                 sb_post("ventas", {"fecha": fecha_hoy(), "hora": ahora(), "canal": "Cambio",
                     "vendedor": fac["vendedor"], "sabor": sabor_in,
                     "cantidad": cant_in, "total": valor_in,
-                    "cliente": fac["cliente"], "factura_id": fac["id"]})
+                    "cliente": fac["cliente"], "factura_id": fac["id"],
+                    "abono": 0, "saldo": 0})
+                restar_stock(sabor_in, cant_in)
+                if diferencia != 0:
+                    raw_saldo_f = sb_get("ventas", f"select=saldo&factura_id=eq.{fac['id']}&canal=eq.Fábrica&limit=1")
+                    saldo_act_f = float(raw_saldo_f[0]["saldo"]) if raw_saldo_f else 0
+                    nuevo_saldo_f = max(0, saldo_act_f + diferencia)
+                    sb_patch("ventas", f"factura_id=eq.{fac['id']}&canal=eq.Fábrica", {"saldo": nuevo_saldo_f})
+                time.sleep(0.3)
+                _recargar_factura_f(fac)
+                st.rerun()
                 restar_stock(sabor_in, cant_in)
                 time.sleep(0.3)
                 _recargar_factura_f(fac)
@@ -1599,10 +1644,17 @@ elif st.session_state.vista == "fabrica":
                 sb_post("ventas", {"fecha": fecha_hoy(), "hora": ahora(), "canal": "Cambio",
                     "vendedor": fac["vendedor"], "sabor": sabor_add_f,
                     "cantidad": cant_add_f, "total": precio_add_f,
-                    "cliente": fac["cliente"], "factura_id": fac["id"]})
+                    "cliente": fac["cliente"], "factura_id": fac["id"],
+                    "abono": 0, "saldo": 0})
                 restar_stock(sabor_add_f, cant_add_f)
+                # Actualizar saldo — el cliente debe más
+                raw_saldo_f2 = sb_get("ventas", f"select=saldo&factura_id=eq.{fac['id']}&canal=eq.Fábrica&limit=1")
+                saldo_act_f2 = float(raw_saldo_f2[0]["saldo"]) if raw_saldo_f2 else 0
+                nuevo_saldo_f2 = saldo_act_f2 + precio_add_f
+                sb_patch("ventas", f"factura_id=eq.{fac['id']}&canal=eq.Fábrica", {"saldo": nuevo_saldo_f2})
                 time.sleep(0.3)
                 _recargar_factura_f(fac)
+                st.rerun()
                 st.rerun()
 
         if st.button("🧾 Nueva venta", key="btn_nueva"):
