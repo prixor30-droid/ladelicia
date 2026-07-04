@@ -2005,32 +2005,37 @@ elif st.session_state.vista == "materia_prima":
                 primer_dia = datetime.now(COL_TZ).date().replace(day=1)
                 hoy = datetime.now(COL_TZ).date()
                 raw_mes = sb_get("materia_prima",
-                    f"select=fecha,insumo,cantidad&fecha=gte.{primer_dia}&fecha=lte.{hoy}&order=fecha.asc") or []
+                    f"select=fecha,insumo,cantidad,precio_unitario&fecha=gte.{primer_dia}&fecha=lte.{hoy}&order=fecha.asc") or []
                 raw_mes = [r for r in raw_mes if r["insumo"] in insumos_lista]
 
                 if raw_mes:
                     st.markdown(f'<div class="section-label">{titulo_tabla}</div>', unsafe_allow_html=True)
                     fechas_mes = sorted(set(r["fecha"] for r in raw_mes))
                     matriz = {}
+                    precios_fecha = {}
                     for r in raw_mes:
                         k = (r["fecha"], r["insumo"])
                         matriz[k] = matriz.get(k, 0) + float(r["cantidad"])
+                        # Guardar precio unitario por fecha (último registrado ese día)
+                        if r.get("precio_unitario", 0) and float(r.get("precio_unitario", 0)) > 0:
+                            precios_fecha[r["fecha"]] = float(r["precio_unitario"])
 
-                    fila_total = {"Fecha": "📊 TOTAL"}
+                    fila_total = {"Fecha": "📊 TOTAL", "Precio unitario": ""}
                     for ins in insumos_lista:
                         total_ins = sum(matriz.get((f, ins), 0) for f in fechas_mes)
                         fila_total[ins] = total_ins if total_ins > 0 else ""
 
                     filas_df = [fila_total]
                     for f in fechas_mes:
-                        fila = {"Fecha": f}
+                        fila = {"Fecha": f, "Precio unitario": precios_fecha.get(f, "")}
                         for ins in insumos_lista:
                             val = matriz.get((f, ins), 0)
                             fila[ins] = val if val > 0 else ""
                         filas_df.append(fila)
 
                     df_matriz = pd.DataFrame(filas_df).set_index("Fecha")
-                    col_config_tab = {ins: st.column_config.NumberColumn(ins, min_value=0, step=1) for ins in insumos_lista}
+                    col_config_tab = {"Precio unitario": st.column_config.NumberColumn("Precio unitario ($)", disabled=True)}
+                    col_config_tab.update({ins: st.column_config.NumberColumn(ins, min_value=0, step=1) for ins in insumos_lista})
                     st.data_editor(df_matriz, use_container_width=True, column_config=col_config_tab, key=f"matriz_{cat_actual}")
 
         else:
@@ -2186,38 +2191,36 @@ elif st.session_state.vista == "materia_prima":
             if not data and not raw_ent_cat and not raw_sal_cat: return
             st.markdown(f'<div class="section-label">{icono} {titulo}</div>', unsafe_allow_html=True)
             if data:
-                # Precio unitario promedio ponderado y gasto total real por insumo
-                gasto_real = {}
-                precio_unit_pond = {}
+                # Promedio ponderado por insumo: suma(cant*precio_unit) / suma(cant)
+                prom_pond = {}
                 for r in raw_ent_cat:
                     k = r["insumo"]
                     pu = float(r.get("precio_unitario", 0))
-                    pt = float(r.get("precio_total", 0))
                     cant = float(r.get("cantidad", 0))
-                    if k not in gasto_real:
-                        gasto_real[k] = 0
-                        precio_unit_pond[k] = {"total_costo": 0, "total_cant": 0}
-                    gasto_real[k] += pt
                     if pu > 0 and cant > 0:
-                        precio_unit_pond[k]["total_costo"] += pu * cant
-                        precio_unit_pond[k]["total_cant"]  += cant
+                        if k not in prom_pond:
+                            prom_pond[k] = {"total_costo": 0, "total_cant": 0}
+                        prom_pond[k]["total_costo"] += pu * cant
+                        prom_pond[k]["total_cant"]  += cant
 
                 filas_res = []
                 for k, v in data.items():
-                    d = precio_unit_pond.get(k, {"total_costo": 0, "total_cant": 0})
-                    pu = round(d["total_costo"] / d["total_cant"]) if d["total_cant"] > 0 else 0
-                    costo_consumido = round(v["salidas"] * pu) if pu > 0 else 0
-                    gasto = gasto_real.get(k, v["gasto"])
+                    d = prom_pond.get(k, {"total_costo": 0, "total_cant": 0})
+                    pu_prom = round(d["total_costo"] / d["total_cant"]) if d["total_cant"] > 0 else 0
+                    costo_consumido = round(v["salidas"] * pu_prom) if pu_prom > 0 else 0
+                    stock_val = round((v["entradas"] - v["salidas"]) * pu_prom) if pu_prom > 0 else 0
                     filas_res.append({
                         "Insumo": k,
                         "Entradas": v["entradas"],
                         "Salidas": v["salidas"],
                         "Stock": round(v["entradas"]-v["salidas"], 1),
-                        "Precio unitario": fmt(pu) if pu > 0 else "—",
+                        "Precio prom. pond.": fmt(pu_prom) if pu_prom > 0 else "—",
                         "Costo consumido": fmt(costo_consumido) if costo_consumido > 0 else "—",
-                        "Inventario total": fmt(round((v["entradas"]-v["salidas"]) * pu)) if pu > 0 else "—",
+                        "Inventario total": fmt(stock_val) if stock_val > 0 else "—",
                     })
                 st.dataframe(pd.DataFrame(filas_res), use_container_width=True, hide_index=True)
+                # Nota explicativa
+                st.caption("💡 Precio promedio ponderado: promedio de todos los lotes del período, ponderado por cantidad ingresada.")
             else:
                 st.info("No hay registros en este período.")
 
