@@ -1979,6 +1979,36 @@ elif st.session_state.vista == "materia_prima":
             if st.button("📦  Empaque\nBolsas y fundas en kg", key="btn_cat_emp", use_container_width=True):
                 st.session_state.categoria_mp = "emp"; st.rerun()
 
+            # Tabla matricial: días del mes × insumos
+            primer_dia = datetime.now(COL_TZ).date().replace(day=1)
+            hoy = datetime.now(COL_TZ).date()
+            raw_mes = sb_get("materia_prima",
+                f"select=fecha,insumo,cantidad&fecha=gte.{primer_dia}&fecha=lte.{hoy}&order=fecha.asc") or []
+
+            if raw_mes:
+                st.markdown('<div class="section-label">Entradas del mes</div>', unsafe_allow_html=True)
+                # Construir matriz
+                insumos_mes = sorted(set(r["insumo"] for r in raw_mes))
+                fechas_mes  = sorted(set(r["fecha"] for r in raw_mes))
+
+                # Agrupar cantidades por fecha e insumo
+                matriz = {}
+                for r in raw_mes:
+                    k = (r["fecha"], r["insumo"])
+                    matriz[k] = matriz.get(k, 0) + float(r["cantidad"])
+
+                # Construir dataframe
+                filas_df = []
+                for f in fechas_mes:
+                    fila = {"Fecha": f}
+                    for ins in insumos_mes:
+                        val = matriz.get((f, ins), 0)
+                        fila[ins] = val if val > 0 else ""
+                    filas_df.append(fila)
+
+                df_matriz = pd.DataFrame(filas_df).set_index("Fecha")
+                st.dataframe(df_matriz, use_container_width=True)
+
         elif not st.session_state.insumo_sel:
             cats = {"mp": INSUMOS_INFO, "sab": SABORIZANTES_INFO, "emp": EMPAQUES_INFO}
             labels = {"mp": "Materia Prima", "sab": "Saborizantes", "emp": "Empaque"}
@@ -2020,31 +2050,6 @@ elif st.session_state.vista == "materia_prima":
                     time.sleep(0.3); st.rerun()
             if col2.button("← Cambiar", key="btn_cambiar_ins"):
                 st.session_state.insumo_sel = None; st.rerun()
-
-            # Historial del mes para este insumo
-            primer_dia_mes = datetime.now(COL_TZ).date().replace(day=1)
-            raw_hist_ins = sb_get("materia_prima",
-                f"select=fecha,hora,cantidad,unidad,proveedor,precio_unitario,precio_total,estado"
-                f"&insumo=eq.{requests.utils.quote(nombre_sel)}"
-                f"&fecha=gte.{primer_dia_mes}&order=fecha.desc,hora.desc")
-            if raw_hist_ins:
-                st.markdown(f'<div class="section-label">Entradas de {nombre_sel} este mes</div>', unsafe_allow_html=True)
-                filas = "".join(
-                    f'<div class="factura-row">'
-                    f'<span>{r["fecha"]} {r["hora"]} · {r["proveedor"]}</span>'
-                    f'<span>{r["cantidad"]} {r["unidad"]} × {fmt(r["precio_unitario"])} = <b>{fmt(r["precio_total"])}</b> '
-                    f'{"✅" if r["estado"] == "pagado" else "📋"}</span>'
-                    f'</div>'
-                    for r in raw_hist_ins
-                )
-                total_mes = sum(float(r["precio_total"]) for r in raw_hist_ins)
-                total_cant = sum(float(r["cantidad"]) for r in raw_hist_ins)
-                st.markdown(
-                    f'<div class="factura-box">{filas}'
-                    f'<div class="factura-total"><span>Total del mes: {total_cant} unidades</span><span>{fmt(total_mes)}</span></div>'
-                    f'</div>',
-                    unsafe_allow_html=True
-                )
 
         if st.session_state.get("ok_mp"):
             st.markdown('<div class="success-toast">✅ Entrada registrada.</div>', unsafe_allow_html=True)
