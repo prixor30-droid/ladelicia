@@ -2005,36 +2005,38 @@ elif st.session_state.vista == "materia_prima":
                 primer_dia = datetime.now(COL_TZ).date().replace(day=1)
                 hoy = datetime.now(COL_TZ).date()
                 raw_mes = sb_get("materia_prima",
-                    f"select=fecha,insumo,cantidad,precio_unitario&fecha=gte.{primer_dia}&fecha=lte.{hoy}&order=fecha.asc") or []
+                    f"select=fecha,hora,insumo,cantidad,precio_unitario&fecha=gte.{primer_dia}&fecha=lte.{hoy}&order=fecha.asc,hora.asc") or []
                 raw_mes = [r for r in raw_mes if r["insumo"] in insumos_lista]
 
                 if raw_mes:
                     st.markdown(f'<div class="section-label">{titulo_tabla}</div>', unsafe_allow_html=True)
-                    fechas_mes = sorted(set(r["fecha"] for r in raw_mes))
-                    matriz = {}
-                    precios_fecha = {}
+
+                    # Fila de totales por insumo
+                    totales = {}
                     for r in raw_mes:
-                        k = (r["fecha"], r["insumo"])
-                        matriz[k] = matriz.get(k, 0) + float(r["cantidad"])
-                        # Guardar precio unitario por fecha (último registrado ese día)
-                        if r.get("precio_unitario", 0) and float(r.get("precio_unitario", 0)) > 0:
-                            precios_fecha[r["fecha"]] = float(r["precio_unitario"])
+                        totales[r["insumo"]] = totales.get(r["insumo"], 0) + float(r["cantidad"])
 
-                    fila_total = {"Fecha": "📊 TOTAL", "Precio unitario": ""}
+                    fila_total = {"Fecha": "📊 TOTAL", "Hora": "", "Precio unitario ($)": ""}
                     for ins in insumos_lista:
-                        total_ins = sum(matriz.get((f, ins), 0) for f in fechas_mes)
-                        fila_total[ins] = total_ins if total_ins > 0 else ""
+                        fila_total[ins] = totales.get(ins, "") if totales.get(ins, 0) > 0 else ""
 
+                    # Una fila por cada registro
                     filas_df = [fila_total]
-                    for f in fechas_mes:
-                        fila = {"Fecha": f, "Precio unitario": precios_fecha.get(f, "")}
+                    for r in raw_mes:
+                        fila = {
+                            "Fecha": r["fecha"],
+                            "Hora": r.get("hora", ""),
+                            "Precio unitario ($)": float(r.get("precio_unitario", 0)) if r.get("precio_unitario", 0) else ""
+                        }
                         for ins in insumos_lista:
-                            val = matriz.get((f, ins), 0)
-                            fila[ins] = val if val > 0 else ""
+                            fila[ins] = float(r["cantidad"]) if r["insumo"] == ins else ""
                         filas_df.append(fila)
 
                     df_matriz = pd.DataFrame(filas_df).set_index("Fecha")
-                    col_config_tab = {"Precio unitario": st.column_config.NumberColumn("Precio unitario ($)", disabled=True)}
+                    col_config_tab = {
+                        "Hora": st.column_config.TextColumn("Hora", disabled=True),
+                        "Precio unitario ($)": st.column_config.NumberColumn("Precio unitario ($)", disabled=True),
+                    }
                     col_config_tab.update({ins: st.column_config.NumberColumn(ins, min_value=0, step=1) for ins in insumos_lista})
                     st.data_editor(df_matriz, use_container_width=True, column_config=col_config_tab, key=f"matriz_{cat_actual}")
 
