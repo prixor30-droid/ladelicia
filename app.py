@@ -1066,10 +1066,20 @@ elif st.session_state.vista == "carro":
                 df_pend.columns = ["Sabor","Bolsas pendientes"]
                 st.dataframe(df_pend, use_container_width=True, hide_index=True)
 
-        # Tabla editable de cargues del día — para corregir errores
-        raw_cg_full = sb_get("cargues", f"select=id,fecha,hora,sabor,cantidad&fecha=eq.{fecha_hoy()}&order=hora.desc")
+        # Tabla editable de cargues — consulta por fecha
+        st.markdown('<div class="section-label">Consultar cargues por fecha</div>', unsafe_allow_html=True)
+        fecha_consulta_cg = st.date_input(
+            "Día a consultar",
+            value=datetime.now(COL_TZ).date(),
+            key="fecha_consulta_cg"
+        )
+        fecha_consulta_cg_str = str(fecha_consulta_cg)
+        es_hoy_cg = fecha_consulta_cg_str == fecha_hoy()
+        titulo_cg = "Cargues de hoy" if es_hoy_cg else f"Cargues del {fecha_consulta_cg_str}"
+
+        raw_cg_full = sb_get("cargues", f"select=id,fecha,hora,sabor,cantidad&fecha=eq.{fecha_consulta_cg_str}&order=hora.desc")
         if raw_cg_full:
-            st.markdown('<div class="section-label">Cargues registrados hoy</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="section-label">{titulo_cg}</div>', unsafe_allow_html=True)
             st.caption("Toca cualquier celda para corregir un error. Luego presiona Guardar cambios.")
             df_cg_full = pd.DataFrame(raw_cg_full)
             df_cg_edit = df_cg_full[["fecha","hora","sabor","cantidad"]].copy()
@@ -1134,6 +1144,8 @@ elif st.session_state.vista == "carro":
                 agregar_stock(reg_del_cg["sabor"], reg_del_cg["cantidad"])
                 time.sleep(0.3)
                 st.rerun()
+        else:
+            st.info(f"No hay cargues registrados el {fecha_consulta_cg_str}.")
 
     with sub2:
         st.markdown('<div class="section-label">Nueva venta 🚗</div>', unsafe_allow_html=True)
