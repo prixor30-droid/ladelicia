@@ -857,6 +857,7 @@ if st.session_state.vista == "menu":
         ("carro",         "🚗", "Edison & Javier", "Cargues y ventas del carro"),
         ("fabrica",       "🏭", "Fábrica",          "Ventas de Sofía y Andrea"),
         ("materia_prima", "🌽", "Materia Prima",    "Insumos y proveedores"),
+        ("caja",          "💰", "Caja",              "Ingresos y egresos"),
     ]
     if st.session_state.es_admin:
         opciones.append(("resumen", "📊", "Resumen", "Ventas, facturas y exportar"))
@@ -2259,6 +2260,144 @@ elif st.session_state.vista == "materia_prima":
                 tabla_resumen(res_emp, "Empaque",       "📦", ent_emp, sal_emp)
         else:
             st.info("No hay registros en ese período.")
+
+elif st.session_state.vista == "caja":
+    st.markdown('<div class="section-label">💰 Caja</div>', unsafe_allow_html=True)
+    tab_caja1, tab_caja2, tab_caja3 = st.tabs(["📊 Resumen", "➕ Registrar egreso", "📋 Historial"])
+
+    # Fechas del período
+    hoy_caja = datetime.now(COL_TZ).date()
+    primer_dia_caja = hoy_caja.replace(day=1)
+
+    with tab_caja1:
+        st.markdown('<div class="section-label">Resumen de caja</div>', unsafe_allow_html=True)
+        col_c1, col_c2 = st.columns(2)
+        f_ini_caja = col_c1.date_input("Desde", value=primer_dia_caja, key="f_ini_caja")
+        f_fin_caja = col_c2.date_input("Hasta", value=hoy_caja, key="f_fin_caja")
+
+        # INGRESOS — ventas pagadas (total - saldo = abonado)
+        with ThreadPoolExecutor(max_workers=3) as ex:
+            f_vf = ex.submit(sb_get, "ventas", f"select=fecha,total,abono,saldo,canal,cliente,factura_id&fecha=gte.{f_ini_caja}&fecha=lte.{f_fin_caja}&canal=in.(Fábrica,Carro)&order=fecha.desc")
+            f_ab = ex.submit(sb_get, "creditos", f"select=fecha,cliente,canal,total,pagado&fecha=gte.{f_ini_caja}&fecha=lte.{f_fin_caja}&estado=eq.pagado&order=fecha.desc")
+            f_mp = ex.submit(sb_get, "materia_prima", f"select=fecha,insumo,proveedor,precio_total,abono&fecha=gte.{f_ini_caja}&fecha=lte.{f_fin_caja}&order=fecha.desc")
+        raw_ventas_caja = f_vf.result() or []
+        raw_creditos_cobrados = f_ab.result() or []
+        raw_mp_pagos = f_mp.result() or []
+        raw_egresos = sb_get("caja_egresos", f"select=*&fecha=gte.{f_ini_caja}&fecha=lte.{f_fin_caja}&order=fecha.desc") or []
+
+        # Calcular ingresos por factura única (abono pagado)
+        facturas_vistas = set()
+        ingresos_ventas = 0
+        for r in raw_ventas_caja:
+            fid = r.get("factura_id", "")
+            if fid and fid not in facturas_vistas:
+                facturas_vistas.add(fid)
+                abono = float(r.get("abono", 0))
+                ingresos_ventas += abono
+
+        # Egresos: pagos de materia prima + gastos varios
+        egresos_mp = sum(float(r["abono"]) for r in raw_mp_pagos)
+        egresos_gastos = sum(float(r["valor"]) for r in raw_egresos)
+        total_egresos = egresos_mp + egresos_gastos
+
+        saldo_caja = ingresos_ventas - total_egresos
+
+        # Tarjetas resumen
+        color_saldo = "metric-green" if saldo_caja >= 0 else "metric-pink"
+        st.markdown(f"""
+        <div class="metric-row">
+            <div class="metric-box metric-blue"><div class="val">{fmt(ingresos_ventas)}</div><div class="lbl">Ingresos</div></div>
+            <div class="metric-box metric-yellow"><div class="val">{fmt(total_egresos)}</div><div class="lbl">Egresos</div></div>
+            <div class="metric-box {color_saldo}"><div class="val">{fmt(saldo_caja)}</div><div class="lbl">Saldo caja</div></div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # Detalle egresos
+        if egresos_mp > 0 or egresos_gastos > 0:
+            st.markdown('<div class="section-label">Detalle egresos</div>', unsafe_allow_html=True)
+            st.markdown(
+                f'<div class="factura-box">'
+                f'<div class="factura-row"><span>🌽 Pagos materia prima</span><span><b>{fmt(egresos_mp)}</b></span></div>'
+                f'<div class="factura-row"><span>📝 Gastos varios</span><span><b>{fmt(egresos_gastos)}</b></span></div>'
+                f'<div class="factura-total"><span>Total egresos</span><span>{fmt(total_egresos)}</span></div>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
+
+    with tab_caja2:
+        st.markdown('<div class="section-label">Registrar egreso / gasto</div>', unsafe_allow_html=True)
+        concepto_eg = st.text_input("Concepto", placeholder="Ej: Pago arriendo, gas, luz...", key="concepto_eg")
+        cat_eg = st.selectbox("Categoría", ["Servicios", "Arriendo", "Transporte", "Mantenimiento", "Salario", "Otro"], key="cat_eg")
+        valor_eg = st.number_input("Valor ($)", min_value=0, value=0, step=1000, key="valor_eg")
+
+        if st.button("✅ Registrar egreso", key="btn_eg"):
+            if not concepto_eg.strip():
+                st.markdown('<div class="alert-low">⚠️ Escribe el concepto del egreso.</div>', unsafe_allow_html=True)
+            elif valor_eg == 0:
+                st.markdown('<div class="alert-low">⚠️ Ingresa el valor.</div>', unsafe_allow_html=True)
+            else:
+                h = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}",
+                     "Content-Type": "application/json", "Prefer": "return=minimal"}
+                data_eg = {"fecha": fecha_hoy(), "hora": ahora(),
+                           "concepto": concepto_eg.strip(), "valor": float(valor_eg), "categoria": cat_eg}
+                try:
+                    r_eg = requests.post(f"{SUPABASE_URL}/rest/v1/caja_egresos", headers=h, json=data_eg, timeout=10)
+                    if r_eg.ok:
+                        st.markdown('<div class="success-toast">✅ Egreso registrado.</div>', unsafe_allow_html=True)
+                        time.sleep(0.3)
+                        st.rerun()
+                    else:
+                        st.error(f"Error: {r_eg.status_code} — {r_eg.text}")
+                except Exception as e:
+                    st.error(f"Error: {e}")
+
+    with tab_caja3:
+        st.markdown('<div class="section-label">Historial de movimientos</div>', unsafe_allow_html=True)
+        col_h1, col_h2 = st.columns(2)
+        f_ini_h = col_h1.date_input("Desde", value=primer_dia_caja, key="f_ini_h")
+        f_fin_h = col_h2.date_input("Hasta", value=hoy_caja, key="f_fin_h")
+
+        movimientos = []
+
+        # Ingresos por ventas
+        raw_v_h = sb_get("ventas", f"select=fecha,hora,canal,cliente,factura_id,abono,saldo&fecha=gte.{f_ini_h}&fecha=lte.{f_fin_h}&canal=in.(Fábrica,Carro)&order=fecha.desc,hora.desc") or []
+        facturas_h = set()
+        for r in raw_v_h:
+            fid = r.get("factura_id", "")
+            if fid and fid not in facturas_h and float(r.get("abono", 0)) > 0:
+                facturas_h.add(fid)
+                movimientos.append({
+                    "Fecha": r["fecha"], "Hora": r["hora"],
+                    "Concepto": f'Venta {r["canal"]} — {r["cliente"]}',
+                    "Categoría": "Ingreso ventas",
+                    "Ingreso": fmt(r["abono"]), "Egreso": "—"
+                })
+
+        # Egresos materia prima
+        raw_mp_h = sb_get("materia_prima", f"select=fecha,hora,insumo,proveedor,abono&fecha=gte.{f_ini_h}&fecha=lte.{f_fin_h}&abono=gt.0&order=fecha.desc") or []
+        for r in raw_mp_h:
+            movimientos.append({
+                "Fecha": r["fecha"], "Hora": r.get("hora",""),
+                "Concepto": f'{r["insumo"]} — {r["proveedor"]}',
+                "Categoría": "Pago MP",
+                "Ingreso": "—", "Egreso": fmt(r["abono"])
+            })
+
+        # Egresos gastos varios
+        raw_eg_h = sb_get("caja_egresos", f"select=*&fecha=gte.{f_ini_h}&fecha=lte.{f_fin_h}&order=fecha.desc") or []
+        for r in raw_eg_h:
+            movimientos.append({
+                "Fecha": r["fecha"], "Hora": r["hora"],
+                "Concepto": r["concepto"],
+                "Categoría": r["categoria"],
+                "Ingreso": "—", "Egreso": fmt(r["valor"])
+            })
+
+        if movimientos:
+            movimientos.sort(key=lambda x: (x["Fecha"], x["Hora"]), reverse=True)
+            st.dataframe(pd.DataFrame(movimientos), use_container_width=True, hide_index=True)
+        else:
+            st.info("No hay movimientos en ese período.")
 
 elif st.session_state.vista == "resumen" and st.session_state.es_admin:
     sub_r1, sub_r2, sub_r3, sub_r4 = st.tabs(["Hoy", "Por fechas", "📅 Mes", "💾 Exportar"])
