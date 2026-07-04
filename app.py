@@ -1979,36 +1979,6 @@ elif st.session_state.vista == "materia_prima":
             if st.button("📦  Empaque\nBolsas y fundas en kg", key="btn_cat_emp", use_container_width=True):
                 st.session_state.categoria_mp = "emp"; st.rerun()
 
-            # Tabla matricial: días del mes × insumos
-            primer_dia = datetime.now(COL_TZ).date().replace(day=1)
-            hoy = datetime.now(COL_TZ).date()
-            raw_mes = sb_get("materia_prima",
-                f"select=fecha,insumo,cantidad&fecha=gte.{primer_dia}&fecha=lte.{hoy}&order=fecha.asc") or []
-
-            if raw_mes:
-                st.markdown('<div class="section-label">Entradas del mes</div>', unsafe_allow_html=True)
-                # Construir matriz
-                insumos_mes = sorted(set(r["insumo"] for r in raw_mes))
-                fechas_mes  = sorted(set(r["fecha"] for r in raw_mes))
-
-                # Agrupar cantidades por fecha e insumo
-                matriz = {}
-                for r in raw_mes:
-                    k = (r["fecha"], r["insumo"])
-                    matriz[k] = matriz.get(k, 0) + float(r["cantidad"])
-
-                # Construir dataframe
-                filas_df = []
-                for f in fechas_mes:
-                    fila = {"Fecha": f}
-                    for ins in insumos_mes:
-                        val = matriz.get((f, ins), 0)
-                        fila[ins] = val if val > 0 else ""
-                    filas_df.append(fila)
-
-                df_matriz = pd.DataFrame(filas_df).set_index("Fecha")
-                st.dataframe(df_matriz, use_container_width=True)
-
         elif not st.session_state.insumo_sel:
             cats = {"mp": INSUMOS_INFO, "sab": SABORIZANTES_INFO, "emp": EMPAQUES_INFO}
             labels = {"mp": "Materia Prima", "sab": "Saborizantes", "emp": "Empaque"}
@@ -2018,6 +1988,32 @@ elif st.session_state.vista == "materia_prima":
                     st.session_state.insumo_sel = (nombre, unidad, cat); st.rerun()
             if st.button("← Volver", key="btn_volver_cat"):
                 st.session_state.categoria_mp = None; st.rerun()
+
+            # Tabla matricial solo para Materia Prima
+            if st.session_state.categoria_mp == "mp":
+                primer_dia = datetime.now(COL_TZ).date().replace(day=1)
+                hoy = datetime.now(COL_TZ).date()
+                insumos_mp = [n for n,_,_,_ in INSUMOS_INFO]
+                raw_mes = sb_get("materia_prima",
+                    f"select=fecha,insumo,cantidad&fecha=gte.{primer_dia}&fecha=lte.{hoy}"
+                    f"&order=fecha.asc") or []
+                raw_mes = [r for r in raw_mes if r["insumo"] in insumos_mp]
+                if raw_mes:
+                    st.markdown('<div class="section-label">Entradas del mes</div>', unsafe_allow_html=True)
+                    fechas_mes  = sorted(set(r["fecha"] for r in raw_mes))
+                    matriz = {}
+                    for r in raw_mes:
+                        k = (r["fecha"], r["insumo"])
+                        matriz[k] = matriz.get(k, 0) + float(r["cantidad"])
+                    filas_df = []
+                    for f in fechas_mes:
+                        fila = {"Fecha": f}
+                        for ins in insumos_mp:
+                            val = matriz.get((f, ins), 0)
+                            fila[ins] = val if val > 0 else ""
+                        filas_df.append(fila)
+                    df_matriz = pd.DataFrame(filas_df).set_index("Fecha")
+                    st.dataframe(df_matriz, use_container_width=True)
 
         else:
             nombre_sel, unidad_sel, cat_sel = st.session_state.insumo_sel
