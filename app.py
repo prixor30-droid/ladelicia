@@ -2534,22 +2534,92 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
         f_exp_ini = col_e1.date_input("Desde", value=date(datetime.now(COL_TZ).year, datetime.now(COL_TZ).month, 1), key="f_exp_ini")
         f_exp_fin = col_e2.date_input("Hasta", value=datetime.now(COL_TZ).date(), key="f_exp_fin")
 
-        if st.button("📥 Ventas (CSV)", key="btn_exp_v"):
+        def generar_pdf(titulo, df, nombre_archivo):
+            from reportlab.lib.pagesizes import A4, landscape
+            from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+            from reportlab.lib.styles import getSampleStyleSheet
+            from reportlab.lib import colors
+            from reportlab.lib.units import cm
+            import io
+
+            buf = io.BytesIO()
+            doc = SimpleDocTemplate(buf, pagesize=landscape(A4),
+                                    leftMargin=1*cm, rightMargin=1*cm,
+                                    topMargin=1.5*cm, bottomMargin=1*cm)
+            styles = getSampleStyleSheet()
+            elements = []
+
+            # Título
+            elements.append(Paragraph(f"Productos La Delicia — {titulo}", styles["Title"]))
+            elements.append(Paragraph(f"Período: {f_exp_ini} al {f_exp_fin}  |  Generado: {fecha_hoy()}", styles["Normal"]))
+            elements.append(Spacer(1, 0.4*cm))
+
+            # Tabla
+            cols = list(df.columns)
+            data = [cols] + df.astype(str).values.tolist()
+
+            col_width = (landscape(A4)[0] - 2*cm) / len(cols)
+            tabla = Table(data, colWidths=[col_width]*len(cols), repeatRows=1)
+            tabla.setStyle(TableStyle([
+                ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#1565C0")),
+                ("TEXTCOLOR",  (0,0), (-1,0), colors.white),
+                ("FONTNAME",   (0,0), (-1,0), "Helvetica-Bold"),
+                ("FONTSIZE",   (0,0), (-1,-1), 7),
+                ("ROWBACKGROUNDS", (0,1), (-1,-1), [colors.white, colors.HexColor("#EEF4FF")]),
+                ("GRID",       (0,0), (-1,-1), 0.3, colors.HexColor("#BBDEFB")),
+                ("VALIGN",     (0,0), (-1,-1), "MIDDLE"),
+                ("PADDING",    (0,0), (-1,-1), 4),
+            ]))
+            elements.append(tabla)
+            doc.build(elements)
+            buf.seek(0)
+            return buf.read()
+
+        # Ventas
+        st.markdown('<div class="section-label">Ventas</div>', unsafe_allow_html=True)
+        col_v1, col_v2 = st.columns(2)
+        if col_v1.button("📥 CSV", key="btn_exp_v"):
             raw_e = sb_get("ventas", f"select=*&fecha=gte.{f_exp_ini}&fecha=lte.{f_exp_fin}&order=fecha.asc")
             if raw_e:
                 csv = pd.DataFrame(raw_e).to_csv(index=False).encode("utf-8")
-                st.download_button("⬇️ Descargar ventas", csv, f"ventas_{f_exp_ini}_{f_exp_fin}.csv", "text/csv", key="dl_v")
+                st.download_button("⬇️ Descargar ventas CSV", csv, f"ventas_{f_exp_ini}_{f_exp_fin}.csv", "text/csv", key="dl_v")
+        if col_v2.button("📄 PDF", key="btn_pdf_v"):
+            raw_e = sb_get("ventas", f"select=fecha,hora,canal,vendedor,cliente,sabor,cantidad,total&fecha=gte.{f_exp_ini}&fecha=lte.{f_exp_fin}&order=fecha.asc")
+            if raw_e:
+                df_v = pd.DataFrame(raw_e)
+                df_v["total"] = df_v["total"].apply(lambda x: f"${int(x):,.0f}".replace(",","."))
+                pdf_bytes = generar_pdf("Reporte de Ventas", df_v, f"ventas_{f_exp_ini}_{f_exp_fin}")
+                st.download_button("⬇️ Descargar ventas PDF", pdf_bytes, f"ventas_{f_exp_ini}_{f_exp_fin}.pdf", "application/pdf", key="dl_pdf_v")
 
-        if st.button("📥 Producción (CSV)", key="btn_exp_p"):
+        # Producción
+        st.markdown('<div class="section-label">Producción</div>', unsafe_allow_html=True)
+        col_p1, col_p2 = st.columns(2)
+        if col_p1.button("📥 CSV", key="btn_exp_p"):
             raw_e2 = sb_get("produccion", f"select=*&fecha=gte.{f_exp_ini}&fecha=lte.{f_exp_fin}&order=fecha.asc")
             if raw_e2:
                 csv2 = pd.DataFrame(raw_e2).to_csv(index=False).encode("utf-8")
-                st.download_button("⬇️ Descargar producción", csv2, f"produccion_{f_exp_ini}_{f_exp_fin}.csv", "text/csv", key="dl_p")
+                st.download_button("⬇️ Descargar producción CSV", csv2, f"produccion_{f_exp_ini}_{f_exp_fin}.csv", "text/csv", key="dl_p")
+        if col_p2.button("📄 PDF", key="btn_pdf_p"):
+            raw_e2 = sb_get("produccion", f"select=fecha,hora,empleado,sabor,cantidad&fecha=gte.{f_exp_ini}&fecha=lte.{f_exp_fin}&order=fecha.asc")
+            if raw_e2:
+                df_p = pd.DataFrame(raw_e2)
+                pdf_bytes = generar_pdf("Reporte de Producción", df_p, f"produccion_{f_exp_ini}_{f_exp_fin}")
+                st.download_button("⬇️ Descargar producción PDF", pdf_bytes, f"produccion_{f_exp_ini}_{f_exp_fin}.pdf", "application/pdf", key="dl_pdf_p")
 
-        if st.button("📥 Inventario actual (CSV)", key="btn_exp_i"):
+        # Inventario
+        st.markdown('<div class="section-label">Inventario</div>', unsafe_allow_html=True)
+        col_i1, col_i2 = st.columns(2)
+        if col_i1.button("📥 CSV", key="btn_exp_i"):
             raw_e3 = sb_get("inventario", "select=*&order=sabor.asc")
             if raw_e3:
                 csv3 = pd.DataFrame(raw_e3).to_csv(index=False).encode("utf-8")
-                st.download_button("⬇️ Descargar inventario", csv3, f"inventario_{fecha_hoy()}.csv", "text/csv", key="dl_i")
+                st.download_button("⬇️ Descargar inventario CSV", csv3, f"inventario_{fecha_hoy()}.csv", "text/csv", key="dl_i")
+        if col_i2.button("📄 PDF", key="btn_pdf_i"):
+            raw_e3 = sb_get("inventario", "select=sabor,stock,precio&order=sabor.asc")
+            if raw_e3:
+                df_i = pd.DataFrame(raw_e3)
+                df_i["precio"] = df_i["precio"].apply(lambda x: f"${int(x):,.0f}".replace(",","."))
+                pdf_bytes = generar_pdf("Inventario Actual", df_i, f"inventario_{fecha_hoy()}")
+                st.download_button("⬇️ Descargar inventario PDF", pdf_bytes, f"inventario_{fecha_hoy()}.pdf", "application/pdf", key="dl_pdf_i")
 
         st.markdown('<div class="warn-box">💡 Guarda estos archivos semanalmente como respaldo.</div>', unsafe_allow_html=True)
