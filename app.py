@@ -1256,7 +1256,7 @@ elif st.session_state.vista == "carro":
 
             # Billete y vuelto
             st.markdown('<div class="section-label">Pago del cliente</div>', unsafe_allow_html=True)
-            abono_vc = st.number_input("Abono del cliente ($)", min_value=0, value=0, step=1000, key="abono_vc")
+            abono_vc = st.number_input("Abono del cliente ($)", min_value=0, value=int(total_cc), step=1000, key="abono_vc")
             if abono_vc > 0:
                 if abono_vc >= total_cc:
                     st.markdown(f'<div class="info-box">💰 Total: <b>{fmt(total_cc)}</b> · Devolver: <b>{fmt(abono_vc - total_cc)}</b></div>', unsafe_allow_html=True)
@@ -1676,7 +1676,7 @@ elif st.session_state.vista == "fabrica":
 
         # Billete y vuelto
         st.markdown('<div class="section-label">Pago del cliente</div>', unsafe_allow_html=True)
-        abono_f = st.number_input("Abono del cliente ($)", min_value=0, value=0, step=1000, key="abono_f")
+        abono_f = st.number_input("Abono del cliente ($)", min_value=0, value=int(total_fac), step=1000, key="abono_f")
         if abono_f > 0:
             if abono_f >= total_fac:
                 st.markdown(f'<div class="info-box">💰 Total: <b>{fmt(total_fac)}</b> · Devolver: <b>{fmt(abono_f - total_fac)}</b></div>', unsafe_allow_html=True)
