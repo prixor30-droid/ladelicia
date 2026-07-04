@@ -2021,6 +2021,31 @@ elif st.session_state.vista == "materia_prima":
             if col2.button("← Cambiar", key="btn_cambiar_ins"):
                 st.session_state.insumo_sel = None; st.rerun()
 
+            # Historial del mes para este insumo
+            primer_dia_mes = datetime.now(COL_TZ).date().replace(day=1)
+            raw_hist_ins = sb_get("materia_prima",
+                f"select=fecha,hora,cantidad,unidad,proveedor,precio_unitario,precio_total,estado"
+                f"&insumo=eq.{requests.utils.quote(nombre_sel)}"
+                f"&fecha=gte.{primer_dia_mes}&order=fecha.desc,hora.desc")
+            if raw_hist_ins:
+                st.markdown(f'<div class="section-label">Entradas de {nombre_sel} este mes</div>', unsafe_allow_html=True)
+                filas = "".join(
+                    f'<div class="factura-row">'
+                    f'<span>{r["fecha"]} {r["hora"]} · {r["proveedor"]}</span>'
+                    f'<span>{r["cantidad"]} {r["unidad"]} × {fmt(r["precio_unitario"])} = <b>{fmt(r["precio_total"])}</b> '
+                    f'{"✅" if r["estado"] == "pagado" else "📋"}</span>'
+                    f'</div>'
+                    for r in raw_hist_ins
+                )
+                total_mes = sum(float(r["precio_total"]) for r in raw_hist_ins)
+                total_cant = sum(float(r["cantidad"]) for r in raw_hist_ins)
+                st.markdown(
+                    f'<div class="factura-box">{filas}'
+                    f'<div class="factura-total"><span>Total del mes: {total_cant} unidades</span><span>{fmt(total_mes)}</span></div>'
+                    f'</div>',
+                    unsafe_allow_html=True
+                )
+
         if st.session_state.get("ok_mp"):
             st.markdown('<div class="success-toast">✅ Entrada registrada.</div>', unsafe_allow_html=True)
             st.session_state.ok_mp = False
