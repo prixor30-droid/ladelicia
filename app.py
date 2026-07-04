@@ -1820,7 +1820,6 @@ elif st.session_state.vista == "recibo":
         </div>
         <style>
         @media print {
-            /* Ocultar todo excepto el recibo */
             body > * { display: none !important; }
             .recibo-wrap { display: flex !important; }
             .recibo-ticket {
@@ -1829,13 +1828,51 @@ elif st.session_state.vista == "recibo":
                 box-shadow: none !important;
                 font-size: 11px !important;
             }
-            /* Ocultar botones de Streamlit */
             .stButton, .stApp header, footer, [data-testid="stToolbar"] {
                 display: none !important;
             }
         }
         </style>
         """, height=80)
+
+        # Eliminar factura — visible para todos
+        if True:
+            fid_recibo = registros_recibo[0].get("factura_id", "") if registros_recibo else ""
+            canal_recibo = registros_recibo[0].get("canal", "") if registros_recibo else ""
+
+            st.markdown("---")
+            st.markdown('<div class="section-label">⚠️ Zona de administrador</div>', unsafe_allow_html=True)
+
+            if st.session_state.get("confirmar_eliminar_fac") == fid_recibo:
+                st.markdown('<div class="alert-low">¿Seguro que quieres eliminar esta factura? Esta acción devolverá las bolsas al inventario.</div>', unsafe_allow_html=True)
+                col_si, col_no = st.columns(2)
+                if col_si.button("✅ Sí, eliminar", key="btn_confirmar_elim"):
+                    # Obtener todos los registros de la factura
+                    regs = sb_get("ventas", f"select=sabor,cantidad,canal&factura_id=eq.{fid_recibo}")
+                    if regs:
+                        for r in regs:
+                            cant = int(r.get("cantidad", 0))
+                            sabor = r.get("sabor", "")
+                            canal_r = r.get("canal", "")
+                            if cant > 0 and sabor:
+                                # Fábrica: devolver al inventario general
+                                # Carro: NO tocar inventario general (el stock ya estaba descontado en el cargue)
+                                if canal_r in ("Fábrica",):
+                                    agregar_stock(sabor, cant)
+                        # Eliminar todos los registros de la factura
+                        sb_delete("ventas", f"factura_id=eq.{fid_recibo}")
+                    st.session_state.confirmar_eliminar_fac = None
+                    st.session_state.recibo_canal_df = []
+                    st.session_state.vista = st.session_state.get("vista_anterior", "resumen")
+                    time.sleep(0.3)
+                    st.rerun()
+                if col_no.button("✗ Cancelar", key="btn_cancelar_elim"):
+                    st.session_state.confirmar_eliminar_fac = None
+                    st.rerun()
+            else:
+                if st.button("🗑️ Eliminar esta factura", key="btn_eliminar_fac"):
+                    st.session_state.confirmar_eliminar_fac = fid_recibo
+                    st.rerun()
     else:
         st.info("No se encontró la factura seleccionada.")
 
