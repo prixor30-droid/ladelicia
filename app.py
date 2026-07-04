@@ -836,22 +836,6 @@ if st.session_state.vista != "menu":
 # ══════════════════════════════════════════════════════════════════════════════
 # CALCULADORA (función reutilizable)
 # ══════════════════════════════════════════════════════════════════════════════
-def mostrar_calculadora():
-    with st.expander("🧮 Calculadora", expanded=False):
-        st.markdown('<div class="calc-box">', unsafe_allow_html=True)
-        billete = st.number_input("Billete del cliente ($)", min_value=0, value=0, step=1000,
-                                  key="calc_billete")
-        cobrar  = st.number_input("Total a cobrar ($)", min_value=0, value=0, step=100,
-                                  key="calc_cobrar")
-        if billete > 0 and cobrar > 0:
-            if billete >= cobrar:
-                st.markdown(f'<div class="info-box">💵 Devolver: <b>{fmt(billete - cobrar)}</b></div>',
-                            unsafe_allow_html=True)
-            else:
-                st.markdown(f'<div class="alert-low">⚠️ El billete no alcanza — faltan {fmt(cobrar - billete)}</div>',
-                            unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
-
 # ══════════════════════════════════════════════════════════════════════════════
 # MENÚ PRINCIPAL
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1015,7 +999,6 @@ elif st.session_state.vista == "produccion":
 # VISTA: CARRO (Edison & Javier)
 # ══════════════════════════════════════════════════════════════════════════════
 elif st.session_state.vista == "carro":
-    mostrar_calculadora()
 
     sub1, sub2, sub3, sub4 = st.tabs(["🚗 Nuevo cargue", "💵 Registrar venta", "🔄 Devolución", "🎁 Regalar"])
 
@@ -1586,7 +1569,6 @@ elif st.session_state.vista == "carro":
 # VISTA: FÁBRICA
 # ══════════════════════════════════════════════════════════════════════════════
 elif st.session_state.vista == "fabrica":
-    mostrar_calculadora()
 
     st.markdown('<div class="section-label">Nueva venta 🏭</div>', unsafe_allow_html=True)
 
