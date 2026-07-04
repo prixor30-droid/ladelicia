@@ -89,6 +89,27 @@ PRODUCTOS = {
     "Fósforo 70g (x10)": 14500, "Fósforo 140g": 3500,
     "Fósforo 250g": 7000, "Fósforo 500g": 14000,
 }
+
+# Precios rápidos por sabor — aparecen como botones en el carrito
+PRECIOS_RAPIDOS = {
+    "BBQ":           [("Frecuente", 9000), ("Ocasional", 9500), ("Pequeño", 10000)],
+    "Limón":         [("Frecuente", 9000), ("Ocasional", 9500), ("Pequeño", 10000)],
+    "Carita Feliz":  [("Frecuente", 9000), ("Ocasional", 9500), ("Pequeño", 10000)],
+    "Pollo":         [("Frecuente", 9000), ("Ocasional", 9500), ("Pequeño", 10000)],
+    "Parrillada":    [("Frecuente", 9000), ("Ocasional", 9500), ("Pequeño", 10000)],
+    "Chorizo Limón": [("Frecuente", 9000), ("Ocasional", 9500), ("Pequeño", 10000)],
+    "Mayonesa":      [("Frecuente", 9000), ("Ocasional", 9500), ("Pequeño", 10000)],
+    "Queso":         [("Frecuente", 9000), ("Ocasional", 9500), ("Pequeño", 10000)],
+    "Picante":       [("Frecuente", 9000), ("Ocasional", 9500), ("Pequeño", 10000)],
+    "Almuerzo Pollo":   [("Frecuente", 9000), ("Ocasional", 9500), ("Pequeño", 10000)],
+    "Almuerzo Limón":   [("Frecuente", 9000), ("Ocasional", 9500), ("Pequeño", 10000)],
+    "Almuerzo Picante": [("Frecuente", 9000), ("Ocasional", 9500), ("Pequeño", 10000)],
+    "Fósforo 70g (x10)": [("Mayorista", 14500), ("Minorista", 15000)],
+    "Fósforo 140g":      [("Mayorista", 3500),  ("Minorista", 4000)],
+    "Fósforo 500g":      [("Mayorista", 14500), ("Minorista", 15000)],
+    "Mega":    [("$1.600", 1600), ("$1.700", 1700), ("$1.800", 1800)],
+    "Megaton": [("$5.000", 5000), ("$5.500", 5500)],
+}
 SABORES_LISTA = list(PRODUCTOS.keys())
 EMPLEADOS = ["Andrea", "Sofía", "Javier", "Edison", "Otro"]
 VENDEDORES_FABRICA = ["Sofía", "Andrea"]
@@ -1192,6 +1213,16 @@ elif st.session_state.vista == "carro":
                 key="carro_cart_editor"
             )
 
+            # Botones de precio rápido
+            st.markdown('<div class="section-label">Precio rápido</div>', unsafe_allow_html=True)
+            sabor_pr_cc = st.selectbox("Sabor a cambiar precio", sabores_cc, key="sabor_pr_cc") if sabores_cc else None
+            if sabor_pr_cc and sabor_pr_cc in PRECIOS_RAPIDOS:
+                cols_pr = st.columns(len(PRECIOS_RAPIDOS[sabor_pr_cc]))
+                for i, (etiqueta, precio) in enumerate(PRECIOS_RAPIDOS[sabor_pr_cc]):
+                    if cols_pr[i].button(f"{etiqueta}\n{fmt(precio)}", key=f"pr_cc_{sabor_pr_cc}_{precio}"):
+                        st.session_state.precios_carro[sabor_pr_cc] = precio
+                        st.rerun()
+
             if st.button("💾 Aplicar cambios", key="btn_save_cc"):
                 nuevo_cc = {}
                 nuevos_p_cc = {}
@@ -1602,6 +1633,16 @@ elif st.session_state.vista == "fabrica":
             },
             key="carrito_editor"
         )
+
+        # Botones de precio rápido
+        st.markdown('<div class="section-label">Precio rápido</div>', unsafe_allow_html=True)
+        sabor_pr_f = st.selectbox("Sabor a cambiar precio", sabores_carrito, key="sabor_pr_f") if sabores_carrito else None
+        if sabor_pr_f and sabor_pr_f in PRECIOS_RAPIDOS:
+            cols_pr_f = st.columns(len(PRECIOS_RAPIDOS[sabor_pr_f]))
+            for i, (etiqueta, precio) in enumerate(PRECIOS_RAPIDOS[sabor_pr_f]):
+                if cols_pr_f[i].button(f"{etiqueta}\n{fmt(precio)}", key=f"pr_f_{sabor_pr_f}_{precio}"):
+                    st.session_state.precios_carrito[sabor_pr_f] = precio
+                    st.rerun()
 
         if st.button("💾 Aplicar cambios al carrito", key="btn_save_cart"):
             nuevo_carrito = {}
