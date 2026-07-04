@@ -1036,11 +1036,11 @@ elif st.session_state.vista == "carro":
             st.markdown('<div class="success-toast">✅ Cargue registrado.</div>', unsafe_allow_html=True)
             st.session_state.ok_cargue = False
 
-        # Cargue activo hoy
+        # Lo que lleva el carro (histórico — incluye días anteriores)
         with ThreadPoolExecutor(max_workers=3) as ex:
-            f_cg  = ex.submit(sb_get, "cargues",      f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}")
-            f_vc  = ex.submit(sb_get, "ventas",        f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}&canal=in.(Carro,Cambio,Regalo)")
-            f_dev = ex.submit(sb_get, "devoluciones",  f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}")
+            f_cg  = ex.submit(sb_get, "cargues",      f"select=sabor,cantidad")
+            f_vc  = ex.submit(sb_get, "ventas",        f"select=sabor,cantidad&canal=in.(Carro,Cambio,Regalo)")
+            f_dev = ex.submit(sb_get, "devoluciones",  f"select=sabor,cantidad")
         raw_cg = f_cg.result()
         raw_vc = f_vc.result()
         raw_dev = f_dev.result()
@@ -1159,10 +1159,11 @@ elif st.session_state.vista == "carro":
         cant_vc  = col_c.number_input("Bolsas", min_value=1, max_value=500, value=1, step=1, key="cant_vc")
 
         # Calcular disponible del carro por sabor (cargado - vendido - devuelto)
+        # Verificar si hay papas disponibles en el carro (histórico)
         with ThreadPoolExecutor(max_workers=3) as ex:
-            f_cg2  = ex.submit(sb_get, "cargues",     f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}")
-            f_vc2  = ex.submit(sb_get, "ventas",       f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}&canal=in.(Carro,Cambio,Regalo)")
-            f_dev2 = ex.submit(sb_get, "devoluciones", f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}")
+            f_cg2  = ex.submit(sb_get, "cargues",     f"select=sabor,cantidad")
+            f_vc2  = ex.submit(sb_get, "ventas",       f"select=sabor,cantidad&canal=in.(Carro,Cambio,Regalo)")
+            f_dev2 = ex.submit(sb_get, "devoluciones", f"select=sabor,cantidad")
         raw_cg_check  = f_cg2.result()
         raw_vc_check  = f_vc2.result()
         raw_dev_check = f_dev2.result()
@@ -1425,12 +1426,12 @@ elif st.session_state.vista == "carro":
         mostrar_creditos_pendientes("Carro")
 
 
-        # Papas disponibles del cargue — lo que lleva el carro pendiente de vender
+        # Papas disponibles del cargue — histórico completo
         st.markdown('<div class="section-label">Papas disponibles del cargue</div>', unsafe_allow_html=True)
         with ThreadPoolExecutor(max_workers=3) as ex:
-            f_cg3  = ex.submit(sb_get, "cargues",     f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}")
-            f_vc3  = ex.submit(sb_get, "ventas",       f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}&canal=in.(Carro,Cambio,Regalo)")
-            f_dev3 = ex.submit(sb_get, "devoluciones", f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}")
+            f_cg3  = ex.submit(sb_get, "cargues",     f"select=sabor,cantidad")
+            f_vc3  = ex.submit(sb_get, "ventas",       f"select=sabor,cantidad&canal=in.(Carro,Cambio,Regalo)")
+            f_dev3 = ex.submit(sb_get, "devoluciones", f"select=sabor,cantidad")
         raw_cg2  = f_cg3.result()
         raw_vc2  = f_vc3.result()
         raw_dev2 = f_dev3.result()
@@ -1508,11 +1509,11 @@ elif st.session_state.vista == "carro":
         st.markdown('<div class="section-label">Regalar bolsa 🎁</div>', unsafe_allow_html=True)
         st.caption("Registra las bolsas que se regalan — se descuentan del carro pero no cuentan como venta.")
 
-        # Solo sabores disponibles en el carro
+        # Solo sabores disponibles en el carro (histórico)
         with ThreadPoolExecutor(max_workers=3) as ex:
-            f_cg_r  = ex.submit(sb_get, "cargues",     f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}")
-            f_vc_r  = ex.submit(sb_get, "ventas",       f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}&canal=in.(Carro,Cambio,Regalo)")
-            f_dev_r = ex.submit(sb_get, "devoluciones", f"select=sabor,cantidad&fecha=eq.{fecha_hoy()}")
+            f_cg_r  = ex.submit(sb_get, "cargues",     f"select=sabor,cantidad")
+            f_vc_r  = ex.submit(sb_get, "ventas",       f"select=sabor,cantidad&canal=in.(Carro,Cambio,Regalo)")
+            f_dev_r = ex.submit(sb_get, "devoluciones", f"select=sabor,cantidad")
         raw_cg_r  = f_cg_r.result()
         raw_vc_r  = f_vc_r.result()
         raw_dev_r = f_dev_r.result()
