@@ -444,8 +444,9 @@ def init_inventario():
         for sabor, precio in PRODUCTOS.items():
             sb_post("inventario", {"sabor": sabor, "stock": 0, "precio": precio})
 
+@st.cache_data(ttl=5)
 def get_inventario_completo():
-    """Trae todo el inventario de una sola vez."""
+    """Trae todo el inventario de una sola vez, cacheado 5 segundos."""
     data = sb_get("inventario", "select=sabor,stock,precio")
     return {r["sabor"]: r["stock"] for r in data} if data else {}
 
@@ -462,16 +463,22 @@ def agregar_stock(sabor, cantidad):
     r = sb_get("inventario", f"select=stock&sabor=eq.{q}")
     stock = int(r[0]["stock"]) if r else 0
     sb_patch("inventario", f"sabor=eq.{q}", {"stock": stock + cantidad})
+    get_inventario_completo.clear()
+    get_metricas_globales.clear()
 
 def restar_stock(sabor, cantidad):
     q = requests.utils.quote(sabor)
     r = sb_get("inventario", f"select=stock&sabor=eq.{q}")
     stock = int(r[0]["stock"]) if r else 0
     sb_patch("inventario", f"sabor=eq.{q}", {"stock": max(0, stock - cantidad)})
+    get_inventario_completo.clear()
+    get_metricas_globales.clear()
 
 def set_stock(sabor, cantidad):
     q = requests.utils.quote(sabor)
     sb_patch("inventario", f"sabor=eq.{q}", {"stock": cantidad})
+    get_inventario_completo.clear()
+    get_metricas_globales.clear()
 
 @st.cache_data(ttl=60)
 def sabores_por_frecuencia(canal=None):
@@ -742,6 +749,7 @@ st.markdown(f"""
 # ══════════════════════════════════════════════════════════════════════════════
 # MÉTRICAS
 # ══════════════════════════════════════════════════════════════════════════════
+@st.cache_data(ttl=5)
 def get_metricas_globales(fecha):
     def q_inv():   return sb_get("inventario", "select=sabor,stock")
     def q_prod():  return sb_get("produccion", f"select=cantidad&fecha=eq.{fecha}")
