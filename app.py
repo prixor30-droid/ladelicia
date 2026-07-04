@@ -1161,10 +1161,8 @@ elif st.session_state.vista == "carro":
 
         col_s, col_c = st.columns([2, 1])
         sabor_vc = col_s.selectbox("Sabor", sabores_por_frecuencia("Carro"), key="sabor_vc")
-        cant_vc  = col_c.number_input("Bolsas", min_value=1, max_value=500, value=1, step=1, key="cant_vc")
 
-        # Calcular disponible del carro por sabor (cargado - vendido - devuelto)
-        # Verificar si hay papas disponibles en el carro (histórico)
+        # Calcular disponible del carro por sabor ANTES del number_input
         with ThreadPoolExecutor(max_workers=3) as ex:
             f_cg2  = ex.submit(sb_get, "cargues",     f"select=sabor,cantidad")
             f_vc2  = ex.submit(sb_get, "ventas",       f"select=sabor,cantidad&canal=in.(Carro,Cambio,Regalo)")
@@ -1173,7 +1171,7 @@ elif st.session_state.vista == "carro":
         raw_vc_check  = f_vc2.result()
         raw_dev_check = f_dev2.result()
 
-        stock_carro = {}  # disponible por sabor en el carro
+        stock_carro = {}
         if raw_cg_check:
             for r in raw_cg_check:
                 stock_carro[r["sabor"]] = stock_carro.get(r["sabor"], 0) + r["cantidad"]
@@ -1187,6 +1185,8 @@ elif st.session_state.vista == "carro":
 
         hay_cargue = sum(max(0, v) for v in stock_carro.values()) > 0
         disp_sabor = max(0, stock_carro.get(sabor_vc, 0))
+
+        cant_vc = col_c.number_input("Bolsas", min_value=1, max_value=max(1, disp_sabor), value=1, step=1, key="cant_vc")
 
         if not hay_cargue:
             st.markdown('<div class="warn-box">⚠️ No hay papas cargadas disponibles. Registra un cargue primero.</div>', unsafe_allow_html=True)
