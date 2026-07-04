@@ -1189,55 +1189,49 @@ elif st.session_state.vista == "carro":
 
         if st.session_state.carrito_carro:
             st.markdown('<div class="section-label">Carrito de venta</div>', unsafe_allow_html=True)
-            st.caption("Toca cualquier celda para cambiar cantidad o precio.")
 
             sabores_cc = list(st.session_state.carrito_carro.keys())
-            df_cc = pd.DataFrame({
-                "Sabor":    sabores_cc,
-                "Cantidad": [st.session_state.carrito_carro[s] for s in sabores_cc],
-                "Precio":   [st.session_state.precios_carro.get(s, PRODUCTOS[s]) for s in sabores_cc],
-            })
-            df_cc["Subtotal"] = df_cc["Cantidad"] * df_cc["Precio"]
+            total_cc_calc = 0
+            cambio_precio = False
 
-            edited_cc = st.data_editor(
-                df_cc,
-                use_container_width=True,
-                hide_index=True,
-                num_rows="fixed",
-                column_config={
-                    "Sabor":    st.column_config.TextColumn("Sabor", disabled=True),
-                    "Cantidad": st.column_config.NumberColumn("Cantidad", min_value=1, step=1),
-                    "Precio":   st.column_config.NumberColumn("Precio", min_value=100, step=100),
-                    "Subtotal": st.column_config.NumberColumn("Subtotal", disabled=True),
-                },
-                key="carro_cart_editor"
-            )
+            for s in sabores_cc:
+                precio_actual = st.session_state.precios_carro.get(s, PRODUCTOS[s])
+                cant = st.session_state.carrito_carro[s]
+                col_s, col_c = st.columns([3, 1])
+                col_s.markdown(f'<div style="font-weight:600;padding:6px 0;">{s}</div>', unsafe_allow_html=True)
+                nueva_cant = col_c.number_input("cant", min_value=1, max_value=500, value=cant, step=1,
+                                                 key=f"cant_edit_{s}", label_visibility="collapsed")
+                if nueva_cant != cant:
+                    st.session_state.carrito_carro[s] = nueva_cant
+                    cambio_precio = True
 
-            # Precio rápido con radio horizontal
-            if sabores_cc:
-                st.markdown('<div class="section-label">Precio rápido</div>', unsafe_allow_html=True)
-                sabor_pr_cc = st.selectbox("Sabor", sabores_cc, key="sabor_pr_cc", label_visibility="collapsed")
-                if sabor_pr_cc in PRECIOS_RAPIDOS:
-                    opciones_pr = [f"{e} — {fmt(p)}" for e, p in PRECIOS_RAPIDOS[sabor_pr_cc]]
-                    precios_pr  = [p for _, p in PRECIOS_RAPIDOS[sabor_pr_cc]]
-                    precio_actual = st.session_state.precios_carro.get(sabor_pr_cc, PRODUCTOS[sabor_pr_cc])
-                    idx_actual = precios_pr.index(precio_actual) if precio_actual in precios_pr else 0
-                    sel_pr = st.radio("Precio", opciones_pr, index=idx_actual, horizontal=True, key=f"radio_pr_cc_{sabor_pr_cc}")
-                    nuevo_precio_pr = precios_pr[opciones_pr.index(sel_pr)]
-                    if nuevo_precio_pr != precio_actual:
-                        st.session_state.precios_carro[sabor_pr_cc] = nuevo_precio_pr
-                        st.rerun()
+                if s in PRECIOS_RAPIDOS:
+                    opciones_pr = [f"{e} — {fmt(p)}" for e, p in PRECIOS_RAPIDOS[s]]
+                    precios_pr  = [p for _, p in PRECIOS_RAPIDOS[s]]
+                    idx = precios_pr.index(precio_actual) if precio_actual in precios_pr else 0
+                    sel = st.radio("", opciones_pr, index=idx, horizontal=True, key=f"radio_{s}", label_visibility="collapsed")
+                    nuevo_precio = precios_pr[opciones_pr.index(sel)]
+                    if nuevo_precio != precio_actual:
+                        st.session_state.precios_carro[s] = nuevo_precio
+                        cambio_precio = True
+                    precio_actual = nuevo_precio
+                else:
+                    nuevo_precio = st.number_input("Precio", min_value=100, value=precio_actual, step=100,
+                                                    key=f"precio_edit_{s}", label_visibility="collapsed")
+                    if nuevo_precio != precio_actual:
+                        st.session_state.precios_carro[s] = nuevo_precio
+                        cambio_precio = True
+                    precio_actual = nuevo_precio
 
-            if st.button("💾 Aplicar cambios", key="btn_save_cc"):
-                nuevo_cc = {}
-                nuevos_p_cc = {}
-                for _, row in edited_cc.iterrows():
-                    if pd.notna(row["Sabor"]) and row["Cantidad"] > 0:
-                        nuevo_cc[row["Sabor"]] = nuevo_cc.get(row["Sabor"], 0) + int(row["Cantidad"])
-                        nuevos_p_cc[row["Sabor"]] = int(row["Precio"])
-                st.session_state.carrito_carro = nuevo_cc
-                st.session_state.precios_carro = nuevos_p_cc
+                subtotal = nueva_cant * precio_actual
+                total_cc_calc += subtotal
+                st.markdown(f'<div style="text-align:right;font-size:0.85rem;color:#1565C0;margin-bottom:8px;">{nueva_cant} × {fmt(precio_actual)} = <b>{fmt(subtotal)}</b></div>', unsafe_allow_html=True)
+                st.markdown('<hr style="margin:4px 0;border-color:#BBDEFB;">', unsafe_allow_html=True)
+
+            if cambio_precio:
                 st.rerun()
+
+            total_cc = float(total_cc_calc)
 
             sabor_quitar_cc = st.selectbox("Quitar un sabor", ["— Selecciona —"] + sabores_cc, key="sel_quitar_cc")
             if sabor_quitar_cc != "— Selecciona —" and st.button("✕ Quitar", key="btn_quitar_cc"):
@@ -1246,7 +1240,7 @@ elif st.session_state.vista == "carro":
                     del st.session_state.precios_carro[sabor_quitar_cc]
                 st.rerun()
 
-            total_cc = float((edited_cc["Cantidad"] * edited_cc["Precio"]).sum())
+            # total_cc ya calculado arriba
 
             # Billete y vuelto
             st.markdown('<div class="section-label">Pago del cliente</div>', unsafe_allow_html=True)
@@ -1615,55 +1609,49 @@ elif st.session_state.vista == "fabrica":
     # Carrito como tabla editable
     if st.session_state.carrito:
         st.markdown('<div class="section-label">Carrito actual</div>', unsafe_allow_html=True)
-        st.caption("Toca cualquier celda para cambiar cantidad o precio.")
 
         sabores_carrito = list(st.session_state.carrito.keys())
-        df_carrito = pd.DataFrame({
-            "Sabor":    sabores_carrito,
-            "Cantidad": [st.session_state.carrito[s] for s in sabores_carrito],
-            "Precio":   [st.session_state.precios_carrito.get(s, PRODUCTOS[s]) for s in sabores_carrito],
-        })
-        df_carrito["Subtotal"] = df_carrito["Cantidad"] * df_carrito["Precio"]
+        total_fac_calc = 0
+        cambio_f = False
 
-        edited_cart = st.data_editor(
-            df_carrito,
-            use_container_width=True,
-            hide_index=True,
-            num_rows="fixed",
-            column_config={
-                "Sabor":    st.column_config.TextColumn("Sabor", disabled=True),
-                "Cantidad": st.column_config.NumberColumn("Cantidad", min_value=1, step=1),
-                "Precio":   st.column_config.NumberColumn("Precio", min_value=100, step=100),
-                "Subtotal": st.column_config.NumberColumn("Subtotal", disabled=True),
-            },
-            key="carrito_editor"
-        )
+        for s in sabores_carrito:
+            precio_actual_f = st.session_state.precios_carrito.get(s, PRODUCTOS[s])
+            cant_f = st.session_state.carrito[s]
+            col_sf, col_cf = st.columns([3, 1])
+            col_sf.markdown(f'<div style="font-weight:600;padding:6px 0;">{s}</div>', unsafe_allow_html=True)
+            nueva_cant_f = col_cf.number_input("cant", min_value=1, max_value=500, value=cant_f, step=1,
+                                                key=f"cant_edit_f_{s}", label_visibility="collapsed")
+            if nueva_cant_f != cant_f:
+                st.session_state.carrito[s] = nueva_cant_f
+                cambio_f = True
 
-        # Precio rápido con radio horizontal
-        if sabores_carrito:
-            st.markdown('<div class="section-label">Precio rápido</div>', unsafe_allow_html=True)
-            sabor_pr_f = st.selectbox("Sabor", sabores_carrito, key="sabor_pr_f", label_visibility="collapsed")
-            if sabor_pr_f in PRECIOS_RAPIDOS:
-                opciones_pr_f = [f"{e} — {fmt(p)}" for e, p in PRECIOS_RAPIDOS[sabor_pr_f]]
-                precios_pr_f  = [p for _, p in PRECIOS_RAPIDOS[sabor_pr_f]]
-                precio_actual_f = st.session_state.precios_carrito.get(sabor_pr_f, PRODUCTOS[sabor_pr_f])
-                idx_actual_f = precios_pr_f.index(precio_actual_f) if precio_actual_f in precios_pr_f else 0
-                sel_pr_f = st.radio("Precio", opciones_pr_f, index=idx_actual_f, horizontal=True, key=f"radio_pr_f_{sabor_pr_f}")
-                nuevo_precio_pr_f = precios_pr_f[opciones_pr_f.index(sel_pr_f)]
-                if nuevo_precio_pr_f != precio_actual_f:
-                    st.session_state.precios_carrito[sabor_pr_f] = nuevo_precio_pr_f
-                    st.rerun()
+            if s in PRECIOS_RAPIDOS:
+                opciones_pr_f = [f"{e} — {fmt(p)}" for e, p in PRECIOS_RAPIDOS[s]]
+                precios_pr_f  = [p for _, p in PRECIOS_RAPIDOS[s]]
+                idx_f = precios_pr_f.index(precio_actual_f) if precio_actual_f in precios_pr_f else 0
+                sel_f = st.radio("", opciones_pr_f, index=idx_f, horizontal=True, key=f"radio_f_{s}", label_visibility="collapsed")
+                nuevo_precio_f = precios_pr_f[opciones_pr_f.index(sel_f)]
+                if nuevo_precio_f != precio_actual_f:
+                    st.session_state.precios_carrito[s] = nuevo_precio_f
+                    cambio_f = True
+                precio_actual_f = nuevo_precio_f
+            else:
+                nuevo_precio_f = st.number_input("Precio", min_value=100, value=precio_actual_f, step=100,
+                                                  key=f"precio_edit_f_{s}", label_visibility="collapsed")
+                if nuevo_precio_f != precio_actual_f:
+                    st.session_state.precios_carrito[s] = nuevo_precio_f
+                    cambio_f = True
+                precio_actual_f = nuevo_precio_f
 
-        if st.button("💾 Aplicar cambios al carrito", key="btn_save_cart"):
-            nuevo_carrito = {}
-            nuevos_precios = {}
-            for _, row in edited_cart.iterrows():
-                if pd.notna(row["Sabor"]) and row["Cantidad"] > 0:
-                    nuevo_carrito[row["Sabor"]] = nuevo_carrito.get(row["Sabor"], 0) + int(row["Cantidad"])
-                    nuevos_precios[row["Sabor"]] = int(row["Precio"])
-            st.session_state.carrito = nuevo_carrito
-            st.session_state.precios_carrito = nuevos_precios
+            subtotal_f = nueva_cant_f * precio_actual_f
+            total_fac_calc += subtotal_f
+            st.markdown(f'<div style="text-align:right;font-size:0.85rem;color:#1565C0;margin-bottom:8px;">{nueva_cant_f} × {fmt(precio_actual_f)} = <b>{fmt(subtotal_f)}</b></div>', unsafe_allow_html=True)
+            st.markdown('<hr style="margin:4px 0;border-color:#BBDEFB;">', unsafe_allow_html=True)
+
+        if cambio_f:
             st.rerun()
+
+        total_fac = float(total_fac_calc)
 
         # Quitar un sabor completo del carrito
         sabor_quitar = st.selectbox("Quitar un sabor del carrito", ["— Selecciona —"] + sabores_carrito, key="sel_quitar")
@@ -1673,7 +1661,7 @@ elif st.session_state.vista == "fabrica":
                 del st.session_state.precios_carrito[sabor_quitar]
             st.rerun()
 
-        total_fac = float((edited_cart["Cantidad"] * edited_cart["Precio"]).sum())
+        # total_fac ya calculado arriba
 
         # Billete y vuelto
         st.markdown('<div class="section-label">Pago del cliente</div>', unsafe_allow_html=True)
