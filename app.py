@@ -2282,15 +2282,13 @@ elif st.session_state.vista == "caja":
         raw_mp_pagos = f_mp.result() or []
         raw_egresos = sb_get("caja_egresos", f"select=*&fecha=gte.{f_ini_caja}&fecha=lte.{f_fin_caja}&order=fecha.desc") or []
 
-        # Calcular ingresos por factura única (abono pagado)
-        facturas_vistas = set()
-        ingresos_ventas = 0
+        # Calcular ingresos — una sola entrada por factura (la primera fila de cada una)
+        facturas_vistas = {}
         for r in raw_ventas_caja:
             fid = r.get("factura_id", "")
             if fid and fid not in facturas_vistas:
-                facturas_vistas.add(fid)
-                abono = float(r.get("abono", 0))
-                ingresos_ventas += abono
+                facturas_vistas[fid] = float(r.get("abono", 0))
+        ingresos_ventas = sum(facturas_vistas.values())
 
         # Egresos: pagos de materia prima + gastos varios
         egresos_mp = sum(float(r["abono"]) for r in raw_mp_pagos)
