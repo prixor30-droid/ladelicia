@@ -639,10 +639,9 @@ label,.stSelectbox label,.stNumberInput label,.stDateInput label,.stTextInput la
 .recibo-total-row{display:flex;justify-content:space-between;font-size:1.05rem;font-weight:700;color:#1B9E5A;}
 .recibo-footer{text-align:center;font-size:0.8rem;color:#1565C0;font-style:italic;}
 div[data-testid="stRadio"] > div{display:flex;flex-wrap:wrap;gap:8px;}
-div[data-testid="stRadio"] label{background:#FFFFFF;border:2px solid #1565C0;border-radius:8px;padding:8px 16px;color:#1565C0 !important;font-weight:600;cursor:pointer;min-width:auto !important;}
-div[data-testid="stRadio"] label span{color:#1565C0 !important;}
-div[data-testid="stRadio"] label:first-of-type{background:#1565C0;color:white !important;}
-div[data-testid="stRadio"] label:first-of-type span{color:white !important;}
+div[data-testid="stRadio"] label{background:#1565C0 !important;border:2px solid #1565C0 !important;border-radius:8px !important;padding:8px 16px !important;cursor:pointer;}
+div[data-testid="stRadio"] label p, div[data-testid="stRadio"] label span{color:white !important;font-weight:600 !important;}
+div[data-testid="stRadio"] input[type="radio"]{accent-color:#1565C0;}
 .calc-box{background:#FFFFFF;border-radius:14px;padding:14px;margin-bottom:14px;box-shadow:0 2px 10px rgba(21,101,192,0.10);}
 .main-btn{background:#F0F7FF;border:1px solid #BBDEFB;border-radius:14px;padding:20px 16px;margin-bottom:10px;cursor:pointer;display:flex;align-items:center;gap:14px;}
 .main-btn-icon{font-size:2rem;}
