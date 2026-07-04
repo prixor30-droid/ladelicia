@@ -1213,14 +1213,19 @@ elif st.session_state.vista == "carro":
                 key="carro_cart_editor"
             )
 
-            # Botones de precio rápido
-            st.markdown('<div class="section-label">Precio rápido</div>', unsafe_allow_html=True)
-            sabor_pr_cc = st.selectbox("Sabor a cambiar precio", sabores_cc, key="sabor_pr_cc") if sabores_cc else None
-            if sabor_pr_cc and sabor_pr_cc in PRECIOS_RAPIDOS:
-                cols_pr = st.columns(len(PRECIOS_RAPIDOS[sabor_pr_cc]))
-                for i, (etiqueta, precio) in enumerate(PRECIOS_RAPIDOS[sabor_pr_cc]):
-                    if cols_pr[i].button(f"{etiqueta}\n{fmt(precio)}", key=f"pr_cc_{sabor_pr_cc}_{precio}"):
-                        st.session_state.precios_carro[sabor_pr_cc] = precio
+            # Precio rápido con radio horizontal
+            if sabores_cc:
+                st.markdown('<div class="section-label">Precio rápido</div>', unsafe_allow_html=True)
+                sabor_pr_cc = st.selectbox("Sabor", sabores_cc, key="sabor_pr_cc", label_visibility="collapsed")
+                if sabor_pr_cc in PRECIOS_RAPIDOS:
+                    opciones_pr = [f"{e} — {fmt(p)}" for e, p in PRECIOS_RAPIDOS[sabor_pr_cc]]
+                    precios_pr  = [p for _, p in PRECIOS_RAPIDOS[sabor_pr_cc]]
+                    precio_actual = st.session_state.precios_carro.get(sabor_pr_cc, PRODUCTOS[sabor_pr_cc])
+                    idx_actual = precios_pr.index(precio_actual) if precio_actual in precios_pr else 0
+                    sel_pr = st.radio("Precio", opciones_pr, index=idx_actual, horizontal=True, key=f"radio_pr_cc_{sabor_pr_cc}")
+                    nuevo_precio_pr = precios_pr[opciones_pr.index(sel_pr)]
+                    if nuevo_precio_pr != precio_actual:
+                        st.session_state.precios_carro[sabor_pr_cc] = nuevo_precio_pr
                         st.rerun()
 
             if st.button("💾 Aplicar cambios", key="btn_save_cc"):
@@ -1634,14 +1639,19 @@ elif st.session_state.vista == "fabrica":
             key="carrito_editor"
         )
 
-        # Botones de precio rápido
-        st.markdown('<div class="section-label">Precio rápido</div>', unsafe_allow_html=True)
-        sabor_pr_f = st.selectbox("Sabor a cambiar precio", sabores_carrito, key="sabor_pr_f") if sabores_carrito else None
-        if sabor_pr_f and sabor_pr_f in PRECIOS_RAPIDOS:
-            cols_pr_f = st.columns(len(PRECIOS_RAPIDOS[sabor_pr_f]))
-            for i, (etiqueta, precio) in enumerate(PRECIOS_RAPIDOS[sabor_pr_f]):
-                if cols_pr_f[i].button(f"{etiqueta}\n{fmt(precio)}", key=f"pr_f_{sabor_pr_f}_{precio}"):
-                    st.session_state.precios_carrito[sabor_pr_f] = precio
+        # Precio rápido con radio horizontal
+        if sabores_carrito:
+            st.markdown('<div class="section-label">Precio rápido</div>', unsafe_allow_html=True)
+            sabor_pr_f = st.selectbox("Sabor", sabores_carrito, key="sabor_pr_f", label_visibility="collapsed")
+            if sabor_pr_f in PRECIOS_RAPIDOS:
+                opciones_pr_f = [f"{e} — {fmt(p)}" for e, p in PRECIOS_RAPIDOS[sabor_pr_f]]
+                precios_pr_f  = [p for _, p in PRECIOS_RAPIDOS[sabor_pr_f]]
+                precio_actual_f = st.session_state.precios_carrito.get(sabor_pr_f, PRODUCTOS[sabor_pr_f])
+                idx_actual_f = precios_pr_f.index(precio_actual_f) if precio_actual_f in precios_pr_f else 0
+                sel_pr_f = st.radio("Precio", opciones_pr_f, index=idx_actual_f, horizontal=True, key=f"radio_pr_f_{sabor_pr_f}")
+                nuevo_precio_pr_f = precios_pr_f[opciones_pr_f.index(sel_pr_f)]
+                if nuevo_precio_pr_f != precio_actual_f:
+                    st.session_state.precios_carrito[sabor_pr_f] = nuevo_precio_pr_f
                     st.rerun()
 
         if st.button("💾 Aplicar cambios al carrito", key="btn_save_cart"):
