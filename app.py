@@ -1189,16 +1189,19 @@ elif st.session_state.vista == "carro":
         else:
             st.markdown(f'<div class="info-box">📦 Disponible en el carro de <b>{sabor_vc}</b>: <b>{disp_sabor}</b> bolsas</div>', unsafe_allow_html=True)
 
+        # Selector de precio antes de agregar
+        if sabor_vc in PRECIOS_RAPIDOS:
+            opciones_vc = [f"{e} — {fmt(p)}" for e, p in PRECIOS_RAPIDOS[sabor_vc]]
+            precios_vc  = [p for _, p in PRECIOS_RAPIDOS[sabor_vc]]
+            sel_precio_vc = st.radio("Precio", opciones_vc, horizontal=True, key=f"precio_radio_vc_{sabor_vc}")
+            precio_elegido_vc = precios_vc[opciones_vc.index(sel_precio_vc)]
+        else:
+            precio_elegido_vc = PRODUCTOS[sabor_vc]
+
         if st.button("➕ Agregar al carrito", key="btn_add_carro", disabled=(not hay_cargue or disp_sabor < cant_vc)):
             actual = st.session_state.carrito_carro.get(sabor_vc, 0)
             st.session_state.carrito_carro[sabor_vc] = actual + cant_vc
-            if sabor_vc not in st.session_state.precios_carro:
-                st.session_state.precios_carro[sabor_vc] = PRODUCTOS[sabor_vc]
-            st.rerun()
-            actual = st.session_state.carrito_carro.get(sabor_vc, 0)
-            st.session_state.carrito_carro[sabor_vc] = actual + cant_vc
-            if sabor_vc not in st.session_state.precios_carro:
-                st.session_state.precios_carro[sabor_vc] = PRODUCTOS[sabor_vc]
+            st.session_state.precios_carro[sabor_vc] = precio_elegido_vc
             st.rerun()
 
         if st.session_state.carrito_carro:
@@ -1599,11 +1602,19 @@ elif st.session_state.vista == "fabrica":
     if disponible < cant_vf:
         st.markdown(f'<div class="alert-low">⚠️ Solo hay {disponible} bolsas disponibles de {sabor_vf}.</div>', unsafe_allow_html=True)
 
+    # Selector de precio antes de agregar
+    if sabor_vf in PRECIOS_RAPIDOS:
+        opciones_vf = [f"{e} — {fmt(p)}" for e, p in PRECIOS_RAPIDOS[sabor_vf]]
+        precios_vf  = [p for _, p in PRECIOS_RAPIDOS[sabor_vf]]
+        sel_precio_vf = st.radio("Precio", opciones_vf, horizontal=True, key=f"precio_radio_vf_{sabor_vf}")
+        precio_elegido_vf = precios_vf[opciones_vf.index(sel_precio_vf)]
+    else:
+        precio_elegido_vf = PRODUCTOS[sabor_vf]
+
     col_add, col_clr = st.columns(2)
     if col_add.button("➕ Agregar", key="btn_add", disabled=(disponible < cant_vf)):
         st.session_state.carrito[sabor_vf] = en_carrito + cant_vf
-        if sabor_vf not in st.session_state.precios_carrito:
-            st.session_state.precios_carrito[sabor_vf] = PRODUCTOS[sabor_vf]
+        st.session_state.precios_carrito[sabor_vf] = precio_elegido_vf
         st.rerun()
 
     if col_clr.button("🗑️ Vaciar", key="btn_clr"):
