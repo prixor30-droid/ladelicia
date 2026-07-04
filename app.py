@@ -2000,20 +2000,36 @@ elif st.session_state.vista == "materia_prima":
                 raw_mes = [r for r in raw_mes if r["insumo"] in insumos_mp]
                 if raw_mes:
                     st.markdown('<div class="section-label">Entradas del mes</div>', unsafe_allow_html=True)
-                    fechas_mes  = sorted(set(r["fecha"] for r in raw_mes))
+                    fechas_mes = sorted(set(r["fecha"] for r in raw_mes))
                     matriz = {}
                     for r in raw_mes:
                         k = (r["fecha"], r["insumo"])
                         matriz[k] = matriz.get(k, 0) + float(r["cantidad"])
-                    filas_df = []
+
+                    # Fila de totales primero
+                    fila_total = {"Fecha": "📊 TOTAL"}
+                    for ins in insumos_mp:
+                        total_ins = sum(matriz.get((f, ins), 0) for f in fechas_mes)
+                        fila_total[ins] = total_ins if total_ins > 0 else ""
+
+                    # Filas por fecha
+                    filas_df = [fila_total]
                     for f in fechas_mes:
                         fila = {"Fecha": f}
                         for ins in insumos_mp:
                             val = matriz.get((f, ins), 0)
                             fila[ins] = val if val > 0 else ""
                         filas_df.append(fila)
+
                     df_matriz = pd.DataFrame(filas_df).set_index("Fecha")
-                    st.dataframe(df_matriz, use_container_width=True)
+
+                    col_config_mp = {ins: st.column_config.NumberColumn(ins, min_value=0, step=1) for ins in insumos_mp}
+                    edited_matriz = st.data_editor(
+                        df_matriz,
+                        use_container_width=True,
+                        column_config=col_config_mp,
+                        key="matriz_mp"
+                    )
 
         else:
             nombre_sel, unidad_sel, cat_sel = st.session_state.insumo_sel
