@@ -36,8 +36,8 @@ st.markdown("""
 # ══════════════════════════════════════════════════════════════════════════════
 # SUPABASE
 # ══════════════════════════════════════════════════════════════════════════════
-SUPABASE_URL = "https://duhsskisgksyozjdrusl.supabase.co"
-SUPABASE_KEY = "sb_publishable_ChRLE6JchVDz1lW6ExRCDA_ibizrTGU"
+SUPABASE_URL = st.secrets["SUPABASE_URL"]
+SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
 HEADERS = {
     "apikey": SUPABASE_KEY,
     "Authorization": f"Bearer {SUPABASE_KEY}",
@@ -45,35 +45,54 @@ HEADERS = {
     "Prefer": "return=representation"
 }
 
+def _sb_error(operacion, tabla, detalle):
+    st.error(f"⚠️ No se pudo {operacion} en '{tabla}': {detalle}. Revisa tu conexión e intenta de nuevo.")
+
 def sb_get(tabla, params=""):
     url = f"{SUPABASE_URL}/rest/v1/{tabla}"
     if params:
         url += f"?{params}"
     try:
         r = requests.get(url, headers=HEADERS, timeout=10)
-        return r.json() if r.ok else []
-    except:
+        if r.ok:
+            return r.json()
+        _sb_error("leer datos", tabla, f"{r.status_code} — {r.text[:200]}")
+        return []
+    except requests.RequestException as e:
+        _sb_error("leer datos", tabla, str(e))
         return []
 
 def sb_post(tabla, data):
     try:
-        r = requests.post(f"{SUPABASE_URL}/rest/v1/{tabla}", headers=HEADERS, json=data)
-        return r.ok
-    except:
+        r = requests.post(f"{SUPABASE_URL}/rest/v1/{tabla}", headers=HEADERS, json=data, timeout=10)
+        if r.ok:
+            return True
+        _sb_error("guardar", tabla, f"{r.status_code} — {r.text[:200]}")
+        return False
+    except requests.RequestException as e:
+        _sb_error("guardar", tabla, str(e))
         return False
 
 def sb_patch(tabla, filtro, data):
     try:
-        r = requests.patch(f"{SUPABASE_URL}/rest/v1/{tabla}?{filtro}", headers=HEADERS, json=data)
-        return r.ok
-    except:
+        r = requests.patch(f"{SUPABASE_URL}/rest/v1/{tabla}?{filtro}", headers=HEADERS, json=data, timeout=10)
+        if r.ok:
+            return True
+        _sb_error("actualizar", tabla, f"{r.status_code} — {r.text[:200]}")
+        return False
+    except requests.RequestException as e:
+        _sb_error("actualizar", tabla, str(e))
         return False
 
 def sb_delete(tabla, filtro):
     try:
-        r = requests.delete(f"{SUPABASE_URL}/rest/v1/{tabla}?{filtro}", headers=HEADERS)
-        return r.ok
-    except:
+        r = requests.delete(f"{SUPABASE_URL}/rest/v1/{tabla}?{filtro}", headers=HEADERS, timeout=10)
+        if r.ok:
+            return True
+        _sb_error("eliminar", tabla, f"{r.status_code} — {r.text[:200]}")
+        return False
+    except requests.RequestException as e:
+        _sb_error("eliminar", tabla, str(e))
         return False
 
 
@@ -252,28 +271,8 @@ def mostrar_creditos_pendientes(canal):
             time.sleep(0.3)
             st.rerun()
 
-def _recargar_factura_vc(fac_vc):
-    """Recarga la factura del carro desde Supabase y actualiza session_state."""
-    registros_act = sb_get("ventas", f"select=sabor,cantidad,total&factura_id=eq.{fac_vc['id']}")
-    items_act = {}
-    precios_act = {}
-    for r in (registros_act or []):
-        if r["cantidad"] > 0:
-            items_act[r["sabor"]] = items_act.get(r["sabor"], 0) + r["cantidad"]
-            precios_act[r["sabor"]] = r["total"] // r["cantidad"] if r["cantidad"] else PRODUCTOS[r["sabor"]]
-        elif r["cantidad"] < 0:
-            s = r["sabor"]
-            if s in items_act:
-                items_act[s] = max(0, items_act[s] + r["cantidad"])
-                if items_act[s] == 0:
-                    del items_act[s]
-                    if s in precios_act:
-                        del precios_act[s]
-    total_act = sum(precios_act.get(s, PRODUCTOS[s]) * c for s, c in items_act.items())
-    st.session_state.factura_carro_guardada = {**fac_vc, "items": items_act, "precios": precios_act, "total": total_act}
-
-def _recargar_factura_f(fac):
-    """Recarga la factura de fábrica desde Supabase y actualiza session_state."""
+def _recargar_factura(key_factura, fac):
+    """Recarga una factura (fábrica o carro) desde Supabase y actualiza session_state[key_factura]."""
     registros_act = sb_get("ventas", f"select=sabor,cantidad,total&factura_id=eq.{fac['id']}")
     items_act = {}
     precios_act = {}
@@ -290,7 +289,316 @@ def _recargar_factura_f(fac):
                     if s in precios_act:
                         del precios_act[s]
     total_act = sum(precios_act.get(s, PRODUCTOS[s]) * c for s, c in items_act.items())
-    st.session_state.factura_guardada = {**fac, "items": items_act, "precios": precios_act, "total": total_act}
+    st.session_state[key_factura] = {**fac, "items": items_act, "precios": precios_act, "total": total_act}
+
+def _stock_carro_actual():
+    """Bolsas disponibles en el carro ambulante, por sabor: cargado - vendido - devuelto."""
+    with ThreadPoolExecutor(max_workers=3) as ex:
+        f_cg  = ex.submit(sb_get, "cargues",      "select=sabor,cantidad")
+        f_vc  = ex.submit(sb_get, "ventas",        "select=sabor,cantidad&canal=in.(Carro,Cambio,Regalo)")
+        f_dev = ex.submit(sb_get, "devoluciones",  "select=sabor,cantidad")
+    raw_cg, raw_vc, raw_dev = f_cg.result(), f_vc.result(), f_dev.result()
+    stock = {}
+    for r in (raw_cg or []):
+        stock[r["sabor"]] = stock.get(r["sabor"], 0) + r["cantidad"]
+    for r in (raw_vc or []):
+        if r.get("cantidad", 0) > 0:
+            stock[r["sabor"]] = stock.get(r["sabor"], 0) - r["cantidad"]
+    for r in (raw_dev or []):
+        stock[r["sabor"]] = stock.get(r["sabor"], 0) - r.get("cantidad", 0)
+    return stock
+
+def render_venta_canal(cfg):
+    """Flujo de venta (carrito, pago, factura, cambios) compartido entre las
+    vistas 'Fábrica' y 'Carro'. cfg define lo que cambia entre canales:
+    de dónde sale el stock disponible, si la venta descuenta inventario
+    central, quién puede vender y qué sabores se ofrecen post-venta."""
+    key_carrito = cfg["key_carrito"]
+    key_precios = cfg["key_precios"]
+    key_factura = cfg["key_factura"]
+    canal       = cfg["canal"]
+    mutar_stock = cfg["mutar_stock"]
+
+    st.markdown(f'<div class="section-label">Nueva venta {cfg["icono"]}</div>', unsafe_allow_html=True)
+
+    if cfg["vendedores"] is not None:
+        vendedor = st.selectbox("Vendedor", cfg["vendedores"], key="venta_vendedor")
+    else:
+        vendedor = cfg["vendedor_fijo"]
+    cliente = st.text_input("Nombre del cliente", placeholder="Ej: Tienda Don Carlos", key="venta_cliente")
+
+    st.markdown('<div class="section-label">Agregar al carrito</div>', unsafe_allow_html=True)
+    col_s, col_c = st.columns([2, 1])
+    sabor = col_s.selectbox("Sabor", cfg["sabores_venta_fn"](), key="venta_sabor")
+
+    disp_map = cfg["disponible_map_fn"]()
+    en_carrito = st.session_state[key_carrito].get(sabor, 0)
+    disponible = max(0, disp_map.get(sabor, 0) - en_carrito)
+
+    cant = col_c.number_input("Bolsas", min_value=1, max_value=max(1, disponible), value=1, step=1, key="venta_cant")
+
+    if disponible < cant:
+        st.markdown(f'<div class="alert-low">⚠️ Solo hay {disponible} bolsas disponibles de {sabor}.</div>', unsafe_allow_html=True)
+
+    if sabor in PRECIOS_RAPIDOS:
+        opciones_p = [f"{e} — {fmt(p)}" for e, p in PRECIOS_RAPIDOS[sabor]]
+        precios_p  = [p for _, p in PRECIOS_RAPIDOS[sabor]]
+        sel_p = st.radio("Precio", opciones_p, horizontal=True, key=f"venta_precio_radio_{sabor}")
+        precio_elegido = precios_p[opciones_p.index(sel_p)]
+    else:
+        precio_elegido = PRODUCTOS[sabor]
+
+    col_add, col_clr = st.columns(2)
+    if col_add.button("➕ Agregar", key="venta_btn_add", disabled=(disponible < cant)):
+        st.session_state[key_carrito][sabor] = en_carrito + cant
+        st.session_state[key_precios][sabor] = precio_elegido
+        st.rerun()
+    if col_clr.button("🗑️ Vaciar", key="venta_btn_clr"):
+        st.session_state[key_carrito] = {}
+        st.session_state[key_precios] = {}
+        st.rerun()
+
+    carrito = st.session_state[key_carrito]
+    if carrito:
+        st.markdown('<div class="section-label">Carrito actual</div>', unsafe_allow_html=True)
+        st.caption("Toca cualquier celda para cambiar cantidad o precio.")
+
+        sabores_cart = list(carrito.keys())
+        df_cart = pd.DataFrame({
+            "Sabor":    sabores_cart,
+            "Cantidad": [carrito[s] for s in sabores_cart],
+            "Precio":   [st.session_state[key_precios].get(s, PRODUCTOS[s]) for s in sabores_cart],
+        })
+        df_cart["Subtotal"] = df_cart["Cantidad"] * df_cart["Precio"]
+
+        edited = st.data_editor(
+            df_cart,
+            use_container_width=True,
+            hide_index=True,
+            num_rows="fixed",
+            column_config={
+                "Sabor":    st.column_config.TextColumn("Sabor", disabled=True),
+                "Cantidad": st.column_config.NumberColumn("Cantidad", min_value=1, step=1),
+                "Precio":   st.column_config.NumberColumn("Precio", min_value=100, step=100),
+                "Subtotal": st.column_config.NumberColumn("Subtotal", disabled=True),
+            },
+            key="venta_cart_editor"
+        )
+
+        if st.button("💾 Aplicar cambios al carrito", key="venta_btn_save_cart"):
+            nuevo, nuevos_p = {}, {}
+            for _, row in edited.iterrows():
+                if pd.notna(row["Sabor"]) and row["Cantidad"] > 0:
+                    nuevo[row["Sabor"]] = nuevo.get(row["Sabor"], 0) + int(row["Cantidad"])
+                    nuevos_p[row["Sabor"]] = int(row["Precio"])
+            st.session_state[key_carrito] = nuevo
+            st.session_state[key_precios] = nuevos_p
+            st.rerun()
+
+        sabor_quitar = st.selectbox("Quitar un sabor del carrito", ["— Selecciona —"] + sabores_cart, key="venta_sel_quitar")
+        if sabor_quitar != "— Selecciona —" and st.button("✕ Quitar del carrito", key="venta_btn_quitar"):
+            del st.session_state[key_carrito][sabor_quitar]
+            st.session_state[key_precios].pop(sabor_quitar, None)
+            st.rerun()
+
+        total_venta = float((edited["Cantidad"] * edited["Precio"]).sum())
+
+        st.markdown('<div class="section-label">Pago del cliente</div>', unsafe_allow_html=True)
+        abono = st.number_input("Abono del cliente ($)", min_value=0, value=int(total_venta), step=1000, key="venta_abono")
+        if abono > 0:
+            if abono >= total_venta:
+                st.markdown(f'<div class="info-box">💰 Total: <b>{fmt(total_venta)}</b> · Devolver: <b>{fmt(abono - total_venta)}</b></div>', unsafe_allow_html=True)
+            else:
+                st.markdown(f'<div class="warn-box">📋 Abono: <b>{fmt(abono)}</b> · Queda debiendo: <b>{fmt(total_venta - abono)}</b></div>', unsafe_allow_html=True)
+        else:
+            st.markdown(f'<div class="warn-box">📋 Sin abono — queda debiendo: <b>{fmt(total_venta)}</b></div>', unsafe_allow_html=True)
+
+        col_clr2, col_conf = st.columns(2)
+        if col_clr2.button("🗑️ Vaciar carrito", key="venta_btn_clr2"):
+            st.session_state[key_carrito] = {}
+            st.session_state[key_precios] = {}
+            st.rerun()
+
+        if col_conf.button("✅ Confirmar venta", key="venta_btn_confirmar"):
+            if not cliente.strip():
+                st.markdown('<div class="alert-low">⚠️ Escribe el nombre del cliente.</div>', unsafe_allow_html=True)
+            else:
+                disp_check = cfg["disponible_map_fn"]()
+                sin_stock = [s for s, c in carrito.items() if disp_check.get(s, 0) < c]
+                if sin_stock:
+                    st.markdown(f'<div class="alert-low">⚠️ Stock insuficiente: <b>{", ".join(sin_stock)}</b>. Ajusta el carrito.</div>', unsafe_allow_html=True)
+                else:
+                    fid = str(uuid.uuid4())[:8].upper()
+                    total_confirmado = 0
+                    abono_val = int(st.session_state.get("venta_abono", 0))
+                    for s, c in carrito.items():
+                        precio_final = st.session_state[key_precios].get(s, PRODUCTOS[s])
+                        subtotal = precio_final * c
+                        total_confirmado += subtotal
+                        sb_post("ventas", {
+                            "fecha": fecha_hoy(), "hora": ahora(), "canal": canal,
+                            "vendedor": vendedor, "sabor": s, "cantidad": c,
+                            "total": subtotal, "cliente": cliente.strip(),
+                            "factura_id": fid, "abono": abono_val, "saldo": 0
+                        })
+                        if mutar_stock:
+                            restar_stock(s, c)
+                    saldo_final = max(0, total_confirmado - abono_val)
+                    sb_patch("ventas", f"factura_id=eq.{fid}", {"abono": abono_val, "saldo": saldo_final})
+                    st.session_state[key_factura] = {
+                        "id": fid, "cliente": cliente.strip(), "vendedor": vendedor,
+                        "items": dict(carrito), "precios": dict(st.session_state[key_precios]),
+                        "total": total_confirmado, "billete": abono_val, "saldo": saldo_final,
+                    }
+                    st.session_state[key_carrito] = {}
+                    st.session_state[key_precios] = {}
+                    time.sleep(0.3)
+                    st.rerun()
+
+    # Opciones post-venta — solo si hay una factura activa en esta sesión
+    if st.session_state[key_factura]:
+        fac = st.session_state[key_factura]
+        vuelto = fac["billete"] - fac["total"] if fac["billete"] >= fac["total"] and fac["billete"] > 0 else 0
+        saldo_fac = fac.get("saldo", 0)
+        msg = f'✅ Venta registrada — <b>#{fac["id"]}</b> · {fac["cliente"]} · {fmt(fac["total"])}'
+        if vuelto > 0:
+            msg += f'<br>💵 Devolver: <b>{fmt(vuelto)}</b>'
+        if saldo_fac > 0:
+            msg += f'<br>📋 Queda debiendo: <b>{fmt(saldo_fac)}</b>'
+        st.markdown(f'<div class="success-toast">{msg}</div>', unsafe_allow_html=True)
+
+        st.markdown('<div class="section-label">¿El cliente quiere algo más?</div>', unsafe_allow_html=True)
+        tab_cambio, tab_agregar = st.tabs(["🔁 Cambiar producto", "➕ Agregar producto"])
+
+        with tab_cambio:
+            col_a, col_b = st.columns(2)
+            sabores_en_fac = list(fac["items"].keys())
+            sabor_out = col_a.selectbox("Devuelve", sabores_en_fac, key="venta_cambio_out")
+            max_out = fac["items"].get(sabor_out, 1)
+            cant_out = col_a.number_input("Cantidad que devuelve", min_value=1, max_value=max_out, value=1, step=1, key="venta_cant_out")
+
+            # Al devolver, ese sabor vuelve a estar disponible — sumarlo temporalmente
+            disp_cambio = cfg["disponible_map_fn"]()
+            disp_cambio[sabor_out] = disp_cambio.get(sabor_out, 0) + cant_out
+            opciones_in = cfg["sabores_post_venta_fn"](disp_cambio)
+            sabor_in = col_b.selectbox("Lleva en cambio", opciones_in, key="venta_cambio_in")
+            max_in = max(1, int(disp_cambio.get(sabor_in, 0)))
+            cant_in = col_b.number_input("Cantidad que lleva", min_value=1, max_value=max_in, value=1, step=1, key="venta_cant_in")
+
+            valor_out = fac["precios"].get(sabor_out, PRODUCTOS[sabor_out]) * cant_out
+            valor_in  = fac["precios"].get(sabor_in,  PRODUCTOS[sabor_in])  * cant_in
+            diferencia = valor_in - valor_out
+            if diferencia > 0:
+                st.markdown(f'<div class="warn-box">💰 El cliente debe pagar <b>{fmt(diferencia)}</b> adicionales</div>', unsafe_allow_html=True)
+            elif diferencia < 0:
+                st.markdown(f'<div class="info-box">💵 Hay que devolver <b>{fmt(abs(diferencia))}</b> al cliente</div>', unsafe_allow_html=True)
+            else:
+                st.markdown('<div class="info-box">✅ Cambio sin diferencia de valor</div>', unsafe_allow_html=True)
+
+            if st.button("🔁 Registrar cambio", key="venta_btn_cambio"):
+                sb_post("ventas", {
+                    "fecha": fecha_hoy(), "hora": ahora(), "canal": "Cambio",
+                    "vendedor": fac["vendedor"], "sabor": sabor_out,
+                    "cantidad": -cant_out, "total": -valor_out,
+                    "cliente": fac["cliente"], "factura_id": fac["id"],
+                    "abono": 0, "saldo": 0
+                })
+                if mutar_stock:
+                    agregar_stock(sabor_out, cant_out)
+                sb_post("ventas", {
+                    "fecha": fecha_hoy(), "hora": ahora(), "canal": "Cambio",
+                    "vendedor": fac["vendedor"], "sabor": sabor_in,
+                    "cantidad": cant_in, "total": valor_in,
+                    "cliente": fac["cliente"], "factura_id": fac["id"],
+                    "abono": 0, "saldo": 0
+                })
+                if mutar_stock:
+                    restar_stock(sabor_in, cant_in)
+                if diferencia != 0:
+                    raw_saldo = sb_get("ventas", f"select=saldo&factura_id=eq.{fac['id']}&canal=eq.{canal}&limit=1")
+                    saldo_actual = float(raw_saldo[0]["saldo"]) if raw_saldo else 0
+                    nuevo_saldo = max(0, saldo_actual + diferencia)
+                    sb_patch("ventas", f"factura_id=eq.{fac['id']}&canal=eq.{canal}", {"saldo": nuevo_saldo})
+                time.sleep(0.3)
+                _recargar_factura(key_factura, fac)
+                st.rerun()
+
+        with tab_agregar:
+            disp_add = cfg["disponible_map_fn"]()
+            opciones_add = cfg["sabores_post_venta_fn"](disp_add)
+            if not opciones_add:
+                st.markdown('<div class="warn-box">⚠️ No hay disponible para agregar.</div>', unsafe_allow_html=True)
+            else:
+                sabor_add = st.selectbox("Sabor a agregar", opciones_add, key="venta_add_sabor")
+                max_add = max(1, int(disp_add.get(sabor_add, 0)))
+                cant_add = st.number_input("Cantidad", min_value=1, max_value=max_add, value=1, step=1, key="venta_add_cant")
+                precio_add = fac["precios"].get(sabor_add, PRODUCTOS[sabor_add]) * cant_add
+                st.markdown(f'<div class="info-box">📦 Disponible: <b>{max_add}</b> · 💰 A cobrar: <b>{fmt(precio_add)}</b></div>', unsafe_allow_html=True)
+
+                if st.button("➕ Agregar a la factura", key="venta_btn_add_fac"):
+                    sb_post("ventas", {
+                        "fecha": fecha_hoy(), "hora": ahora(), "canal": "Cambio",
+                        "vendedor": fac["vendedor"], "sabor": sabor_add,
+                        "cantidad": cant_add, "total": precio_add,
+                        "cliente": fac["cliente"], "factura_id": fac["id"],
+                        "abono": 0, "saldo": 0
+                    })
+                    if mutar_stock:
+                        restar_stock(sabor_add, cant_add)
+                    raw_saldo2 = sb_get("ventas", f"select=saldo&factura_id=eq.{fac['id']}&canal=eq.{canal}&limit=1")
+                    saldo_actual2 = float(raw_saldo2[0]["saldo"]) if raw_saldo2 else 0
+                    nuevo_saldo2 = saldo_actual2 + precio_add
+                    sb_patch("ventas", f"factura_id=eq.{fac['id']}&canal=eq.{canal}", {"saldo": nuevo_saldo2})
+                    time.sleep(0.3)
+                    _recargar_factura(key_factura, fac)
+                    st.rerun()
+
+        if st.button("🧾 Nueva venta", key="venta_btn_nueva"):
+            st.session_state[key_factura] = None
+            st.rerun()
+
+    # Ventas de hoy — visible para todos desde cualquier dispositivo
+    st.markdown('<div class="section-label">Ventas de hoy</div>', unsafe_allow_html=True)
+    st.caption("Toca una fila para ver el recibo completo.")
+    raw_fact = sb_get("ventas",
+        f"select=fecha,hora,cliente,vendedor,sabor,cantidad,total,factura_id,es_credito&fecha=eq.{fecha_hoy()}&canal=eq.{canal}&order=hora.desc")
+    if raw_fact:
+        df_fact = pd.DataFrame(raw_fact)
+        mostrar_facturas_seleccionables(df_fact, cfg["tabla_key"])
+    else:
+        st.caption("Aún no hay ventas registradas hoy.")
+
+    mostrar_creditos_pendientes(canal)
+
+CONFIG_FABRICA = {
+    "canal": "Fábrica",
+    "icono": "🏭",
+    "key_carrito": "carrito",
+    "key_precios": "precios_carrito",
+    "key_factura": "factura_guardada",
+    "vendedores": VENDEDORES_FABRICA,
+    "vendedor_fijo": None,
+    "mutar_stock": True,
+    "tabla_key": "fabrica_todos",
+    "sabores_venta_fn": lambda: sabores_por_frecuencia("Fábrica"),
+    "disponible_map_fn": lambda: get_inventario_completo(),
+    "sabores_post_venta_fn": lambda disp: [s for s in SABORES_LISTA if disp.get(s, 0) > 0],
+}
+
+CONFIG_CARRO = {
+    "canal": "Carro",
+    "icono": "🚗",
+    "key_carrito": "carrito_carro",
+    "key_precios": "precios_carro",
+    "key_factura": "factura_carro_guardada",
+    "vendedores": None,
+    "vendedor_fijo": "Javier & Edison",
+    "mutar_stock": False,
+    "tabla_key": "carro_todos",
+    "sabores_venta_fn": lambda: sabores_por_frecuencia("Carro"),
+    "disponible_map_fn": lambda: _stock_carro_actual(),
+    "sabores_post_venta_fn": lambda disp: [s for s, v in disp.items() if v > 0],
+}
 
 def render_recibo(registros):
     """Genera el HTML de un recibo tipo ticket consolidando originales + cambios."""
@@ -458,21 +766,34 @@ def get_stock(sabor):
     r = sb_get("inventario", f"select=stock&sabor=eq.{q}")
     return int(r[0]["stock"]) if r else 0
 
-def agregar_stock(sabor, cantidad):
+def _ajustar_stock_cas(sabor, delta, intentos=5):
+    """Suma/resta stock con concurrencia optimista: el PATCH solo aplica si nadie
+    más cambió el valor entre la lectura y la escritura (evita perder cambios
+    cuando dos ventas del mismo sabor se registran casi al mismo tiempo)."""
     q = requests.utils.quote(sabor)
-    r = sb_get("inventario", f"select=stock&sabor=eq.{q}")
-    stock = int(r[0]["stock"]) if r else 0
-    sb_patch("inventario", f"sabor=eq.{q}", {"stock": stock + cantidad})
-    get_inventario_completo.clear()
-    get_metricas_globales.clear()
+    for _ in range(intentos):
+        r = sb_get("inventario", f"select=stock&sabor=eq.{q}")
+        stock_actual = int(r[0]["stock"]) if r else 0
+        stock_nuevo = max(0, stock_actual + delta)
+        try:
+            resp = requests.patch(
+                f"{SUPABASE_URL}/rest/v1/inventario?sabor=eq.{q}&stock=eq.{stock_actual}",
+                headers=HEADERS, json={"stock": stock_nuevo}, timeout=10
+            )
+            if resp.ok and resp.json():
+                get_inventario_completo.clear()
+                get_metricas_globales.clear()
+                return True
+        except Exception:
+            pass
+    st.error(f"⚠️ No se pudo actualizar el stock de {sabor} (conflicto de concurrencia). Intenta de nuevo.")
+    return False
+
+def agregar_stock(sabor, cantidad):
+    _ajustar_stock_cas(sabor, cantidad)
 
 def restar_stock(sabor, cantidad):
-    q = requests.utils.quote(sabor)
-    r = sb_get("inventario", f"select=stock&sabor=eq.{q}")
-    stock = int(r[0]["stock"]) if r else 0
-    sb_patch("inventario", f"sabor=eq.{q}", {"stock": max(0, stock - cantidad)})
-    get_inventario_completo.clear()
-    get_metricas_globales.clear()
+    _ajustar_stock_cas(sabor, -cantidad)
 
 def set_stock(sabor, cantidad):
     q = requests.utils.quote(sabor)
@@ -722,10 +1043,8 @@ for k, v in defaults.items():
 # ══════════════════════════════════════════════════════════════════════════════
 # LOGIN
 # ══════════════════════════════════════════════════════════════════════════════
-ADMINS = {
-    "1": "49bd2aab5ca8c640d9461d138268eaba3a12831bd634ce9e65c013425460de1b",
-}
-NOMBRES_ADMIN = {"1": "Admin"}
+ADMINS = dict(st.secrets["admins"])
+NOMBRES_ADMIN = dict(st.secrets["admin_nombres"])
 
 def check_login(usuario, pw):
     u = usuario.lower().strip()
@@ -1033,34 +1352,15 @@ elif st.session_state.vista == "carro":
             st.session_state.ok_cargue = False
 
         # Lo que lleva el carro (histórico — incluye días anteriores)
-        with ThreadPoolExecutor(max_workers=3) as ex:
-            f_cg  = ex.submit(sb_get, "cargues",      f"select=sabor,cantidad")
-            f_vc  = ex.submit(sb_get, "ventas",        f"select=sabor,cantidad&canal=in.(Carro,Cambio,Regalo)")
-            f_dev = ex.submit(sb_get, "devoluciones",  f"select=sabor,cantidad")
-        raw_cg = f_cg.result()
-        raw_vc = f_vc.result()
-        raw_dev = f_dev.result()
-        if raw_cg:
-            df_cg = pd.DataFrame(raw_cg).groupby("sabor")["cantidad"].sum().reset_index()
-            df_cg.columns = ["sabor","cargado"]
-            if raw_vc:
-                df_vc2 = pd.DataFrame(raw_vc).groupby("sabor")["cantidad"].sum().reset_index()
-                df_vc2.columns = ["sabor","vendido"]
-                df_cg = df_cg.merge(df_vc2, on="sabor", how="left").fillna(0)
-            else:
-                df_cg["vendido"] = 0
-            if raw_dev:
-                df_dev2 = pd.DataFrame(raw_dev).groupby("sabor")["cantidad"].sum().reset_index()
-                df_dev2.columns = ["sabor","devuelto"]
-                df_cg = df_cg.merge(df_dev2, on="sabor", how="left").fillna(0)
-            else:
-                df_cg["devuelto"] = 0
-            df_cg["pendiente"] = df_cg["cargado"] - df_cg["vendido"] - df_cg["devuelto"]
-            df_pend = df_cg[df_cg["pendiente"] > 0][["sabor","pendiente"]]
-            if not df_pend.empty:
-                st.markdown('<div class="section-label">Lo que lleva el carro ahora</div>', unsafe_allow_html=True)
-                df_pend.columns = ["Sabor","Bolsas pendientes"]
-                st.dataframe(df_pend, use_container_width=True, hide_index=True)
+        stock_carro_sub1 = _stock_carro_actual()
+        pendientes_sub1 = sorted(
+            ((s, v) for s, v in stock_carro_sub1.items() if v > 0),
+            key=lambda x: -x[1]
+        )
+        if pendientes_sub1:
+            st.markdown('<div class="section-label">Lo que lleva el carro ahora</div>', unsafe_allow_html=True)
+            df_pend = pd.DataFrame(pendientes_sub1, columns=["Sabor", "Bolsas pendientes"])
+            st.dataframe(df_pend, use_container_width=True, hide_index=True)
 
         # Tabla editable de cargues — consulta por fecha
         st.markdown('<div class="section-label">Consultar cargues por fecha</div>', unsafe_allow_html=True)
@@ -1144,323 +1444,20 @@ elif st.session_state.vista == "carro":
             st.info(f"No hay cargues registrados el {fecha_consulta_cg_str}.")
 
     with sub2:
-        st.markdown('<div class="section-label">Nueva venta 🚗</div>', unsafe_allow_html=True)
-
-        cliente_vc = st.text_input("Nombre del cliente", placeholder="Ej: Tienda Don Carlos", key="cliente_vc")
-
-        st.markdown('<div class="section-label">Agregar al carrito</div>', unsafe_allow_html=True)
-
-        col_s, col_c = st.columns([2, 1])
-        sabor_vc = col_s.selectbox("Sabor", sabores_por_frecuencia("Carro"), key="sabor_vc")
-
-        # Calcular disponible del carro por sabor ANTES del number_input
-        with ThreadPoolExecutor(max_workers=3) as ex:
-            f_cg2  = ex.submit(sb_get, "cargues",     f"select=sabor,cantidad")
-            f_vc2  = ex.submit(sb_get, "ventas",       f"select=sabor,cantidad&canal=in.(Carro,Cambio,Regalo)")
-            f_dev2 = ex.submit(sb_get, "devoluciones", f"select=sabor,cantidad")
-        raw_cg_check  = f_cg2.result()
-        raw_vc_check  = f_vc2.result()
-        raw_dev_check = f_dev2.result()
-
-        stock_carro = {}
-        if raw_cg_check:
-            for r in raw_cg_check:
-                stock_carro[r["sabor"]] = stock_carro.get(r["sabor"], 0) + r["cantidad"]
-        if raw_vc_check:
-            for r in raw_vc_check:
-                if r.get("cantidad", 0) > 0:
-                    stock_carro[r["sabor"]] = stock_carro.get(r["sabor"], 0) - r["cantidad"]
-        if raw_dev_check:
-            for r in raw_dev_check:
-                stock_carro[r["sabor"]] = stock_carro.get(r["sabor"], 0) - r.get("cantidad", 0)
-
-        hay_cargue = sum(max(0, v) for v in stock_carro.values()) > 0
-        disp_sabor = max(0, stock_carro.get(sabor_vc, 0))
-
-        cant_vc = col_c.number_input("Bolsas", min_value=1, max_value=max(1, disp_sabor), value=1, step=1, key="cant_vc")
-
-        if not hay_cargue:
-            st.markdown('<div class="warn-box">⚠️ No hay papas cargadas disponibles. Registra un cargue primero.</div>', unsafe_allow_html=True)
-        else:
-            st.markdown(f'<div class="info-box">📦 Disponible en el carro de <b>{sabor_vc}</b>: <b>{disp_sabor}</b> bolsas</div>', unsafe_allow_html=True)
-
-        # Selector de precio antes de agregar
-        if sabor_vc in PRECIOS_RAPIDOS:
-            opciones_vc = [f"{e} — {fmt(p)}" for e, p in PRECIOS_RAPIDOS[sabor_vc]]
-            precios_vc  = [p for _, p in PRECIOS_RAPIDOS[sabor_vc]]
-            sel_precio_vc = st.radio("Precio", opciones_vc, horizontal=True, key=f"precio_radio_vc_{sabor_vc}")
-            precio_elegido_vc = precios_vc[opciones_vc.index(sel_precio_vc)]
-        else:
-            precio_elegido_vc = PRODUCTOS[sabor_vc]
-
-        if st.button("➕ Agregar al carrito", key="btn_add_carro", disabled=(not hay_cargue or disp_sabor < cant_vc)):
-            actual = st.session_state.carrito_carro.get(sabor_vc, 0)
-            st.session_state.carrito_carro[sabor_vc] = actual + cant_vc
-            st.session_state.precios_carro[sabor_vc] = precio_elegido_vc
-            st.rerun()
-
-        if st.session_state.carrito_carro:
-            st.markdown('<div class="section-label">Carrito de venta</div>', unsafe_allow_html=True)
-            st.caption("Toca cualquier celda para cambiar cantidad o precio.")
-
-            sabores_cc = list(st.session_state.carrito_carro.keys())
-            df_cc = pd.DataFrame({
-                "Sabor":    sabores_cc,
-                "Cantidad": [st.session_state.carrito_carro[s] for s in sabores_cc],
-                "Precio":   [st.session_state.precios_carro.get(s, PRODUCTOS[s]) for s in sabores_cc],
-            })
-            df_cc["Subtotal"] = df_cc["Cantidad"] * df_cc["Precio"]
-
-            edited_cc = st.data_editor(
-                df_cc,
-                use_container_width=True,
-                hide_index=True,
-                num_rows="fixed",
-                column_config={
-                    "Sabor":    st.column_config.TextColumn("Sabor", disabled=True),
-                    "Cantidad": st.column_config.NumberColumn("Cantidad", min_value=1, step=1),
-                    "Precio":   st.column_config.NumberColumn("Precio", min_value=100, step=100),
-                    "Subtotal": st.column_config.NumberColumn("Subtotal", disabled=True),
-                },
-                key="carro_cart_editor"
-            )
-
-            if st.button("💾 Aplicar cambios", key="btn_save_cc"):
-                nuevo_cc = {}
-                nuevos_p_cc = {}
-                for _, row in edited_cc.iterrows():
-                    if pd.notna(row["Sabor"]) and row["Cantidad"] > 0:
-                        nuevo_cc[row["Sabor"]] = nuevo_cc.get(row["Sabor"], 0) + int(row["Cantidad"])
-                        nuevos_p_cc[row["Sabor"]] = int(row["Precio"])
-                st.session_state.carrito_carro = nuevo_cc
-                st.session_state.precios_carro = nuevos_p_cc
-                st.rerun()
-
-            sabor_quitar_cc = st.selectbox("Quitar un sabor", ["— Selecciona —"] + sabores_cc, key="sel_quitar_cc")
-            if sabor_quitar_cc != "— Selecciona —" and st.button("✕ Quitar", key="btn_quitar_cc"):
-                del st.session_state.carrito_carro[sabor_quitar_cc]
-                if sabor_quitar_cc in st.session_state.precios_carro:
-                    del st.session_state.precios_carro[sabor_quitar_cc]
-                st.rerun()
-
-            total_cc = float((edited_cc["Cantidad"] * edited_cc["Precio"]).sum())
-
-            # Billete y vuelto
-            st.markdown('<div class="section-label">Pago del cliente</div>', unsafe_allow_html=True)
-            abono_vc = st.number_input("Abono del cliente ($)", min_value=0, value=int(total_cc), step=1000, key="abono_vc")
-            if abono_vc > 0:
-                if abono_vc >= total_cc:
-                    st.markdown(f'<div class="info-box">💰 Total: <b>{fmt(total_cc)}</b> · Devolver: <b>{fmt(abono_vc - total_cc)}</b></div>', unsafe_allow_html=True)
-                else:
-                    saldo_mostrar = total_cc - abono_vc
-                    st.markdown(f'<div class="warn-box">📋 Abono: <b>{fmt(abono_vc)}</b> · Queda debiendo: <b>{fmt(saldo_mostrar)}</b></div>', unsafe_allow_html=True)
-            else:
-                st.markdown(f'<div class="warn-box">📋 Sin abono — queda debiendo: <b>{fmt(total_cc)}</b></div>', unsafe_allow_html=True)
-
-            col_clr2, col_conf = st.columns(2)
-            if col_clr2.button("🗑️ Vaciar carrito", key="btn_clr_cc"):
-                st.session_state.carrito_carro = {}
-                st.session_state.precios_carro = {}
-                st.rerun()
-
-            if col_conf.button("✅ Confirmar venta", key="btn_vc"):
-                if not cliente_vc.strip():
-                    st.markdown('<div class="alert-low">⚠️ Escribe el nombre del cliente.</div>', unsafe_allow_html=True)
-                else:
-                    sin_stock = [s for s, c in st.session_state.carrito_carro.items() if stock_carro.get(s, 0) < c]
-                    if sin_stock:
-                        st.markdown(f'<div class="alert-low">⚠️ Stock insuficiente: <b>{", ".join(sin_stock)}</b>. Ajusta el carrito.</div>', unsafe_allow_html=True)
-                    else:
-                        fid_vc = str(uuid.uuid4())[:8].upper()
-                        total_venta_vc = 0
-                        abono_val = int(st.session_state.get("abono_vc", 0))
-                        for s, c in st.session_state.carrito_carro.items():
-                            precio_final = st.session_state.precios_carro.get(s, PRODUCTOS[s])
-                            subtotal = precio_final * c
-                            total_venta_vc += subtotal
-                            sb_post("ventas", {
-                                "fecha": fecha_hoy(), "hora": ahora(), "canal": "Carro",
-                                "vendedor": "Javier & Edison", "sabor": s,
-                                "cantidad": c, "total": subtotal,
-                                "cliente": cliente_vc.strip(), "factura_id": fid_vc,
-                                "abono": abono_val, "saldo": max(0, total_venta_vc - abono_val)
-                            })
-                        # Actualizar saldo en todos los registros de la factura
-                        saldo_final = max(0, total_venta_vc - abono_val)
-                        sb_patch("ventas", f"factura_id=eq.{fid_vc}", {"abono": abono_val, "saldo": saldo_final})
-                        st.session_state.factura_carro_guardada = {
-                            "id": fid_vc, "cliente": cliente_vc.strip(),
-                            "vendedor": "Javier & Edison",
-                            "items": dict(st.session_state.carrito_carro),
-                            "precios": dict(st.session_state.precios_carro),
-                            "total": total_venta_vc,
-                            "billete": abono_val,
-                            "saldo": saldo_final,
-                        }
-                        st.session_state.carrito_carro = {}
-                        st.session_state.precios_carro = {}
-                        time.sleep(0.3)
-                        st.rerun()
-
-        # Opciones post-venta — solo si hay una factura activa en esta sesión
-        if st.session_state.factura_carro_guardada:
-            fac_vc = st.session_state.factura_carro_guardada
-            vuelto_vc = fac_vc["billete"] - fac_vc["total"] if fac_vc["billete"] >= fac_vc["total"] and fac_vc["billete"] > 0 else 0
-            saldo_vc = fac_vc.get("saldo", 0)
-            msg = f'✅ Venta registrada — <b>#{fac_vc["id"]}</b> · {fac_vc["cliente"]} · {fmt(fac_vc["total"])}'
-            if vuelto_vc > 0:
-                msg += f'<br>💵 Devolver: <b>{fmt(vuelto_vc)}</b>'
-            if saldo_vc > 0:
-                msg += f'<br>📋 Queda debiendo: <b>{fmt(saldo_vc)}</b>'
-            st.markdown(f'<div class="success-toast">{msg}</div>', unsafe_allow_html=True)
-
-            # Modificar factura post-venta
-            st.markdown('<div class="section-label">¿El cliente quiere algo más?</div>', unsafe_allow_html=True)
-            tab_cambio_vc, tab_agregar_vc = st.tabs(["🔁 Cambiar producto", "➕ Agregar producto"])
-
-            with tab_cambio_vc:
-                col_a, col_b = st.columns(2)
-
-                # Devuelve: solo sabores que están en la factura actual
-                sabores_en_factura = list(fac_vc["items"].keys())
-                sabor_out_vc = col_a.selectbox("Devuelve", sabores_en_factura, key="cambio_out_vc")
-                max_out = fac_vc["items"].get(sabor_out_vc, 1)
-                cant_out_vc = col_a.number_input("Cantidad que devuelve", min_value=1, max_value=max_out, value=1, step=1, key="cant_out_vc")
-
-                # Lleva en cambio: solo sabores disponibles en el carro
-                # Al devolver, ese sabor vuelve al carro — sumarlo temporalmente
-                stock_carro_cambio = dict(stock_carro)
-                stock_carro_cambio[sabor_out_vc] = stock_carro_cambio.get(sabor_out_vc, 0) + cant_out_vc
-                sabores_disp_cambio = [s for s, v in stock_carro_cambio.items() if v > 0]
-                sabor_in_vc = col_b.selectbox("Lleva en cambio", sabores_disp_cambio, key="cambio_in_vc")
-                max_in = int(stock_carro_cambio.get(sabor_in_vc, 1))
-                cant_in_vc = col_b.number_input("Cantidad que lleva", min_value=1, max_value=max_in, value=1, step=1, key="cant_in_vc")
-
-                valor_out_vc = fac_vc["precios"].get(sabor_out_vc, PRODUCTOS[sabor_out_vc]) * cant_out_vc
-                valor_in_vc  = fac_vc["precios"].get(sabor_in_vc,  PRODUCTOS[sabor_in_vc])  * cant_in_vc
-                dif_vc = valor_in_vc - valor_out_vc
-                if dif_vc > 0:
-                    st.markdown(f'<div class="warn-box">💰 El cliente debe pagar <b>{fmt(dif_vc)}</b> adicionales</div>', unsafe_allow_html=True)
-                elif dif_vc < 0:
-                    st.markdown(f'<div class="info-box">💵 Hay que devolver <b>{fmt(abs(dif_vc))}</b> al cliente</div>', unsafe_allow_html=True)
-                else:
-                    st.markdown('<div class="info-box">✅ Cambio sin diferencia de valor</div>', unsafe_allow_html=True)
-
-                if st.button("🔁 Registrar cambio", key="btn_cambio_vc"):
-                    sb_post("ventas", {
-                        "fecha": fecha_hoy(), "hora": ahora(), "canal": "Cambio",
-                        "vendedor": fac_vc["vendedor"], "sabor": sabor_out_vc,
-                        "cantidad": -cant_out_vc, "total": -valor_out_vc,
-                        "cliente": fac_vc["cliente"], "factura_id": fac_vc["id"],
-                        "abono": 0, "saldo": 0
-                    })
-                    sb_post("ventas", {
-                        "fecha": fecha_hoy(), "hora": ahora(), "canal": "Cambio",
-                        "vendedor": fac_vc["vendedor"], "sabor": sabor_in_vc,
-                        "cantidad": cant_in_vc, "total": valor_in_vc,
-                        "cliente": fac_vc["cliente"], "factura_id": fac_vc["id"],
-                        "abono": 0, "saldo": 0
-                    })
-                    # Actualizar saldo de la factura si hay diferencia
-                    if dif_vc > 0:
-                        raw_saldo = sb_get("ventas", f"select=saldo&factura_id=eq.{fac_vc['id']}&canal=eq.Carro&limit=1")
-                        saldo_actual = float(raw_saldo[0]["saldo"]) if raw_saldo else 0
-                        nuevo_saldo = saldo_actual + dif_vc
-                        sb_patch("ventas", f"factura_id=eq.{fac_vc['id']}&canal=eq.Carro", {"saldo": nuevo_saldo})
-                    elif dif_vc < 0:
-                        raw_saldo = sb_get("ventas", f"select=saldo&factura_id=eq.{fac_vc['id']}&canal=eq.Carro&limit=1")
-                        saldo_actual = float(raw_saldo[0]["saldo"]) if raw_saldo else 0
-                        nuevo_saldo = max(0, saldo_actual + dif_vc)
-                        sb_patch("ventas", f"factura_id=eq.{fac_vc['id']}&canal=eq.Carro", {"saldo": nuevo_saldo})
-                    time.sleep(0.3)
-                    todos_vc = sb_get("ventas", f"select=*&factura_id=eq.{fac_vc['id']}")
-                    st.session_state.recibo_canal_df = todos_vc or []
-                    _recargar_factura_vc(fac_vc)
-                    st.rerun()
-
-            with tab_agregar_vc:
-                # Solo mostrar sabores disponibles en el carro
-                sabores_disponibles_vc = [s for s, v in stock_carro.items() if v > 0]
-                if not sabores_disponibles_vc:
-                    st.markdown('<div class="warn-box">⚠️ No hay papas disponibles en el carro para agregar.</div>', unsafe_allow_html=True)
-                else:
-                    sabor_add_vc = st.selectbox("Sabor a agregar", sabores_disponibles_vc, key="add_sabor_vc")
-                    disp_add_vc = int(stock_carro.get(sabor_add_vc, 0))
-                    cant_add_vc = st.number_input("Cantidad", min_value=1, max_value=disp_add_vc, value=1, step=1, key="add_cant_vc")
-                    precio_add_vc = fac_vc["precios"].get(sabor_add_vc, PRODUCTOS[sabor_add_vc]) * cant_add_vc
-                    st.markdown(f'<div class="info-box">📦 Disponible: <b>{disp_add_vc}</b> · 💰 A cobrar: <b>{fmt(precio_add_vc)}</b></div>', unsafe_allow_html=True)
-
-                    if st.button("➕ Agregar a la factura", key="btn_add_vc"):
-                        sb_post("ventas", {
-                            "fecha": fecha_hoy(), "hora": ahora(), "canal": "Cambio",
-                            "vendedor": fac_vc["vendedor"], "sabor": sabor_add_vc,
-                            "cantidad": cant_add_vc, "total": precio_add_vc,
-                            "cliente": fac_vc["cliente"], "factura_id": fac_vc["id"],
-                            "abono": 0, "saldo": 0
-                        })
-                        # Actualizar saldo — el cliente debe más
-                        raw_saldo = sb_get("ventas", f"select=saldo&factura_id=eq.{fac_vc['id']}&canal=eq.Carro&limit=1")
-                        saldo_actual = float(raw_saldo[0]["saldo"]) if raw_saldo else 0
-                        nuevo_saldo = saldo_actual + precio_add_vc
-                        sb_patch("ventas", f"factura_id=eq.{fac_vc['id']}&canal=eq.Carro", {"saldo": nuevo_saldo})
-                        time.sleep(0.3)
-                        _recargar_factura_vc(fac_vc)
-                        st.rerun()
-
-            if st.button("🧾 Nueva venta", key="btn_nueva_vc"):
-                st.session_state.factura_carro_guardada = None
-                st.rerun()
-
-        # Facturas del día — visible para todos desde cualquier dispositivo
-        st.markdown('<div class="section-label">Ventas de hoy</div>', unsafe_allow_html=True)
-        st.caption("Toca una fila para ver el recibo completo.")
-        raw_fact_vc = sb_get("ventas",
-            f"select=fecha,hora,cliente,vendedor,sabor,cantidad,total,factura_id,es_credito&fecha=eq.{fecha_hoy()}&canal=eq.Carro&order=hora.desc")
-        if raw_fact_vc:
-            df_fact_vc = pd.DataFrame(raw_fact_vc)
-            mostrar_facturas_seleccionables(df_fact_vc, "carro_todos")
-        else:
-            st.caption("Aún no hay ventas registradas hoy.")
-
-        mostrar_creditos_pendientes("Carro")
-
+        render_venta_canal(CONFIG_CARRO)
 
         # Papas disponibles del cargue — histórico completo
         st.markdown('<div class="section-label">Papas disponibles del cargue</div>', unsafe_allow_html=True)
-        with ThreadPoolExecutor(max_workers=3) as ex:
-            f_cg3  = ex.submit(sb_get, "cargues",     f"select=sabor,cantidad")
-            f_vc3  = ex.submit(sb_get, "ventas",       f"select=sabor,cantidad&canal=in.(Carro,Cambio,Regalo)")
-            f_dev3 = ex.submit(sb_get, "devoluciones", f"select=sabor,cantidad")
-        raw_cg2  = f_cg3.result()
-        raw_vc2  = f_vc3.result()
-        raw_dev2 = f_dev3.result()
-        if raw_cg2:
-            df_cg2 = pd.DataFrame(raw_cg2).groupby("sabor")["cantidad"].sum().reset_index()
-            df_cg2.columns = ["sabor","cargado"]
-            if raw_vc2:
-                df_vc3 = pd.DataFrame(raw_vc2).groupby("sabor")["cantidad"].sum().reset_index()
-                df_vc3.columns = ["sabor","vendido"]
-                df_cg2 = df_cg2.merge(df_vc3, on="sabor", how="left").fillna(0)
-            else:
-                df_cg2["vendido"] = 0
-            if raw_dev2:
-                df_dev3 = pd.DataFrame(raw_dev2).groupby("sabor")["cantidad"].sum().reset_index()
-                df_dev3.columns = ["sabor","devuelto"]
-                df_cg2 = df_cg2.merge(df_dev3, on="sabor", how="left").fillna(0)
-            else:
-                df_cg2["devuelto"] = 0
-            df_cg2["pendiente"] = df_cg2["cargado"] - df_cg2["vendido"] - df_cg2["devuelto"]
-            disponibles = df_cg2[df_cg2["pendiente"] > 0]
-            if not disponibles.empty:
-                filas_cg = "".join(
-                    f'<div class="factura-row"><span>{row["sabor"]}</span><span><b>{int(row["pendiente"])} bolsas</b></span></div>'
-                    for _, row in disponibles.iterrows()
-                )
-                st.markdown(f'<div class="factura-box">{filas_cg}</div>', unsafe_allow_html=True)
-            else:
-                st.caption("No hay cargue activo hoy.")
+        stock_carro_sub2 = _stock_carro_actual()
+        disponibles_cargue = sorted(((s, v) for s, v in stock_carro_sub2.items() if v > 0), key=lambda x: -x[1])
+        if disponibles_cargue:
+            filas_cg = "".join(
+                f'<div class="factura-row"><span>{s}</span><span><b>{int(v)} bolsas</b></span></div>'
+                for s, v in disponibles_cargue
+            )
+            st.markdown(f'<div class="factura-box">{filas_cg}</div>', unsafe_allow_html=True)
         else:
-            st.caption("No hay cargue registrado hoy.")
+            st.caption("No hay cargue activo hoy.")
 
         # Solo admin ve resumen del carro
         if st.session_state.es_admin:
@@ -1509,26 +1506,7 @@ elif st.session_state.vista == "carro":
         st.caption("Registra las bolsas que se regalan — se descuentan del carro pero no cuentan como venta.")
 
         # Solo sabores disponibles en el carro (histórico)
-        with ThreadPoolExecutor(max_workers=3) as ex:
-            f_cg_r  = ex.submit(sb_get, "cargues",     f"select=sabor,cantidad")
-            f_vc_r  = ex.submit(sb_get, "ventas",       f"select=sabor,cantidad&canal=in.(Carro,Cambio,Regalo)")
-            f_dev_r = ex.submit(sb_get, "devoluciones", f"select=sabor,cantidad")
-        raw_cg_r  = f_cg_r.result()
-        raw_vc_r  = f_vc_r.result()
-        raw_dev_r = f_dev_r.result()
-
-        stock_carro_r = {}
-        if raw_cg_r:
-            for r in raw_cg_r:
-                stock_carro_r[r["sabor"]] = stock_carro_r.get(r["sabor"], 0) + r["cantidad"]
-        if raw_vc_r:
-            for r in raw_vc_r:
-                if r.get("cantidad", 0) > 0:
-                    stock_carro_r[r["sabor"]] = stock_carro_r.get(r["sabor"], 0) - r["cantidad"]
-        if raw_dev_r:
-            for r in raw_dev_r:
-                stock_carro_r[r["sabor"]] = stock_carro_r.get(r["sabor"], 0) - r.get("cantidad", 0)
-
+        stock_carro_r = _stock_carro_actual()
         sabores_disp_r = [s for s, v in stock_carro_r.items() if v > 0]
 
         if not sabores_disp_r:
@@ -1578,243 +1556,7 @@ elif st.session_state.vista == "carro":
 # ══════════════════════════════════════════════════════════════════════════════
 elif st.session_state.vista == "fabrica":
 
-    st.markdown('<div class="section-label">Nueva venta 🏭</div>', unsafe_allow_html=True)
-
-    vendedor_f = st.selectbox("Vendedor", VENDEDORES_FABRICA, key="vend_f")
-    cliente_f  = st.text_input("Nombre del cliente", placeholder="Ej: Tienda Don Carlos", key="cliente_f")
-
-    st.markdown('<div class="section-label">Agregar al carrito</div>', unsafe_allow_html=True)
-
-    col_s, col_c = st.columns([2, 1])
-    sabor_vf = col_s.selectbox("Sabor", sabores_por_frecuencia("Fábrica"), key="sabor_vf")
-    cant_vf  = col_c.number_input("Bolsas", min_value=1, max_value=500, value=1, step=1, key="cant_vf")
-
-    stock_vf   = get_stock(sabor_vf)
-    en_carrito = st.session_state.carrito.get(sabor_vf, 0)
-    disponible = stock_vf - en_carrito
-
-    if disponible < cant_vf:
-        st.markdown(f'<div class="alert-low">⚠️ Solo hay {disponible} bolsas disponibles de {sabor_vf}.</div>', unsafe_allow_html=True)
-
-    # Selector de precio antes de agregar
-    if sabor_vf in PRECIOS_RAPIDOS:
-        opciones_vf = [f"{e} — {fmt(p)}" for e, p in PRECIOS_RAPIDOS[sabor_vf]]
-        precios_vf  = [p for _, p in PRECIOS_RAPIDOS[sabor_vf]]
-        sel_precio_vf = st.radio("Precio", opciones_vf, horizontal=True, key=f"precio_radio_vf_{sabor_vf}")
-        precio_elegido_vf = precios_vf[opciones_vf.index(sel_precio_vf)]
-    else:
-        precio_elegido_vf = PRODUCTOS[sabor_vf]
-
-    col_add, col_clr = st.columns(2)
-    if col_add.button("➕ Agregar", key="btn_add", disabled=(disponible < cant_vf)):
-        st.session_state.carrito[sabor_vf] = en_carrito + cant_vf
-        st.session_state.precios_carrito[sabor_vf] = precio_elegido_vf
-        st.rerun()
-
-    if col_clr.button("🗑️ Vaciar", key="btn_clr"):
-        st.session_state.carrito = {}
-        st.session_state.precios_carrito = {}
-        st.rerun()
-
-    # Carrito como tabla editable
-    if st.session_state.carrito:
-        st.markdown('<div class="section-label">Carrito actual</div>', unsafe_allow_html=True)
-        st.caption("Toca cualquier celda para cambiar cantidad o precio.")
-
-        sabores_carrito = list(st.session_state.carrito.keys())
-        df_carrito = pd.DataFrame({
-            "Sabor":    sabores_carrito,
-            "Cantidad": [st.session_state.carrito[s] for s in sabores_carrito],
-            "Precio":   [st.session_state.precios_carrito.get(s, PRODUCTOS[s]) for s in sabores_carrito],
-        })
-        df_carrito["Subtotal"] = df_carrito["Cantidad"] * df_carrito["Precio"]
-
-        edited_cart = st.data_editor(
-            df_carrito,
-            use_container_width=True,
-            hide_index=True,
-            num_rows="fixed",
-            column_config={
-                "Sabor":    st.column_config.TextColumn("Sabor", disabled=True),
-                "Cantidad": st.column_config.NumberColumn("Cantidad", min_value=1, step=1),
-                "Precio":   st.column_config.NumberColumn("Precio", min_value=100, step=100),
-                "Subtotal": st.column_config.NumberColumn("Subtotal", disabled=True),
-            },
-            key="carrito_editor"
-        )
-
-        if st.button("💾 Aplicar cambios al carrito", key="btn_save_cart"):
-            nuevo_carrito = {}
-            nuevos_precios = {}
-            for _, row in edited_cart.iterrows():
-                if pd.notna(row["Sabor"]) and row["Cantidad"] > 0:
-                    nuevo_carrito[row["Sabor"]] = nuevo_carrito.get(row["Sabor"], 0) + int(row["Cantidad"])
-                    nuevos_precios[row["Sabor"]] = int(row["Precio"])
-            st.session_state.carrito = nuevo_carrito
-            st.session_state.precios_carrito = nuevos_precios
-            st.rerun()
-
-        sabor_quitar = st.selectbox("Quitar un sabor del carrito", ["— Selecciona —"] + sabores_carrito, key="sel_quitar")
-        if sabor_quitar != "— Selecciona —" and st.button("✕ Quitar del carrito", key="btn_quitar"):
-            del st.session_state.carrito[sabor_quitar]
-            if sabor_quitar in st.session_state.precios_carrito:
-                del st.session_state.precios_carrito[sabor_quitar]
-            st.rerun()
-
-        total_fac = float((edited_cart["Cantidad"] * edited_cart["Precio"]).sum())
-
-
-        # Billete y vuelto
-        st.markdown('<div class="section-label">Pago del cliente</div>', unsafe_allow_html=True)
-        abono_f = st.number_input("Abono del cliente ($)", min_value=0, value=int(total_fac), step=1000, key="abono_f")
-        if abono_f > 0:
-            if abono_f >= total_fac:
-                st.markdown(f'<div class="info-box">💰 Total: <b>{fmt(total_fac)}</b> · Devolver: <b>{fmt(abono_f - total_fac)}</b></div>', unsafe_allow_html=True)
-            else:
-                st.markdown(f'<div class="warn-box">📋 Abono: <b>{fmt(abono_f)}</b> · Queda debiendo: <b>{fmt(total_fac - abono_f)}</b></div>', unsafe_allow_html=True)
-        else:
-            st.markdown(f'<div class="warn-box">📋 Sin abono — queda debiendo: <b>{fmt(total_fac)}</b></div>', unsafe_allow_html=True)
-
-        if st.button("✅ Confirmar venta", key="btn_vf"):
-            if not cliente_f.strip():
-                st.markdown('<div class="alert-low">⚠️ Escribe el nombre del cliente.</div>', unsafe_allow_html=True)
-            else:
-                sin_stock_f = [s for s, c in st.session_state.carrito.items() if get_stock(s) < c]
-                if sin_stock_f:
-                    st.markdown(f'<div class="alert-low">⚠️ Stock insuficiente: <b>{", ".join(sin_stock_f)}</b>. Ajusta el carrito.</div>', unsafe_allow_html=True)
-                else:
-                    fid = str(uuid.uuid4())[:8].upper()
-                    total_venta_f = 0
-                    abono_val_f = int(st.session_state.get("abono_f", 0))
-                    for s, c in st.session_state.carrito.items():
-                        precio_final = st.session_state.precios_carrito.get(s, PRODUCTOS[s])
-                        subtotal = precio_final * c
-                        total_venta_f += subtotal
-                        sb_post("ventas", {
-                            "fecha": fecha_hoy(), "hora": ahora(), "canal": "Fábrica",
-                            "vendedor": vendedor_f, "sabor": s, "cantidad": c,
-                            "total": subtotal, "cliente": cliente_f.strip(),
-                            "factura_id": fid, "abono": abono_val_f, "saldo": 0
-                        })
-                        restar_stock(s, c)
-                    saldo_final_f = max(0, total_venta_f - abono_val_f)
-                    sb_patch("ventas", f"factura_id=eq.{fid}", {"abono": abono_val_f, "saldo": saldo_final_f})
-                    st.session_state.factura_guardada = {
-                        "id": fid, "cliente": cliente_f.strip(),
-                        "vendedor": vendedor_f,
-                        "items": dict(st.session_state.carrito),
-                        "precios": dict(st.session_state.precios_carrito),
-                        "total": total_venta_f,
-                        "billete": abono_val_f,
-                        "saldo": saldo_final_f,
-                    }
-                    st.session_state.carrito = {}
-                    st.session_state.precios_carrito = {}
-                    time.sleep(0.3)
-                    st.rerun()
-
-    # Opciones post-venta — solo si hay una factura activa en esta sesión
-    if st.session_state.factura_guardada:
-        fac = st.session_state.factura_guardada
-        vuelto = fac["billete"] - fac["total"] if fac["billete"] >= fac["total"] and fac["billete"] > 0 else 0
-        saldo_fac = fac.get("saldo", 0)
-        msg_f = f'✅ Venta registrada — <b>#{fac["id"]}</b> · {fac["cliente"]} · {fmt(fac["total"])}'
-        if vuelto > 0:
-            msg_f += f'<br>💵 Devolver: <b>{fmt(vuelto)}</b>'
-        if saldo_fac > 0:
-            msg_f += f'<br>📋 Queda debiendo: <b>{fmt(saldo_fac)}</b>'
-        st.markdown(f'<div class="success-toast">{msg_f}</div>', unsafe_allow_html=True)
-
-        # Modificar factura post-venta
-        st.markdown('<div class="section-label">¿El cliente quiere algo más?</div>', unsafe_allow_html=True)
-        tab_cambio_f, tab_agregar_f = st.tabs(["🔁 Cambiar producto", "➕ Agregar producto"])
-
-        with tab_cambio_f:
-            col_a, col_b = st.columns(2)
-            sabores_en_fac = list(fac["items"].keys())
-            sabor_out = col_a.selectbox("Devuelve", sabores_en_fac, key="cambio_out")
-            max_out_f = fac["items"].get(sabor_out, 1)
-            cant_out  = col_a.number_input("Cantidad que devuelve", min_value=1, max_value=max_out_f, value=1, step=1, key="cant_out")
-            sabor_in  = col_b.selectbox("Lleva en cambio", SABORES_LISTA, key="cambio_in")
-            max_in_f  = max(1, get_stock(sabor_in))
-            cant_in   = col_b.number_input("Cantidad que lleva", min_value=1, max_value=max_in_f, value=1, step=1, key="cant_in")
-
-            valor_out = fac["precios"].get(sabor_out, PRODUCTOS[sabor_out]) * cant_out
-            valor_in  = fac["precios"].get(sabor_in,  PRODUCTOS[sabor_in])  * cant_in
-            diferencia = valor_in - valor_out
-            if diferencia > 0:
-                st.markdown(f'<div class="warn-box">💰 El cliente debe pagar <b>{fmt(diferencia)}</b> adicionales</div>', unsafe_allow_html=True)
-            elif diferencia < 0:
-                st.markdown(f'<div class="info-box">💵 Hay que devolver <b>{fmt(abs(diferencia))}</b> al cliente</div>', unsafe_allow_html=True)
-            else:
-                st.markdown('<div class="info-box">✅ Cambio sin diferencia de valor</div>', unsafe_allow_html=True)
-
-            if st.button("🔁 Registrar cambio", key="btn_cambio"):
-                sb_post("ventas", {"fecha": fecha_hoy(), "hora": ahora(), "canal": "Cambio",
-                    "vendedor": fac["vendedor"], "sabor": sabor_out,
-                    "cantidad": -cant_out, "total": -valor_out,
-                    "cliente": fac["cliente"], "factura_id": fac["id"],
-                    "abono": 0, "saldo": 0})
-                agregar_stock(sabor_out, cant_out)
-                sb_post("ventas", {"fecha": fecha_hoy(), "hora": ahora(), "canal": "Cambio",
-                    "vendedor": fac["vendedor"], "sabor": sabor_in,
-                    "cantidad": cant_in, "total": valor_in,
-                    "cliente": fac["cliente"], "factura_id": fac["id"],
-                    "abono": 0, "saldo": 0})
-                restar_stock(sabor_in, cant_in)
-                if diferencia != 0:
-                    raw_saldo_f = sb_get("ventas", f"select=saldo&factura_id=eq.{fac['id']}&canal=eq.Fábrica&limit=1")
-                    saldo_act_f = float(raw_saldo_f[0]["saldo"]) if raw_saldo_f else 0
-                    nuevo_saldo_f = max(0, saldo_act_f + diferencia)
-                    sb_patch("ventas", f"factura_id=eq.{fac['id']}&canal=eq.Fábrica", {"saldo": nuevo_saldo_f})
-                time.sleep(0.3)
-                _recargar_factura_f(fac)
-                st.rerun()
-                restar_stock(sabor_in, cant_in)
-                time.sleep(0.3)
-                _recargar_factura_f(fac)
-                st.rerun()
-
-        with tab_agregar_f:
-            sabor_add_f = st.selectbox("Sabor a agregar", SABORES_LISTA, key="add_sabor_f")
-            cant_add_f  = st.number_input("Cantidad", min_value=1, max_value=50, value=1, step=1, key="add_cant_f")
-            precio_add_f = fac["precios"].get(sabor_add_f, PRODUCTOS[sabor_add_f]) * cant_add_f
-            st.markdown(f'<div class="info-box">💰 A cobrar adicionalmente: <b>{fmt(precio_add_f)}</b></div>', unsafe_allow_html=True)
-
-            if st.button("➕ Agregar a la factura", key="btn_add_f"):
-                sb_post("ventas", {"fecha": fecha_hoy(), "hora": ahora(), "canal": "Cambio",
-                    "vendedor": fac["vendedor"], "sabor": sabor_add_f,
-                    "cantidad": cant_add_f, "total": precio_add_f,
-                    "cliente": fac["cliente"], "factura_id": fac["id"],
-                    "abono": 0, "saldo": 0})
-                restar_stock(sabor_add_f, cant_add_f)
-                # Actualizar saldo — el cliente debe más
-                raw_saldo_f2 = sb_get("ventas", f"select=saldo&factura_id=eq.{fac['id']}&canal=eq.Fábrica&limit=1")
-                saldo_act_f2 = float(raw_saldo_f2[0]["saldo"]) if raw_saldo_f2 else 0
-                nuevo_saldo_f2 = saldo_act_f2 + precio_add_f
-                sb_patch("ventas", f"factura_id=eq.{fac['id']}&canal=eq.Fábrica", {"saldo": nuevo_saldo_f2})
-                time.sleep(0.3)
-                _recargar_factura_f(fac)
-                st.rerun()
-                st.rerun()
-
-        if st.button("🧾 Nueva venta", key="btn_nueva"):
-            st.session_state.factura_guardada = None
-            st.rerun()
-
-    # Ventas de hoy — visible para todos, igual que en el resumen del admin
-    st.markdown('<div class="section-label">Ventas de hoy</div>', unsafe_allow_html=True)
-    st.caption("Toca una fila para ver el recibo completo.")
-    raw_fact_f = sb_get("ventas",
-        f"select=fecha,hora,cliente,vendedor,sabor,cantidad,total,factura_id,es_credito&fecha=eq.{fecha_hoy()}&canal=eq.Fábrica&order=hora.desc")
-    if raw_fact_f:
-        df_fact_f = pd.DataFrame(raw_fact_f)
-        mostrar_facturas_seleccionables(df_fact_f, "fabrica_todos")
-    else:
-        st.caption("Aún no hay ventas registradas hoy.")
-
-    mostrar_creditos_pendientes("Fábrica")
-
+    render_venta_canal(CONFIG_FABRICA)
 
     # Solo admin ve resumen y historial
     if st.session_state.es_admin:
