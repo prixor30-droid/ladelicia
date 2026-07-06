@@ -246,6 +246,12 @@ def mostrar_creditos_pendientes(canal):
     if not facturas:
         return
     st.markdown('<div class="section-label">💳 Créditos pendientes de cobro</div>', unsafe_allow_html=True)
+    busqueda = st.text_input("🔍 Buscar por cliente", key=f"buscar_credito_{canal}", placeholder="Ej: Don Carlos")
+    if busqueda.strip():
+        q = busqueda.strip().lower()
+        facturas = {fid: d for fid, d in facturas.items() if q in d["cliente"].lower()}
+        if not facturas:
+            st.caption("No hay créditos pendientes para ese cliente.")
     for fid, datos in facturas.items():
         saldo = datos["saldo"]
         st.markdown(
