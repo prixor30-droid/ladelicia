@@ -1336,26 +1336,33 @@ elif st.session_state.vista == "carro":
 
     with sub1:
         st.markdown('<div class="section-label">Cargue del carro</div>', unsafe_allow_html=True)
-        sabor_cg = st.selectbox("Sabor", sabores_por_frecuencia("Carro"), key="sabor_cg")
-        stock_cg = get_stock(sabor_cg)
-        cant_cg  = st.number_input("Bolsas a cargar", min_value=1, max_value=max(1, stock_cg), value=min(10, max(1, stock_cg)), step=5, key="cant_cg")
+        st.caption("Escribe la cantidad solo en los sabores que vas a cargar y presiona Registrar.")
 
-        if stock_cg < cant_cg:
-            st.markdown(f'<div class="alert-low">⚠️ Solo hay {stock_cg} bolsas de {sabor_cg}.</div>', unsafe_allow_html=True)
-        else:
-            st.markdown(f'<div class="info-box">📦 Disponible: <b>{stock_cg}</b> · Quedarán: <b>{stock_cg - cant_cg}</b></div>', unsafe_allow_html=True)
+        sabores_cg_orden = sabores_por_frecuencia("Carro")
+        with st.form("form_cargue", clear_on_submit=True):
+            cols_cg = st.columns(3)
+            cantidades_cg = {}
+            for i, sabor in enumerate(sabores_cg_orden):
+                stock_s = get_stock(sabor)
+                with cols_cg[i % 3]:
+                    cantidades_cg[sabor] = st.number_input(
+                        f"{sabor} ({stock_s} disp.)",
+                        min_value=0, max_value=max(0, stock_s), value=0, step=5,
+                        key=f"cg_{sabor}", disabled=(stock_s == 0)
+                    )
+            enviar_cg = st.form_submit_button("🚗 Registrar cargue")
 
-        def _registrar_cargue(sabor, cantidad):
-            sb_post("cargues", {"fecha": fecha_hoy(), "hora": ahora(), "sabor": sabor, "cantidad": cantidad})
-            restar_stock(sabor, cantidad)
-            st.session_state.ok_cargue = True
-            st.session_state.confirmar_cg = False
-
-        confirmar_cg = st.checkbox(f"Confirmo: {cant_cg} bolsas de {sabor_cg}", key="confirmar_cg")
-        if st.button("🚗 Registrar cargue", key="btn_cg", disabled=(stock_cg < cant_cg) or not confirmar_cg,
-                     on_click=_registrar_cargue, args=(sabor_cg, cant_cg)):
-            time.sleep(0.3)
-            st.rerun()
+        if enviar_cg:
+            registrados_cg = [(s, c) for s, c in cantidades_cg.items() if c > 0]
+            if not registrados_cg:
+                st.warning("Ingresa al menos una cantidad para registrar.")
+            else:
+                for sabor, cantidad in registrados_cg:
+                    sb_post("cargues", {"fecha": fecha_hoy(), "hora": ahora(), "sabor": sabor, "cantidad": cantidad})
+                    restar_stock(sabor, cantidad)
+                st.session_state.ok_cargue = True
+                time.sleep(0.3)
+                st.rerun()
 
         if st.session_state.ok_cargue:
             st.markdown('<div class="success-toast">✅ Cargue registrado.</div>', unsafe_allow_html=True)
