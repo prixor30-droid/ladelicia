@@ -2375,10 +2375,16 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
                 csv = pd.DataFrame(raw_e).to_csv(index=False).encode("utf-8")
                 st.download_button("⬇️ Descargar ventas CSV", csv, f"ventas_{f_exp_ini}_{f_exp_fin}.csv", "text/csv", key="dl_v")
         if col_v2.button("📄 PDF", key="btn_pdf_v"):
-            raw_e = sb_get("ventas", f"select=fecha,hora,canal,vendedor,cliente,sabor,cantidad,total&fecha=gte.{f_exp_ini}&fecha=lte.{f_exp_fin}&order=fecha.asc")
+            raw_e = sb_get("ventas", f"select=fecha,hora,canal,vendedor,cliente,factura_id,total&fecha=gte.{f_exp_ini}&fecha=lte.{f_exp_fin}&order=fecha.asc")
             if raw_e:
                 df_v = pd.DataFrame(raw_e)
+                df_v = (df_v.groupby("factura_id", as_index=False)
+                        .agg(fecha=("fecha", "first"), hora=("hora", "first"),
+                             canal=("canal", "first"), vendedor=("vendedor", "first"),
+                             cliente=("cliente", "first"), total=("total", "sum"))
+                        .sort_values(["fecha", "hora"]))
                 df_v["total"] = df_v["total"].apply(lambda x: f"${int(x):,.0f}".replace(",","."))
+                df_v = df_v[["fecha", "hora", "canal", "vendedor", "cliente", "total"]]
                 pdf_bytes = generar_pdf("Reporte de Ventas", df_v, f"ventas_{f_exp_ini}_{f_exp_fin}")
                 st.download_button("⬇️ Descargar ventas PDF", pdf_bytes, f"ventas_{f_exp_ini}_{f_exp_fin}.pdf", "application/pdf", key="dl_pdf_v")
 
