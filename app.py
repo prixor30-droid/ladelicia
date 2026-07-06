@@ -1196,15 +1196,18 @@ elif st.session_state.vista == "produccion":
     stock_act = get_stock(sabor_p)
     st.markdown(f'<div class="info-box">📦 Stock actual de <b>{sabor_p}</b>: {stock_act} → quedará en <b>{stock_act + cantidad_p}</b></div>', unsafe_allow_html=True)
 
-    confirmar_prod = st.checkbox(f"Confirmo: {cantidad_p} bolsas de {sabor_p}", key="confirmar_prod")
-    if st.button("✅ Registrar producción", key="btn_prod", disabled=not confirmar_prod):
+    def _registrar_produccion(empleado, sabor, cantidad):
         sb_post("produccion", {
             "fecha": fecha_hoy(), "hora": ahora(),
-            "empleado": empleado, "sabor": sabor_p, "cantidad": cantidad_p
+            "empleado": empleado, "sabor": sabor, "cantidad": cantidad
         })
-        agregar_stock(sabor_p, cantidad_p)
+        agregar_stock(sabor, cantidad)
         st.session_state.ok_prod = True
         st.session_state.confirmar_prod = False
+
+    confirmar_prod = st.checkbox(f"Confirmo: {cantidad_p} bolsas de {sabor_p}", key="confirmar_prod")
+    if st.button("✅ Registrar producción", key="btn_prod", disabled=not confirmar_prod,
+                 on_click=_registrar_produccion, args=(empleado, sabor_p, cantidad_p)):
         time.sleep(0.3)
         st.rerun()
 
@@ -1342,12 +1345,15 @@ elif st.session_state.vista == "carro":
         else:
             st.markdown(f'<div class="info-box">📦 Disponible: <b>{stock_cg}</b> · Quedarán: <b>{stock_cg - cant_cg}</b></div>', unsafe_allow_html=True)
 
-        confirmar_cg = st.checkbox(f"Confirmo: {cant_cg} bolsas de {sabor_cg}", key="confirmar_cg")
-        if st.button("🚗 Registrar cargue", key="btn_cg", disabled=(stock_cg < cant_cg) or not confirmar_cg):
-            sb_post("cargues", {"fecha": fecha_hoy(), "hora": ahora(), "sabor": sabor_cg, "cantidad": cant_cg})
-            restar_stock(sabor_cg, cant_cg)
+        def _registrar_cargue(sabor, cantidad):
+            sb_post("cargues", {"fecha": fecha_hoy(), "hora": ahora(), "sabor": sabor, "cantidad": cantidad})
+            restar_stock(sabor, cantidad)
             st.session_state.ok_cargue = True
             st.session_state.confirmar_cg = False
+
+        confirmar_cg = st.checkbox(f"Confirmo: {cant_cg} bolsas de {sabor_cg}", key="confirmar_cg")
+        if st.button("🚗 Registrar cargue", key="btn_cg", disabled=(stock_cg < cant_cg) or not confirmar_cg,
+                     on_click=_registrar_cargue, args=(sabor_cg, cant_cg)):
             time.sleep(0.3)
             st.rerun()
 
