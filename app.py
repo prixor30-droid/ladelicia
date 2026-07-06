@@ -2023,14 +2023,18 @@ elif st.session_state.vista == "caja":
         f_fin_caja = col_c2.date_input("Hasta", value=hoy_caja, key="f_fin_caja")
 
         # INGRESOS — ventas pagadas (total - saldo = abonado)
-        with ThreadPoolExecutor(max_workers=3) as ex:
+        with ThreadPoolExecutor(max_workers=5) as ex:
             f_vf = ex.submit(sb_get, "ventas", f"select=fecha,total,abono,saldo,canal,cliente,factura_id&fecha=gte.{f_ini_caja}&fecha=lte.{f_fin_caja}&canal=in.(Fábrica,Carro)&order=fecha.desc")
             f_ab = ex.submit(sb_get, "creditos", f"select=fecha,cliente,canal,total,pagado&fecha=gte.{f_ini_caja}&fecha=lte.{f_fin_caja}&estado=eq.pagado&order=fecha.desc")
             f_mp = ex.submit(sb_get, "materia_prima", f"select=fecha,insumo,proveedor,precio_total,abono&fecha=gte.{f_ini_caja}&fecha=lte.{f_fin_caja}&order=fecha.desc")
+            f_cxc = ex.submit(sb_get, "ventas", "select=factura_id,cliente,canal,total,abono,saldo&saldo=gt.0&order=fecha.desc")
+            f_cxp = ex.submit(sb_get, "materia_prima", "select=id,insumo,proveedor,precio_total,abono,saldo&estado=eq.pendiente&order=fecha.desc")
         raw_ventas_caja = f_vf.result() or []
         raw_creditos_cobrados = f_ab.result() or []
         raw_mp_pagos = f_mp.result() or []
         raw_egresos = sb_get("caja_egresos", f"select=*&fecha=gte.{f_ini_caja}&fecha=lte.{f_fin_caja}&order=fecha.desc") or []
+        raw_cxc = f_cxc.result() or []
+        raw_cxp = f_cxp.result() or []
 
         # Calcular ingresos — una sola entrada por factura (la primera fila de cada una)
         facturas_vistas = {}
@@ -2047,13 +2051,32 @@ elif st.session_state.vista == "caja":
 
         saldo_caja = ingresos_ventas - total_egresos
 
+        # Cuentas por cobrar a clientes (créditos de ventas, saldo pendiente) — una sola vez por factura
+        facturas_cxc = {}
+        for r in raw_cxc:
+            fid = r.get("factura_id", "")
+            if fid and fid not in facturas_cxc:
+                facturas_cxc[fid] = float(r.get("saldo", 0))
+        cuentas_por_cobrar = sum(facturas_cxc.values())
+
+        # Cuentas por pagar a proveedores (materia prima/insumos pendientes de pago)
+        cuentas_por_pagar = sum(float(r.get("saldo", 0)) for r in raw_cxp)
+
         # Tarjetas resumen
-        color_saldo = "metric-green" if saldo_caja >= 0 else "metric-pink"
+        color_saldo = "metric-green" if saldo_caja >= 0 else "metric-red"
         st.markdown(f"""
         <div class="metric-row">
             <div class="metric-box metric-blue"><div class="val">{fmt(ingresos_ventas)}</div><div class="lbl">Ingresos</div></div>
             <div class="metric-box metric-yellow"><div class="val">{fmt(total_egresos)}</div><div class="lbl">Egresos</div></div>
             <div class="metric-box {color_saldo}"><div class="val">{fmt(saldo_caja)}</div><div class="lbl">Saldo caja</div></div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        st.markdown('<div class="section-label">🧾 Para contabilidad — créditos vigentes</div>', unsafe_allow_html=True)
+        st.markdown(f"""
+        <div class="metric-row">
+            <div class="metric-box metric-blue"><div class="val">{fmt(cuentas_por_cobrar)}</div><div class="lbl">Cuentas por cobrar (clientes)</div></div>
+            <div class="metric-box metric-red"><div class="val">{fmt(cuentas_por_pagar)}</div><div class="lbl">Cuentas por pagar (proveedores)</div></div>
         </div>
         """, unsafe_allow_html=True)
 
