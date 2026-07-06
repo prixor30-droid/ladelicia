@@ -6,6 +6,7 @@ import hashlib
 import requests
 import time
 import uuid
+import difflib
 from pathlib import Path
 from datetime import date, datetime, timezone, timedelta
 from concurrent.futures import ThreadPoolExecutor
@@ -226,6 +227,28 @@ def mostrar_facturas_seleccionables(df_canal, key_prefix):
         st.session_state.vista = "recibo"
         st.rerun()
 
+def _colapsar_repetidas(s):
+    """Reduce letras repetidas seguidas: 'bettos' -> 'betos'."""
+    out = []
+    prev = None
+    for ch in s:
+        if ch != prev:
+            out.append(ch)
+        prev = ch
+    return "".join(out)
+
+def _coincide_nombre(busqueda, nombre):
+    """Compara nombres tolerando errores de tipeo (letras dobles, acentos, etc)."""
+    b = _colapsar_repetidas(busqueda.strip().lower())
+    n = nombre.strip().lower()
+    n_col = _colapsar_repetidas(n)
+    if not b:
+        return True
+    if b in n or b in n_col:
+        return True
+    palabras = n.split() + [n]
+    return any(difflib.SequenceMatcher(None, b, _colapsar_repetidas(p)).ratio() >= 0.75 for p in palabras)
+
 def mostrar_creditos_pendientes(canal):
     """Muestra facturas con saldo pendiente y permite registrar abonos."""
     raw = sb_get("ventas", f"select=factura_id,cliente,vendedor,total,abono,saldo&fecha=gte.2024-01-01&canal=eq.{requests.utils.quote(canal)}&saldo=gt.0")
@@ -248,8 +271,7 @@ def mostrar_creditos_pendientes(canal):
     st.markdown('<div class="section-label">💳 Créditos pendientes de cobro</div>', unsafe_allow_html=True)
     busqueda = st.text_input("🔍 Buscar por cliente", key=f"buscar_credito_{canal}", placeholder="Ej: Don Carlos")
     if busqueda.strip():
-        q = busqueda.strip().lower()
-        facturas = {fid: d for fid, d in facturas.items() if q in d["cliente"].lower()}
+        facturas = {fid: d for fid, d in facturas.items() if _coincide_nombre(busqueda, d["cliente"])}
         if not facturas:
             st.caption("No hay créditos pendientes para ese cliente.")
     for fid, datos in facturas.items():
