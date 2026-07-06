@@ -308,7 +308,7 @@ def _stock_carro_actual():
         stock[r["sabor"]] = stock.get(r["sabor"], 0) - r.get("cantidad", 0)
     return stock
 
-def render_venta_canal(cfg):
+def render_venta_canal(cfg, mostrar_creditos=True):
     """Flujo de venta (carrito, pago, factura, cambios) compartido entre las
     vistas 'Fábrica' y 'Carro'. cfg define lo que cambia entre canales:
     de dónde sale el stock disponible, si la venta descuenta inventario
@@ -568,7 +568,8 @@ def render_venta_canal(cfg):
     else:
         st.caption("Aún no hay ventas registradas hoy.")
 
-    mostrar_creditos_pendientes(canal)
+    if mostrar_creditos:
+        mostrar_creditos_pendientes(canal)
 
 CONFIG_FABRICA = {
     "canal": "Fábrica",
@@ -1332,7 +1333,7 @@ elif st.session_state.vista == "produccion":
 # ══════════════════════════════════════════════════════════════════════════════
 elif st.session_state.vista == "carro":
 
-    sub1, sub2, sub3, sub4 = st.tabs(["🚗 Nuevo cargue", "💵 Registrar venta", "🔄 Devolución", "🎁 Regalar"])
+    sub1, sub2, sub3, sub4, sub5 = st.tabs(["🚗 Nuevo cargue", "💵 Registrar venta", "🔄 Devolución", "🎁 Regalar", "💳 Créditos"])
 
     with sub1:
         st.markdown('<div class="section-label">Cargue del carro</div>', unsafe_allow_html=True)
@@ -1461,7 +1462,7 @@ elif st.session_state.vista == "carro":
             st.info(f"No hay cargues registrados el {fecha_consulta_cg_str}.")
 
     with sub2:
-        render_venta_canal(CONFIG_CARRO)
+        render_venta_canal(CONFIG_CARRO, mostrar_creditos=False)
 
         # Papas disponibles del cargue — histórico completo
         st.markdown('<div class="section-label">Papas disponibles del cargue</div>', unsafe_allow_html=True)
@@ -1567,6 +1568,9 @@ elif st.session_state.vista == "carro":
                 f'</div>',
                 unsafe_allow_html=True
             )
+
+    with sub5:
+        mostrar_creditos_pendientes("Carro")
 
 # ══════════════════════════════════════════════════════════════════════════════
 # VISTA: FÁBRICA
