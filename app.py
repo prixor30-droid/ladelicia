@@ -254,18 +254,22 @@ def mostrar_creditos_pendientes(canal):
     raw = sb_get("ventas", f"select=factura_id,cliente,vendedor,total,abono,saldo&fecha=gte.2024-01-01&canal=eq.{requests.utils.quote(canal)}&saldo=gt.0")
     if not raw:
         return
-    # Agrupar por factura para no repetir
+    # Agrupar por factura para no repetir (cada fila es un producto de la factura,
+    # por eso el total hay que sumarlo entre todas las filas de la misma factura_id)
     facturas = {}
     for r in raw:
         fid = r["factura_id"]
-        if fid and fid not in facturas:
+        if not fid:
+            continue
+        if fid not in facturas:
             facturas[fid] = {
                 "cliente": r["cliente"],
                 "vendedor": r["vendedor"],
                 "saldo": float(r["saldo"]),
-                "total": float(r["total"]),
+                "total": 0.0,
                 "abono": float(r["abono"]),
             }
+        facturas[fid]["total"] += float(r["total"])
     if not facturas:
         return
     st.markdown('<div class="section-label">💳 Créditos pendientes de cobro</div>', unsafe_allow_html=True)
@@ -371,7 +375,7 @@ def render_venta_canal(cfg, mostrar_creditos=True):
     if sabor in PRECIOS_RAPIDOS:
         opciones_p = [e if e.strip().startswith("$") else f"{e} — {fmt(p)}" for e, p in PRECIOS_RAPIDOS[sabor]]
         precios_p  = [p for _, p in PRECIOS_RAPIDOS[sabor]]
-        sel_p = st.radio("Precio", opciones_p, horizontal=True, key=f"venta_precio_radio_{sabor}", label_visibility="collapsed")
+        sel_p = st.radio("Precio", opciones_p, horizontal=True, key=f"venta_precio_radio_{sabor}")
         precio_elegido = precios_p[opciones_p.index(sel_p)]
     else:
         precio_elegido = PRODUCTOS[sabor]
@@ -1104,7 +1108,7 @@ st.markdown(f"""
 def get_metricas_globales(fecha):
     def q_inv():   return sb_get("inventario", "select=sabor,stock")
     def q_prod():  return sb_get("produccion", f"select=cantidad&fecha=eq.{fecha}")
-    def q_venta(): return sb_get("ventas",     f"select=total&fecha=eq.{fecha}")
+    def q_venta(): return sb_get("ventas",     f"select=factura_id,abono&fecha=eq.{fecha}")
     with ThreadPoolExecutor(max_workers=3) as ex:
         f_inv   = ex.submit(q_inv)
         f_prod  = ex.submit(q_prod)
@@ -1114,7 +1118,16 @@ def get_metricas_globales(fecha):
 _inv, _prod, _venta = get_metricas_globales(fecha_hoy())
 total_inv  = sum(r["stock"]    for r in _inv)   if _inv   else 0
 total_prod = sum(r["cantidad"] for r in _prod)  if _prod  else 0
-total_vta  = sum(r["total"]    for r in _venta) if _venta else 0
+
+# Dinero realmente cobrado hoy — una sola vez por factura (el abono se repite
+# en cada línea de una misma factura). Las ventas a crédito solo cuentan por
+# lo que ya se abonó, no por el total de la venta.
+_facturas_vta = {}
+for r in (_venta or []):
+    fid = r.get("factura_id", "")
+    if fid and fid not in _facturas_vta:
+        _facturas_vta[fid] = float(r.get("abono", 0) or 0)
+total_vta = sum(_facturas_vta.values())
 
 if st.session_state.es_admin:
     tarjeta_ventas = f'<div class="metric-box metric-green"><div class="val">{fmt(total_vta)}</div><div class="lbl">Ventas hoy</div></div>'
@@ -2232,14 +2245,30 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
             st.info("Aún no hay ventas hoy.")
         else:
             df_vt = pd.DataFrame(raw_vt)
-            total_fab   = int(df_vt[df_vt["canal"]=="Fábrica"]["total"].sum()) if "canal" in df_vt.columns else 0
-            total_carro = int(df_vt[df_vt["canal"]=="Carro"]["total"].sum())   if "canal" in df_vt.columns else 0
+
+            # Dinero realmente cobrado y pendiente en créditos — una sola vez por
+            # factura (abono/saldo quedan repetidos en cada línea de una misma factura).
+            facturas_hoy = {}
+            for r in raw_vt:
+                fid = r.get("factura_id", "")
+                if fid and fid not in facturas_hoy:
+                    facturas_hoy[fid] = {
+                        "canal": r.get("canal", ""),
+                        "abono": float(r.get("abono", 0)),
+                        "saldo": float(r.get("saldo", 0)),
+                    }
+            cobrado_fab   = sum(f["abono"] for f in facturas_hoy.values() if f["canal"] == "Fábrica")
+            cobrado_carro = sum(f["abono"] for f in facturas_hoy.values() if f["canal"] == "Carro")
+            pendiente_hoy = sum(f["saldo"] for f in facturas_hoy.values())
+
             st.markdown(f"""
             <div class="metric-row">
-                <div class="metric-box metric-blue"><div class="val">{fmt(total_fab)}</div><div class="lbl">Fábrica</div></div>
-                <div class="metric-box metric-yellow"><div class="val">{fmt(total_carro)}</div><div class="lbl">Carro</div></div>
-                <div class="metric-box metric-green"><div class="val">{fmt(total_fab+total_carro)}</div><div class="lbl">Total</div></div>
+                <div class="metric-box metric-blue"><div class="val">{fmt(cobrado_fab)}</div><div class="lbl">Fábrica</div></div>
+                <div class="metric-box metric-yellow"><div class="val">{fmt(cobrado_carro)}</div><div class="lbl">Carro</div></div>
+                <div class="metric-box metric-green"><div class="val">{fmt(cobrado_fab+cobrado_carro)}</div><div class="lbl">Total cobrado</div></div>
+                <div class="metric-box metric-red"><div class="val">{fmt(pendiente_hoy)}</div><div class="lbl">Pendiente en créditos</div></div>
             </div>""", unsafe_allow_html=True)
+            st.caption("💰 Estas tarjetas muestran solo el dinero cobrado. Los créditos sin pagar aparecen aparte, en \"Pendiente en créditos\".")
 
             st.markdown('<div class="section-label">Por sabor</div>', unsafe_allow_html=True)
             por_sabor = df_vt.groupby("sabor").agg(bolsas=("cantidad","sum"), total=("total","sum")).reset_index()
@@ -2275,15 +2304,30 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
             st.info("No hay ventas en ese rango.")
         else:
             df_r = pd.DataFrame(raw_rango)
-            total_r  = int(df_r["total"].sum())
             bolsas_r = int(df_r["cantidad"].sum())
             dias_r   = df_r["fecha"].nunique()
+
+            # Dinero realmente cobrado y pendiente en créditos — una sola vez por
+            # factura (abono/saldo quedan repetidos en cada línea de una misma factura).
+            facturas_rango = {}
+            for r in raw_rango:
+                fid = r.get("factura_id", "")
+                if fid and fid not in facturas_rango:
+                    facturas_rango[fid] = {
+                        "abono": float(r.get("abono", 0)),
+                        "saldo": float(r.get("saldo", 0)),
+                    }
+            cobrado_r   = sum(f["abono"] for f in facturas_rango.values())
+            pendiente_r = sum(f["saldo"] for f in facturas_rango.values())
+
             st.markdown(f"""
             <div class="metric-row">
-                <div class="metric-box metric-green"><div class="val">{fmt(total_r)}</div><div class="lbl">Ingresos</div></div>
+                <div class="metric-box metric-green"><div class="val">{fmt(cobrado_r)}</div><div class="lbl">Cobrado</div></div>
                 <div class="metric-box metric-blue"><div class="val">{bolsas_r}</div><div class="lbl">Bolsas</div></div>
                 <div class="metric-box metric-yellow"><div class="val">{dias_r}</div><div class="lbl">Días</div></div>
+                <div class="metric-box metric-red"><div class="val">{fmt(pendiente_r)}</div><div class="lbl">Pendiente en créditos</div></div>
             </div>""", unsafe_allow_html=True)
+            st.caption("💰 \"Cobrado\" es el dinero que efectivamente entró. Los créditos sin pagar se muestran aparte.")
 
             st.markdown('<div class="section-label">Por día</div>', unsafe_allow_html=True)
             por_dia = df_r.groupby("fecha").agg(bolsas=("cantidad","sum"), total=("total","sum")).reset_index()
@@ -2325,18 +2369,32 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
             st.info("Aún no hay ventas este mes.")
         else:
             df_mes = pd.DataFrame(raw_mes)
-            total_mes   = int(df_mes["total"].sum())
             bolsas_mes  = int(df_mes["cantidad"].sum())
             dias_mes    = df_mes["fecha"].nunique()
             prod_mes    = sum(r["cantidad"] for r in raw_prod_mes) if raw_prod_mes else 0
-            promedio_dia = total_mes / dias_mes if dias_mes > 0 else 0
+
+            # Dinero realmente cobrado y pendiente en créditos — una sola vez por
+            # factura (abono/saldo quedan repetidos en cada línea de una misma factura).
+            facturas_mes = {}
+            for r in raw_mes:
+                fid = r.get("factura_id", "")
+                if fid and fid not in facturas_mes:
+                    facturas_mes[fid] = {
+                        "abono": float(r.get("abono", 0)),
+                        "saldo": float(r.get("saldo", 0)),
+                    }
+            cobrado_mes   = sum(f["abono"] for f in facturas_mes.values())
+            pendiente_mes = sum(f["saldo"] for f in facturas_mes.values())
+            promedio_dia  = cobrado_mes / dias_mes if dias_mes > 0 else 0
 
             st.markdown(f"""
             <div class="metric-row">
-                <div class="metric-box metric-green"><div class="val">{fmt(total_mes)}</div><div class="lbl">Ingresos del mes</div></div>
+                <div class="metric-box metric-green"><div class="val">{fmt(cobrado_mes)}</div><div class="lbl">Cobrado del mes</div></div>
                 <div class="metric-box metric-blue"><div class="val">{bolsas_mes}</div><div class="lbl">Bolsas vendidas</div></div>
                 <div class="metric-box metric-yellow"><div class="val">{fmt(promedio_dia)}</div><div class="lbl">Promedio diario</div></div>
+                <div class="metric-box metric-red"><div class="val">{fmt(pendiente_mes)}</div><div class="lbl">Pendiente en créditos</div></div>
             </div>""", unsafe_allow_html=True)
+            st.caption("💰 \"Cobrado\" es el dinero que efectivamente entró. Los créditos sin pagar se muestran aparte.")
 
             st.markdown(f'<div class="info-box">📦 Producción total del mes: <b>{prod_mes} bolsas</b></div>', unsafe_allow_html=True)
 
