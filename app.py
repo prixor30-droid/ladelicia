@@ -1362,7 +1362,7 @@ elif st.session_state.vista == "produccion":
     st.markdown('<div class="section-label">Ajustar stock manualmente</div>', unsafe_allow_html=True)
     sabor_adj = st.selectbox("Sabor", SABORES_LISTA, key="sabor_adj")
     stock_adj = get_stock(sabor_adj)
-    nuevo_stock = st.number_input("Stock real", min_value=0, value=stock_adj, step=1, key="nuevo_s")
+    nuevo_stock = st.number_input("Stock real", min_value=0, value=stock_adj, step=1, key=f"nuevo_s_{sabor_adj}")
     if st.button("💾 Guardar ajuste", key="btn_adj"):
         set_stock(sabor_adj, nuevo_stock)
         st.session_state.ok_stock = True
