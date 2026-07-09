@@ -369,9 +369,9 @@ def render_venta_canal(cfg, mostrar_creditos=True):
         st.markdown(f'<div class="alert-low">⚠️ Solo hay {disponible} bolsas disponibles de {sabor}.</div>', unsafe_allow_html=True)
 
     if sabor in PRECIOS_RAPIDOS:
-        opciones_p = [f"{e} — {fmt(p)}" for e, p in PRECIOS_RAPIDOS[sabor]]
+        opciones_p = [e if e.strip().startswith("$") else f"{e} — {fmt(p)}" for e, p in PRECIOS_RAPIDOS[sabor]]
         precios_p  = [p for _, p in PRECIOS_RAPIDOS[sabor]]
-        sel_p = st.radio("Precio", opciones_p, horizontal=True, key=f"venta_precio_radio_{sabor}")
+        sel_p = st.radio("Precio", opciones_p, horizontal=True, key=f"venta_precio_radio_{sabor}", label_visibility="collapsed")
         precio_elegido = precios_p[opciones_p.index(sel_p)]
     else:
         precio_elegido = PRODUCTOS[sabor]
@@ -432,6 +432,9 @@ def render_venta_canal(cfg, mostrar_creditos=True):
         total_venta = float((edited["Cantidad"] * edited["Precio"]).sum())
 
         st.markdown('<div class="section-label">Pago del cliente</div>', unsafe_allow_html=True)
+        if st.session_state.get("venta_abono_total_ref") != total_venta:
+            st.session_state["venta_abono"] = int(total_venta)
+            st.session_state["venta_abono_total_ref"] = total_venta
         abono = st.number_input("Abono del cliente ($)", min_value=0, value=int(total_venta), step=1000, key="venta_abono")
         if abono > 0:
             if abono >= total_venta:
