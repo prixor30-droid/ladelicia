@@ -1771,17 +1771,18 @@ elif st.session_state.vista == "materia_prima":
     st.markdown('<div class="section-label">Materia Prima e Insumos 🌽</div>', unsafe_allow_html=True)
     tab_mp1, tab_mp2, tab_mp3, tab_mp4 = st.tabs(["➕ Entrada", "📤 Salida", "💳 Créditos", "📋 Historial"])
 
-    def registrar_entrada_mp(nombre_sel, unidad_sel, cant_mp, prov_mp, precio_mp, abono_mp, saldo_mp, precio_unit_mp=0, fecha_mp=None):
-        if not prov_mp.strip():
-            st.markdown('<div class="alert-low">⚠️ Escribe el nombre del proveedor.</div>', unsafe_allow_html=True)
-            return False
-        if precio_mp == 0:
-            st.markdown('<div class="alert-low">⚠️ Ingresa el precio total.</div>', unsafe_allow_html=True)
-            return False
+    def registrar_entrada_mp(nombre_sel, unidad_sel, cant_mp, prov_mp, precio_mp, abono_mp, saldo_mp, precio_unit_mp=0, fecha_mp=None, es_stock_existente=False):
+        if not es_stock_existente:
+            if not prov_mp.strip():
+                st.markdown('<div class="alert-low">⚠️ Escribe el nombre del proveedor.</div>', unsafe_allow_html=True)
+                return False
+            if precio_mp == 0:
+                st.markdown('<div class="alert-low">⚠️ Ingresa el precio total.</div>', unsafe_allow_html=True)
+                return False
         data_mp = {
             "fecha": str(fecha_mp) if fecha_mp else fecha_hoy(), "hora": ahora(),
             "insumo": nombre_sel, "cantidad": float(cant_mp),
-            "unidad": unidad_sel, "proveedor": prov_mp.strip(),
+            "unidad": unidad_sel, "proveedor": prov_mp.strip() or "Stock existente",
             "precio_total": float(precio_mp), "abono": float(abono_mp),
             "saldo": float(saldo_mp), "estado": "pagado" if saldo_mp == 0 else "pendiente",
             "precio_unitario": float(precio_unit_mp)
@@ -1874,12 +1875,32 @@ elif st.session_state.vista == "materia_prima":
             if fecha_mp != datetime.now(COL_TZ).date():
                 st.markdown(f'<div class="warn-box">📅 Se registrará con fecha {fecha_mp}, no con la de hoy.</div>', unsafe_allow_html=True)
             cant_mp        = st.number_input(f"Cantidad ({unidad_sel})", min_value=0.1, max_value=9999.0, value=1.0, step=0.5, key="cant_mp")
-            prov_mp        = st.text_input("Proveedor", placeholder="Ej: Distribuidora La 14", key="prov_mp")
-            precio_unit_mp = st.number_input(f"Precio unitario ($ por {unidad_sel})", min_value=0, value=0, step=1000, key="precio_unit_mp")
-            precio_mp      = round(precio_unit_mp * cant_mp)
+
+            ya_tengo_mp = st.checkbox(
+                "📦 Ya tengo este insumo (no es una compra nueva)",
+                key="ya_tengo_mp",
+                help="Úsalo para sumar al stock materia prima que ya tenías. No se descuenta de caja ni queda como deuda con el proveedor."
+            )
+
+            prov_mp = st.text_input(
+                "Proveedor (opcional)" if ya_tengo_mp else "Proveedor",
+                placeholder="Ej: Stock existente" if ya_tengo_mp else "Ej: Distribuidora La 14",
+                key="prov_mp"
+            )
+            precio_unit_mp = st.number_input(
+                f"Precio unitario ($ por {unidad_sel})" + (" — opcional" if ya_tengo_mp else ""),
+                min_value=0, value=0, step=1000, key="precio_unit_mp"
+            )
+            precio_mp = round(precio_unit_mp * cant_mp)
             if precio_mp > 0:
-                st.markdown(f'<div class="info-box">💰 {cant_mp} × {fmt(precio_unit_mp)} = <b>{fmt(precio_mp)}</b> total</div>', unsafe_allow_html=True)
-            if con_credito:
+                nota_caja = " (solo de referencia, no se cobra en caja)" if ya_tengo_mp else ""
+                st.markdown(f'<div class="info-box">💰 {cant_mp} × {fmt(precio_unit_mp)} = <b>{fmt(precio_mp)}</b> total{nota_caja}</div>', unsafe_allow_html=True)
+
+            if ya_tengo_mp:
+                abono_mp = 0
+                saldo_mp = 0
+                st.markdown('<div class="info-box">✅ Se sumará al stock. No se descuenta de caja ni queda como deuda con proveedor.</div>', unsafe_allow_html=True)
+            elif con_credito:
                 abono_mp = st.number_input("Abono inicial ($)", min_value=0, max_value=max(0, precio_mp), value=0, step=1000, key="abono_mp")
                 saldo_mp = max(0, precio_mp - abono_mp)
                 if precio_mp > 0:
@@ -1893,7 +1914,7 @@ elif st.session_state.vista == "materia_prima":
                 abono_mp = precio_mp; saldo_mp = 0
             col1, col2 = st.columns(2)
             if col1.button("✅ Registrar", key="btn_mp"):
-                if registrar_entrada_mp(nombre_sel, unidad_sel, cant_mp, prov_mp, precio_mp, abono_mp, saldo_mp, precio_unit_mp, fecha_mp):
+                if registrar_entrada_mp(nombre_sel, unidad_sel, cant_mp, prov_mp, precio_mp, abono_mp, saldo_mp, precio_unit_mp, fecha_mp, es_stock_existente=ya_tengo_mp):
                     st.session_state.ok_mp = True
                     st.session_state.insumo_sel = None
                     st.session_state.categoria_mp = None
