@@ -1816,57 +1816,6 @@ elif st.session_state.vista == "materia_prima":
             if st.button("← Volver", key="btn_volver_cat"):
                 st.session_state.categoria_mp = None; st.rerun()
 
-            # Tabla matricial según categoría
-            if st.session_state.categoria_mp in ("mp", "sab", "emp"):
-                cat_actual = st.session_state.categoria_mp
-                if cat_actual == "mp":
-                    insumos_lista = [n for n,_,_,_ in INSUMOS_INFO]
-                    titulo_tabla = "Entradas Materia Prima del mes"
-                elif cat_actual == "sab":
-                    insumos_lista = [n for n,_,_,_ in SABORIZANTES_INFO]
-                    titulo_tabla = "Entradas Saborizantes del mes"
-                else:
-                    insumos_lista = [n for n,_,_,_ in EMPAQUES_INFO]
-                    titulo_tabla = "Entradas Empaque del mes"
-
-                primer_dia = datetime.now(COL_TZ).date().replace(day=1)
-                hoy = datetime.now(COL_TZ).date()
-                raw_mes = sb_get("materia_prima",
-                    f"select=fecha,hora,insumo,cantidad,precio_unitario&fecha=gte.{primer_dia}&fecha=lte.{hoy}&order=fecha.asc,hora.asc") or []
-                raw_mes = [r for r in raw_mes if r["insumo"] in insumos_lista]
-
-                if raw_mes:
-                    st.markdown(f'<div class="section-label">{titulo_tabla}</div>', unsafe_allow_html=True)
-
-                    # Fila de totales por insumo
-                    totales = {}
-                    for r in raw_mes:
-                        totales[r["insumo"]] = totales.get(r["insumo"], 0) + float(r["cantidad"])
-
-                    fila_total = {"Fecha": "📊 TOTAL", "Hora": "", "Precio unitario ($)": ""}
-                    for ins in insumos_lista:
-                        fila_total[ins] = totales.get(ins, "") if totales.get(ins, 0) > 0 else ""
-
-                    # Una fila por cada registro
-                    filas_df = [fila_total]
-                    for r in raw_mes:
-                        fila = {
-                            "Fecha": r["fecha"],
-                            "Hora": r.get("hora", ""),
-                            "Precio unitario ($)": float(r.get("precio_unitario", 0)) if r.get("precio_unitario", 0) else ""
-                        }
-                        for ins in insumos_lista:
-                            fila[ins] = float(r["cantidad"]) if r["insumo"] == ins else ""
-                        filas_df.append(fila)
-
-                    df_matriz = pd.DataFrame(filas_df).set_index("Fecha")
-                    col_config_tab = {
-                        "Hora": st.column_config.TextColumn("Hora", disabled=True),
-                        "Precio unitario ($)": st.column_config.NumberColumn("Precio unitario ($)", disabled=True),
-                    }
-                    col_config_tab.update({ins: st.column_config.NumberColumn(ins, min_value=0, step=1) for ins in insumos_lista})
-                    st.data_editor(df_matriz, use_container_width=True, column_config=col_config_tab, key=f"matriz_{cat_actual}")
-
         else:
             nombre_sel, unidad_sel, cat_sel = st.session_state.insumo_sel
             con_credito = cat_sel != "emp"
@@ -1921,6 +1870,21 @@ elif st.session_state.vista == "materia_prima":
                     time.sleep(0.3); st.rerun()
             if col2.button("← Cambiar", key="btn_cambiar_ins"):
                 st.session_state.insumo_sel = None; st.rerun()
+
+            st.markdown(f'<div class="section-label">Entradas de {nombre_sel} este mes</div>', unsafe_allow_html=True)
+            primer_dia = datetime.now(COL_TZ).date().replace(day=1)
+            hoy_ins = datetime.now(COL_TZ).date()
+            raw_ins_mes = sb_get("materia_prima",
+                f"select=fecha,hora,cantidad,precio_unitario,proveedor&insumo=eq.{requests.utils.quote(nombre_sel)}&fecha=gte.{primer_dia}&fecha=lte.{hoy_ins}&order=fecha.desc,hora.desc") or []
+            if raw_ins_mes:
+                total_cant_mes = sum(float(r["cantidad"]) for r in raw_ins_mes)
+                st.caption(f"Total ingresado este mes: {total_cant_mes:.1f} {unidad_sel}")
+                df_ins_mes = pd.DataFrame(raw_ins_mes)
+                df_ins_mes["precio_unitario"] = df_ins_mes["precio_unitario"].apply(lambda x: fmt(x) if x else "—")
+                df_ins_mes.columns = ["Fecha", "Hora", f"Cantidad ({unidad_sel})", "Precio unitario", "Proveedor"]
+                st.dataframe(df_ins_mes, use_container_width=True, hide_index=True)
+            else:
+                st.caption(f"Aún no hay entradas de {nombre_sel} este mes.")
 
         if st.session_state.get("ok_mp"):
             st.markdown('<div class="success-toast">✅ Entrada registrada.</div>', unsafe_allow_html=True)
