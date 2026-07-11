@@ -249,40 +249,77 @@ def _coincide_nombre(busqueda, nombre):
     palabras = n.split() + [n]
     return any(difflib.SequenceMatcher(None, b, _colapsar_repetidas(p)).ratio() >= 0.75 for p in palabras)
 
+def _registrar_credito_manual(fecha, cliente, canal, vendedor, total, abono):
+    """Guarda una deuda que ya existía antes de usar la app (sin sabor/cantidad, sin tocar inventario)."""
+    estado = "pagado" if abono >= total else "pendiente"
+    sb_post("creditos", {
+        "fecha": fecha, "hora": ahora(), "cliente": cliente, "canal": canal,
+        "vendedor": vendedor, "total": total, "pagado": abono, "estado": estado
+    })
+
 def mostrar_creditos_pendientes(canal):
     """Muestra facturas con saldo pendiente y permite registrar abonos."""
-    raw = sb_get("ventas", f"select=factura_id,cliente,vendedor,total,abono,saldo&fecha=gte.2024-01-01&canal=eq.{requests.utils.quote(canal)}&saldo=gt.0")
-    if not raw:
-        return
+    with st.expander("➕ Cargar crédito antiguo"):
+        st.caption("Para deudas que ya existían antes de usar la app. Solo el monto — no afecta el inventario.")
+        col_f1, col_f2 = st.columns(2)
+        fecha_cred = col_f1.date_input("Fecha de la venta", value=datetime.now(COL_TZ).date(), key=f"cred_fecha_{canal}")
+        vendedor_cred = col_f2.selectbox("Vendedor", EMPLEADOS, key=f"cred_vendedor_{canal}")
+        cliente_cred = st.text_input("Nombre del cliente", key=f"cred_cliente_{canal}", placeholder="Ej: Tienda Don Carlos")
+        col_t, col_a = st.columns(2)
+        total_cred = col_t.number_input("Total adeudado ($)", min_value=0, step=1000, key=f"cred_total_{canal}")
+        abono_cred = col_a.number_input("Abono ya pagado ($)", min_value=0, max_value=int(total_cred), step=1000, key=f"cred_abono_{canal}")
+        if st.button("💾 Guardar crédito", key=f"btn_cred_guardar_{canal}"):
+            if not cliente_cred.strip():
+                st.markdown('<div class="alert-low">⚠️ Escribe el nombre del cliente.</div>', unsafe_allow_html=True)
+            elif total_cred <= 0:
+                st.markdown('<div class="alert-low">⚠️ Ingresa el monto adeudado.</div>', unsafe_allow_html=True)
+            else:
+                _registrar_credito_manual(str(fecha_cred), cliente_cred.strip(), canal, vendedor_cred, float(total_cred), float(abono_cred))
+                st.markdown('<div class="success-toast">✅ Crédito registrado.</div>', unsafe_allow_html=True)
+                time.sleep(0.3)
+                st.rerun()
+
     # Agrupar por factura para no repetir (cada fila es un producto de la factura,
     # por eso el total hay que sumarlo entre todas las filas de la misma factura_id)
+    raw = sb_get("ventas", f"select=factura_id,cliente,vendedor,total,abono,saldo&fecha=gte.2024-01-01&canal=eq.{requests.utils.quote(canal)}&saldo=gt.0")
     facturas = {}
-    for r in raw:
+    for r in (raw or []):
         fid = r["factura_id"]
         if not fid:
             continue
-        if fid not in facturas:
-            facturas[fid] = {
-                "cliente": r["cliente"],
-                "vendedor": r["vendedor"],
-                "saldo": float(r["saldo"]),
-                "total": 0.0,
-                "abono": float(r["abono"]),
+        if f"V-{fid}" not in facturas:
+            facturas[f"V-{fid}"] = {
+                "cliente": r["cliente"], "vendedor": r["vendedor"],
+                "saldo": float(r["saldo"]), "total": 0.0, "abono": float(r["abono"]),
+                "tipo": "venta", "ref": fid, "etiqueta": f"FV-{fid}",
             }
-        facturas[fid]["total"] += float(r["total"])
+        facturas[f"V-{fid}"]["total"] += float(r["total"])
+
+    # Créditos antiguos cargados manualmente (tabla 'creditos', sin desglose de productos)
+    raw_m = sb_get("creditos", f"select=id,cliente,vendedor,total,pagado&canal=eq.{requests.utils.quote(canal)}&estado=eq.pendiente")
+    for r in (raw_m or []):
+        total_m = float(r["total"])
+        pagado_m = float(r["pagado"] or 0)
+        facturas[f"M-{r['id']}"] = {
+            "cliente": r["cliente"], "vendedor": r["vendedor"],
+            "saldo": max(0.0, total_m - pagado_m), "total": total_m, "abono": pagado_m,
+            "tipo": "manual", "ref": r["id"], "etiqueta": "Crédito antiguo",
+        }
+
+    facturas = {k: d for k, d in facturas.items() if d["saldo"] > 0}
     if not facturas:
         return
     st.markdown('<div class="section-label">💳 Créditos pendientes de cobro</div>', unsafe_allow_html=True)
     busqueda = st.text_input("🔍 Buscar por cliente", key=f"buscar_credito_{canal}", placeholder="Ej: Don Carlos")
     if busqueda.strip():
-        facturas = {fid: d for fid, d in facturas.items() if _coincide_nombre(busqueda, d["cliente"])}
+        facturas = {k: d for k, d in facturas.items() if _coincide_nombre(busqueda, d["cliente"])}
         if not facturas:
             st.caption("No hay créditos pendientes para ese cliente.")
-    for fid, datos in facturas.items():
+    for key, datos in facturas.items():
         saldo = datos["saldo"]
         st.markdown(
             f'<div class="warn-box">'
-            f'<b>{datos["cliente"]}</b> · FV-{fid}<br>'
+            f'<b>{datos["cliente"]}</b> · {datos["etiqueta"]}<br>'
             f'Total: {fmt(datos["total"])} · Abonado: {fmt(datos["abono"])} · '
             f'<b>Debe: {fmt(saldo)}</b>'
             f'</div>',
@@ -291,15 +328,22 @@ def mostrar_creditos_pendientes(canal):
         col_m, col_b = st.columns([3, 1])
         nuevo_abono = col_m.number_input(
             "Abono ($)", min_value=0, max_value=int(saldo),
-            value=int(saldo), step=1000, key=f"abono_pend_{fid}"
+            value=int(saldo), step=1000, key=f"abono_pend_{key}"
         )
-        if col_b.button("✅ Cobrar", key=f"btn_cobrar_{fid}"):
+        if col_b.button("✅ Cobrar", key=f"btn_cobrar_{key}"):
             nuevo_saldo = max(0, saldo - nuevo_abono)
             nuevo_total_abono = datos["abono"] + nuevo_abono
-            sb_patch("ventas", f"factura_id=eq.{fid}", {
-                "abono": nuevo_total_abono,
-                "saldo": nuevo_saldo
-            })
+            if datos["tipo"] == "venta":
+                sb_patch("ventas", f"factura_id=eq.{datos['ref']}", {
+                    "abono": nuevo_total_abono,
+                    "saldo": nuevo_saldo
+                })
+            else:
+                estado_nuevo = "pagado" if nuevo_saldo <= 0 else "pendiente"
+                sb_patch("creditos", f"id=eq.{datos['ref']}", {
+                    "pagado": nuevo_total_abono,
+                    "estado": estado_nuevo
+                })
             time.sleep(0.3)
             st.rerun()
 
@@ -2082,12 +2126,14 @@ elif st.session_state.vista == "caja":
             f_mp = ex.submit(sb_get, "materia_prima", f"select=fecha,insumo,proveedor,precio_total,abono&fecha=gte.{f_ini_caja}&fecha=lte.{f_fin_caja}&order=fecha.desc")
             f_cxc = ex.submit(sb_get, "ventas", "select=factura_id,cliente,canal,total,abono,saldo&saldo=gt.0&order=fecha.desc")
             f_cxp = ex.submit(sb_get, "materia_prima", "select=id,insumo,proveedor,precio_total,abono,saldo&estado=eq.pendiente&order=fecha.desc")
+            f_cxc_m = ex.submit(sb_get, "creditos", "select=id,cliente,canal,total,pagado&estado=eq.pendiente")
         raw_ventas_caja = f_vf.result() or []
         raw_creditos_cobrados = f_ab.result() or []
         raw_mp_pagos = f_mp.result() or []
         raw_egresos = sb_get("caja_egresos", f"select=*&fecha=gte.{f_ini_caja}&fecha=lte.{f_fin_caja}&order=fecha.desc") or []
         raw_cxc = f_cxc.result() or []
         raw_cxp = f_cxp.result() or []
+        raw_cxc_m = f_cxc_m.result() or []
 
         # Calcular ingresos — una sola entrada por factura (la primera fila de cada una)
         facturas_vistas = {}
@@ -2110,7 +2156,8 @@ elif st.session_state.vista == "caja":
             fid = r.get("factura_id", "")
             if fid and fid not in facturas_cxc:
                 facturas_cxc[fid] = float(r.get("saldo", 0))
-        cuentas_por_cobrar = sum(facturas_cxc.values())
+        cuentas_por_cobrar_manual = sum(max(0.0, float(r["total"]) - float(r.get("pagado", 0) or 0)) for r in raw_cxc_m)
+        cuentas_por_cobrar = sum(facturas_cxc.values()) + cuentas_por_cobrar_manual
 
         # Cuentas por pagar a proveedores (materia prima/insumos pendientes de pago)
         cuentas_por_pagar = sum(float(r.get("saldo", 0)) for r in raw_cxp)
