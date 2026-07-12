@@ -974,8 +974,9 @@ label,.stSelectbox label,.stNumberInput label,.stDateInput label,.stTextInput la
 .stTabs [data-baseweb="tab-list"]{background:#FFFFFF;border-radius:12px;padding:4px;gap:2px;box-shadow:0 1px 4px rgba(21,101,192,0.10);margin-bottom:16px;}
 .stTabs [data-baseweb="tab"]{border-radius:10px;font-size:0.78rem;font-weight:600;padding:8px 4px;color:#7A2050 !important;flex:1;justify-content:center;background:transparent !important;}
 .stTabs [aria-selected="true"]{background-color:#1565C0 !important;color:white !important;}
-.brand-header{background:linear-gradient(135deg,#1565C0,#1E88E5);border-radius:0 0 22px 22px;padding:22px 20px 18px;margin:-1rem -1rem 16px -1rem;text-align:center;}
+.brand-header{background:linear-gradient(135deg,#1565C0,#1E88E5);border-radius:0 0 22px 22px;padding:12px 20px 12px;margin:-1rem -1rem 16px -1rem;text-align:center;}
 .brand-header p{color:rgba(255,255,255,0.85);font-size:0.78rem;margin:0;}
+.brand-logo img{height:185px !important;margin-bottom:0 !important;}
 .metric-row{display:flex;gap:9px;margin-bottom:16px;}
 .metric-box{flex:1;background:#FFFFFF;border-radius:14px;padding:14px 8px;text-align:center;box-shadow:0 2px 8px rgba(21,101,192,0.12);}
 .metric-box .val{font-size:1.2rem;font-weight:700;line-height:1.1;}
@@ -1140,7 +1141,7 @@ if "admin_actual" not in st.session_state:
 # ══════════════════════════════════════════════════════════════════════════════
 st.markdown(f"""
 <div class="brand-header">
-    {logo_html}
+    <div class="brand-logo">{logo_html}</div>
     <p>Control de producción y ventas</p>
 </div>
 """, unsafe_allow_html=True)
