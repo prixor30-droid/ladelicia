@@ -976,7 +976,7 @@ label,.stSelectbox label,.stNumberInput label,.stDateInput label,.stTextInput la
 .stTabs [aria-selected="true"]{background-color:#1565C0 !important;color:white !important;}
 .brand-header{background:linear-gradient(135deg,#1565C0,#1E88E5);border-radius:0 0 22px 22px;padding:12px 20px 12px;margin:-1rem -1rem 16px -1rem;text-align:center;}
 .brand-header p{color:rgba(255,255,255,0.85);font-size:0.78rem;margin:0;}
-.brand-logo img{height:185px !important;margin-bottom:0 !important;}
+.brand-logo img{height:620px !important;margin-bottom:0 !important;}
 .metric-row{display:flex;gap:9px;margin-bottom:16px;}
 .metric-box{flex:1;background:#FFFFFF;border-radius:14px;padding:14px 8px;text-align:center;box-shadow:0 2px 8px rgba(21,101,192,0.12);}
 .metric-box .val{font-size:1.2rem;font-weight:700;line-height:1.1;}
