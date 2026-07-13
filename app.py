@@ -1184,7 +1184,6 @@ if _css_botones_menu:
 components.html("""
 <script>
 (function () {
-    if (true) return; // TEMP: desactivado para diagnosticar el toggle en tablet
     const SEL_SELECTS = '[data-baseweb="select"] input';
     const SEL_FECHAS   = '[data-testid="stDateInputField"], [data-baseweb="datepicker"] input';
     const SEL_NUMEROS  = '[data-testid="stNumberInputField"]';
@@ -2041,11 +2040,14 @@ elif st.session_state.vista == "materia_prima":
                 st.markdown(f'<div class="warn-box">{ICO_CALENDAR} Se registrará con fecha {fecha_mp}, no con la de hoy.</div>', unsafe_allow_html=True)
             cant_mp        = st.number_input(f"Cantidad ({unidad_sel})", min_value=0.1, max_value=9999.0, value=1.0, step=0.5, key="cant_mp")
 
-            ya_tengo_mp = st.toggle(
-                "📦 Ya tengo este insumo (no es una compra nueva)",
-                key="ya_tengo_mp_toggle",
-                help="Úsalo para sumar al stock materia prima que ya tenías. No se descuenta de caja ni queda como deuda con el proveedor."
+            tipo_entrada_mp = st.radio(
+                "Tipo de entrada",
+                ["🆕 Compra nueva", "📦 Ya tengo este insumo"],
+                horizontal=True,
+                key="tipo_entrada_mp",
+                help="\"Ya tengo este insumo\" suma al stock que ya tenías. No se descuenta de caja ni queda como deuda con el proveedor."
             )
+            ya_tengo_mp = tipo_entrada_mp == "📦 Ya tengo este insumo"
 
             prov_mp = st.text_input(
                 "Proveedor (opcional)" if ya_tengo_mp else "Proveedor",
