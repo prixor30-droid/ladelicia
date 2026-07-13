@@ -441,7 +441,7 @@ def render_venta_canal(cfg, mostrar_creditos=True):
     cliente = st.text_input("Nombre del cliente", placeholder="Ej: Tienda Don Carlos", key="venta_cliente")
 
     st.markdown('<div class="section-label">Agregar al carrito</div>', unsafe_allow_html=True)
-    sabor = st.selectbox("Sabor", cfg["sabores_venta_fn"](), key="venta_sabor")
+    sabor = st.radio("Sabor", cfg["sabores_venta_fn"](), key="venta_sabor")
 
     disp_map = cfg["disponible_map_fn"]()
     en_carrito = st.session_state[key_carrito].get(sabor, 0)
@@ -1086,6 +1086,8 @@ div[data-testid="stRadio"] input[type="radio"]{accent-color:#1565C0;}
 .main-btn-icon{font-size:2rem;}
 .main-btn-text{font-size:1.1rem;font-weight:700;color:#0D1B2A;}
 .main-btn-sub{font-size:0.78rem;color:#1565C0;}
+.st-key-venta_sabor > div{flex-direction:column !important;flex-wrap:nowrap !important;max-height:260px;overflow-y:auto;gap:6px !important;}
+.st-key-venta_sabor label[data-baseweb="radio"]{width:100%;box-sizing:border-box;}
 </style>
 """, unsafe_allow_html=True)
 
