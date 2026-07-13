@@ -1202,10 +1202,20 @@ function bloquearTecladoFechas() {
         });
     } catch (e) {}
 }
+function forzarTecladoNumerico() {
+    try {
+        const numeros = window.parent.document.querySelectorAll('[data-testid="stNumberInputField"]');
+        numeros.forEach(function(inp) {
+            inp.setAttribute('inputmode', 'numeric');
+        });
+    } catch (e) {}
+}
 bloquearTecladoSelects();
 bloquearTecladoFechas();
+forzarTecladoNumerico();
 setInterval(bloquearTecladoSelects, 500);
 setInterval(bloquearTecladoFechas, 500);
+setInterval(forzarTecladoNumerico, 500);
 </script>
 """, height=0)
 
