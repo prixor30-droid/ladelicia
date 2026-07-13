@@ -1067,7 +1067,7 @@ label,.stSelectbox label,.stNumberInput label,.stDateInput label,.stTextInput la
 .recibo-wrap{display:flex;justify-content:center;padding:20px 0;}
 .recibo-ticket{background:#FFFFFF;width:100%;max-width:380px;padding:24px 20px;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,0.12);font-family:'Courier New',monospace;}
 .recibo-logo{text-align:center;margin-bottom:6px;}
-.recibo-logo img{height:60px !important;}
+.recibo-logo img{height:120px !important;}
 .recibo-titulo{text-align:center;font-weight:700;font-size:1rem;color:#0D1B2A;}
 .recibo-sub{text-align:center;font-size:0.78rem;color:#1565C0;}
 .recibo-linea-punteada{border-top:1.5px dashed #BBDEFB;margin:12px 0;}
