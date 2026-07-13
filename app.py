@@ -2231,7 +2231,7 @@ elif st.session_state.vista == "materia_prima":
         pend_mp  = [r for r in raw_pend if r["insumo"] not in SABORIZANTES_NAMES and r["insumo"] not in EMPAQUES_NAMES]
         pend_sab = [r for r in raw_pend if r["insumo"] in SABORIZANTES_NAMES]
 
-        def mostrar_creditos_mp(lista, icono, state_key):
+        def mostrar_creditos_mp(lista, icono, state_key, emoji):
             if not lista:
                 st.info("No hay créditos pendientes."); return
 
@@ -2249,7 +2249,7 @@ elif st.session_state.vista == "materia_prima":
                 st.markdown(f'<div class="warn-box">{ICO_CARD} Total pendiente: <b>{fmt(total)}</b></div>', unsafe_allow_html=True)
                 for k in sorted(por_insumo.keys()):
                     v = por_insumo[k]
-                    if st.button(f"{icono} {k} — {fmt(v['saldo'])} ({v['n']})", key=f"btn_cred_ins_{state_key}_{k}", use_container_width=True):
+                    if st.button(f"{emoji} {k} — {fmt(v['saldo'])} ({v['n']})", key=f"btn_cred_ins_{state_key}_{k}", use_container_width=True):
                         st.session_state[state_key] = k; st.rerun()
                 return
 
@@ -2280,10 +2280,10 @@ elif st.session_state.vista == "materia_prima":
         sc1, sc2 = st.tabs(["🌽 Materia Prima", "🧪 Saborizantes"])
         with sc1:
             st.markdown('<div class="section-label">Créditos — Materia Prima</div>', unsafe_allow_html=True)
-            mostrar_creditos_mp(pend_mp, ICO_LAYERS, "credito_sel_mp")
+            mostrar_creditos_mp(pend_mp, ICO_LAYERS, "credito_sel_mp", "🌽")
         with sc2:
             st.markdown('<div class="section-label">Créditos — Saborizantes</div>', unsafe_allow_html=True)
-            mostrar_creditos_mp(pend_sab, ICO_FLASK, "credito_sel_sab")
+            mostrar_creditos_mp(pend_sab, ICO_FLASK, "credito_sel_sab", "🧪")
 
     with tab_mp4:
         st.markdown('<div class="section-label">Resumen del período</div>', unsafe_allow_html=True)
