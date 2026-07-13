@@ -455,7 +455,7 @@ def render_venta_canal(cfg, mostrar_creditos=True):
     if sabor in PRECIOS_RAPIDOS:
         opciones_p = [e if e.strip().startswith("$") else f"{e} — {fmt(p)}" for e, p in PRECIOS_RAPIDOS[sabor]]
         precios_p  = [p for _, p in PRECIOS_RAPIDOS[sabor]]
-        sel_p = st.radio("Precio", opciones_p, horizontal=True, key=f"venta_precio_radio_{sabor}")
+        sel_p = st.selectbox("Precio", opciones_p, key=f"venta_precio_radio_{sabor}")
         precio_elegido = precios_p[opciones_p.index(sel_p)]
     else:
         precio_elegido = PRODUCTOS[sabor]
@@ -1207,6 +1207,14 @@ components.html("""
         const doc = window.parent.document;
         bloquear(doc);
 
+        // Streamlit re-ejecuta este componente en cada rerun de la app; sin
+        // esta bandera, cada rerun agregaría listeners y un observer nuevos
+        // (duplicados, nunca se quitan los anteriores), acumulando cientos
+        // con el uso y congelando la app. Con la bandera, todo lo de abajo
+        // se registra una sola vez por sesión de navegador.
+        if (doc.defaultView.__fabricaTecladoInit) return;
+        doc.defaultView.__fabricaTecladoInit = true;
+
         // Reacciona cuando Streamlit crea nodos nuevos (no observamos atributos:
         // como nosotros mismos los modificamos, eso provocaba un bucle infinito).
         const observer = new MutationObserver(function () { bloquear(doc); });
@@ -1225,6 +1233,21 @@ components.html("""
         doc.addEventListener('touchstart', reforzarDesdeEvento, true);
         doc.addEventListener('pointerdown', reforzarDesdeEvento, true);
         doc.addEventListener('mousedown', reforzarDesdeEvento, true);
+
+        // Último respaldo: React recrea el <input> justo al abrir la lista,
+        // así que puede recibir foco sin el atributo puesto todavía. Si eso
+        // pasa, se quita el foco y se repone al instante ya con el bloqueo
+        // (mismo tick), antes de que el teclado alcance a mostrarse.
+        doc.addEventListener('focus', function (e) {
+            const t = e.target;
+            if (!t || !t.matches) return;
+            if (!t.matches(SEL_SELECTS)) return;
+            if (t.getAttribute('readonly') === 'true') return;
+            t.setAttribute('inputmode', 'none');
+            t.setAttribute('readonly', 'true');
+            t.blur();
+            t.focus();
+        }, true);
 
         // Respaldo por si el observer se pierde algún cambio
         setInterval(function () { bloquear(doc); }, 300);
