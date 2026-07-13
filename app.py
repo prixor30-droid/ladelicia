@@ -2166,6 +2166,26 @@ elif st.session_state.vista == "materia_prima":
             st.session_state.ok_mp = False
 
     with tab_mp2:
+        with st.expander("📋 Inventario actual de insumos", expanded=False):
+            raw_ent_all = sb_get("materia_prima", "select=insumo,cantidad") or []
+            raw_sal_all = sb_get("salidas_mp", "select=insumo,cantidad") or []
+            ent_por_insumo, sal_por_insumo = {}, {}
+            for r in raw_ent_all:
+                ent_por_insumo[r["insumo"]] = ent_por_insumo.get(r["insumo"], 0) + float(r["cantidad"])
+            for r in raw_sal_all:
+                sal_por_insumo[r["insumo"]] = sal_por_insumo.get(r["insumo"], 0) + float(r["cantidad"])
+
+            def _fila_stock(nombre, icono, unidad):
+                stock = round(ent_por_insumo.get(nombre, 0) - sal_por_insumo.get(nombre, 0), 1)
+                return {"Insumo": f"{icono} {nombre}", "Stock": stock, "Unidad": unidad}
+
+            st.markdown("**🌽 Materia Prima**")
+            st.dataframe(pd.DataFrame([_fila_stock(n, ic, u) for n, ic, u, _ in INSUMOS_INFO]), use_container_width=True, hide_index=True)
+            st.markdown("**🧪 Saborizantes**")
+            st.dataframe(pd.DataFrame([_fila_stock(n, ic, u) for n, ic, u, _ in SABORIZANTES_INFO]), use_container_width=True, hide_index=True)
+            st.markdown("**📦 Empaque**")
+            st.dataframe(pd.DataFrame([_fila_stock(n, ic, u) for n, ic, u, _ in EMPAQUES_INFO]), use_container_width=True, hide_index=True)
+
         st.markdown('<div class="section-label">Registrar salida (uso en producción)</div>', unsafe_allow_html=True)
         cat_sal = st.selectbox("Categoría", ["🌽 Materia Prima", "🧪 Saborizantes", "📦 Empaque"], key="cat_sal")
         if "Materia Prima" in cat_sal:
