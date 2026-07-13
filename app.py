@@ -1183,38 +1183,56 @@ if _css_botones_menu:
 # Bloquear teclado virtual en los selectbox y fechas (solo permite tocar y elegir)
 components.html("""
 <script>
-function bloquearTecladoSelects() {
+(function () {
+    const SEL_SELECTS = '[data-baseweb="select"] input';
+    const SEL_FECHAS   = '[data-testid="stDateInputField"], [data-baseweb="datepicker"] input';
+    const SEL_NUMEROS  = '[data-testid="stNumberInputField"]';
+
+    function bloquear(doc) {
+        try {
+            doc.querySelectorAll(SEL_SELECTS).forEach(function (inp) {
+                inp.setAttribute('inputmode', 'none');
+                inp.setAttribute('readonly', 'true');
+            });
+            doc.querySelectorAll(SEL_FECHAS).forEach(function (inp) {
+                inp.setAttribute('inputmode', 'none');
+                inp.setAttribute('readonly', 'true');
+            });
+            doc.querySelectorAll(SEL_NUMEROS).forEach(function (inp) {
+                inp.setAttribute('inputmode', 'numeric');
+            });
+        } catch (e) {}
+    }
+
     try {
-        const inputs = window.parent.document.querySelectorAll('[data-baseweb="select"] input');
-        inputs.forEach(function(inp) {
-            inp.setAttribute('inputmode', 'none');
-            inp.setAttribute('readonly', 'true');
-        });
+        const doc = window.parent.document;
+        bloquear(doc);
+
+        // Reacciona al instante cuando Streamlit crea/re-renderiza los campos
+        const observer = new MutationObserver(function () { bloquear(doc); });
+        observer.observe(doc.body, { childList: true, subtree: true, attributes: true });
+
+        // Refuerzo justo antes del toque: el dedo cae sobre el div contenedor,
+        // no sobre el input, así que hay que buscar hacia arriba con closest().
+        function reforzarDesdeEvento(e) {
+            const t = e.target;
+            if (!t || !t.closest) return;
+            const cont = t.closest('[data-baseweb="select"], [data-baseweb="datepicker"], [data-testid="stDateInputField"]');
+            if (!cont) return;
+            const inp = cont.tagName === 'INPUT' ? cont : cont.querySelector('input');
+            if (inp) {
+                inp.setAttribute('inputmode', 'none');
+                inp.setAttribute('readonly', 'true');
+            }
+        }
+        doc.addEventListener('touchstart', reforzarDesdeEvento, true);
+        doc.addEventListener('pointerdown', reforzarDesdeEvento, true);
+        doc.addEventListener('mousedown', reforzarDesdeEvento, true);
+
+        // Respaldo por si el observer se pierde algún cambio
+        setInterval(function () { bloquear(doc); }, 200);
     } catch (e) {}
-}
-function bloquearTecladoFechas() {
-    try {
-        const fechas = window.parent.document.querySelectorAll('[data-testid="stDateInputField"], [data-baseweb="datepicker"] input');
-        fechas.forEach(function(inp) {
-            inp.setAttribute('inputmode', 'none');
-            inp.setAttribute('readonly', 'true');
-        });
-    } catch (e) {}
-}
-function forzarTecladoNumerico() {
-    try {
-        const numeros = window.parent.document.querySelectorAll('[data-testid="stNumberInputField"]');
-        numeros.forEach(function(inp) {
-            inp.setAttribute('inputmode', 'numeric');
-        });
-    } catch (e) {}
-}
-bloquearTecladoSelects();
-bloquearTecladoFechas();
-forzarTecladoNumerico();
-setInterval(bloquearTecladoSelects, 500);
-setInterval(bloquearTecladoFechas, 500);
-setInterval(forzarTecladoNumerico, 500);
+})();
 </script>
 """, height=0)
 
