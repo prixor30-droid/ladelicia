@@ -2093,14 +2093,71 @@ elif st.session_state.vista == "materia_prima":
             primer_dia = datetime.now(COL_TZ).date().replace(day=1)
             hoy_ins = datetime.now(COL_TZ).date()
             raw_ins_mes = sb_get("materia_prima",
-                f"select=fecha,hora,cantidad,precio_unitario,proveedor&insumo=eq.{requests.utils.quote(nombre_sel)}&fecha=gte.{primer_dia}&fecha=lte.{hoy_ins}&order=fecha.desc,hora.desc") or []
+                f"select=id,fecha,hora,cantidad,precio_unitario,precio_total,abono,saldo,estado,proveedor&insumo=eq.{requests.utils.quote(nombre_sel)}&fecha=gte.{primer_dia}&fecha=lte.{hoy_ins}&order=fecha.desc,hora.desc") or []
             if raw_ins_mes:
                 total_cant_mes = sum(float(r["cantidad"]) for r in raw_ins_mes)
-                st.caption(f"Total ingresado este mes: {total_cant_mes:.1f} {unidad_sel}")
+                st.caption(f"Total ingresado este mes: {total_cant_mes:.1f} {unidad_sel} — toca cualquier celda para editar, luego Guardar cambios.")
                 df_ins_mes = pd.DataFrame(raw_ins_mes)
-                df_ins_mes["precio_unitario"] = df_ins_mes["precio_unitario"].apply(lambda x: fmt(x) if x else "—")
-                df_ins_mes.columns = ["Fecha", "Hora", f"Cantidad ({unidad_sel})", "Precio unitario", "Proveedor"]
-                st.dataframe(df_ins_mes, use_container_width=True, hide_index=True)
+                df_edit_mp = df_ins_mes[["fecha", "hora", "cantidad", "precio_unitario", "proveedor"]].copy()
+                df_edit_mp.columns = ["Fecha", "Hora", f"Cantidad ({unidad_sel})", "Precio unitario", "Proveedor"]
+
+                edited_mp = st.data_editor(
+                    df_edit_mp,
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config={
+                        "Fecha":                      st.column_config.TextColumn("Fecha"),
+                        "Hora":                       st.column_config.TextColumn("Hora"),
+                        f"Cantidad ({unidad_sel})":   st.column_config.NumberColumn(f"Cantidad ({unidad_sel})", min_value=0.1, step=0.5),
+                        "Precio unitario":            st.column_config.NumberColumn("Precio unitario", min_value=0, step=1000),
+                        "Proveedor":                  st.column_config.TextColumn("Proveedor"),
+                    },
+                    key=f"mp_editor_{nombre_sel}"
+                )
+
+                col_gmp, col_dmp = st.columns(2)
+                if col_gmp.button("💾 Guardar cambios", key="btn_save_mp"):
+                    for i, row in edited_mp.iterrows():
+                        orig = df_ins_mes.iloc[i]
+                        cambios = {}
+
+                        fecha_new = str(row["Fecha"])
+                        hora_new  = str(row["Hora"])
+                        cant_new  = float(row[f"Cantidad ({unidad_sel})"])
+                        pu_new    = float(row["Precio unitario"])
+                        prov_new  = str(row["Proveedor"])
+
+                        if fecha_new != str(orig["fecha"]):
+                            cambios["fecha"] = fecha_new
+                        if hora_new != str(orig["hora"]):
+                            cambios["hora"] = hora_new
+                        if prov_new != str(orig["proveedor"]):
+                            cambios["proveedor"] = prov_new
+
+                        cant_orig = float(orig["cantidad"])
+                        pu_orig = float(orig["precio_unitario"] or 0)
+                        if cant_new != cant_orig or pu_new != pu_orig:
+                            precio_total_new = round(pu_new * cant_new)
+                            precio_total_orig = float(orig["precio_total"] or 0)
+                            saldo_new = max(0.0, float(orig["saldo"] or 0) + (precio_total_new - precio_total_orig))
+                            cambios["cantidad"] = cant_new
+                            cambios["precio_unitario"] = pu_new
+                            cambios["precio_total"] = precio_total_new
+                            cambios["saldo"] = saldo_new
+                            cambios["estado"] = "pagado" if saldo_new == 0 else "pendiente"
+
+                        if cambios:
+                            sb_patch("materia_prima", f"id=eq.{orig['id']}", cambios)
+                    time.sleep(1)
+                    st.rerun()
+
+                ids_mp = {f"{r['fecha']} {r['hora']} — {r['cantidad']} {unidad_sel} — {r['proveedor']}": r for r in raw_ins_mes}
+                sel_del_mp = st.selectbox("Eliminar registro", ["— Selecciona —"] + list(ids_mp.keys()), key="sel_del_mp")
+                if sel_del_mp != "— Selecciona —" and col_dmp.button("🗑️ Eliminar", key="btn_del_mp"):
+                    reg_del_mp = ids_mp[sel_del_mp]
+                    sb_delete("materia_prima", f"id=eq.{reg_del_mp['id']}")
+                    time.sleep(0.3)
+                    st.rerun()
             else:
                 st.caption(f"Aún no hay entradas de {nombre_sel} este mes.")
 
