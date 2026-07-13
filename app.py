@@ -441,7 +441,7 @@ def render_venta_canal(cfg, mostrar_creditos=True):
     cliente = st.text_input("Nombre del cliente", placeholder="Ej: Tienda Don Carlos", key="venta_cliente")
 
     st.markdown('<div class="section-label">Agregar al carrito</div>', unsafe_allow_html=True)
-    sabor = st.radio("Sabor", cfg["sabores_venta_fn"](), horizontal=True, key="venta_sabor")
+    sabor = st.selectbox("Sabor", cfg["sabores_venta_fn"](), key="venta_sabor")
 
     disp_map = cfg["disponible_map_fn"]()
     en_carrito = st.session_state[key_carrito].get(sabor, 0)
@@ -455,7 +455,7 @@ def render_venta_canal(cfg, mostrar_creditos=True):
     if sabor in PRECIOS_RAPIDOS:
         opciones_p = [e if e.strip().startswith("$") else f"{e} — {fmt(p)}" for e, p in PRECIOS_RAPIDOS[sabor]]
         precios_p  = [p for _, p in PRECIOS_RAPIDOS[sabor]]
-        sel_p = st.selectbox("Precio", opciones_p, key=f"venta_precio_radio_{sabor}")
+        sel_p = st.radio("Precio", opciones_p, horizontal=True, key=f"venta_precio_radio_{sabor}")
         precio_elegido = precios_p[opciones_p.index(sel_p)]
     else:
         precio_elegido = PRODUCTOS[sabor]
