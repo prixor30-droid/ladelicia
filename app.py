@@ -1074,7 +1074,7 @@ for _vista, _archivo in _imagenes_menu.items():
     if _b64:
         _css_botones_menu += f"""
 .st-key-btn_{_vista} button{{
-  background:linear-gradient(rgba(13,27,42,0.45),rgba(13,27,42,0.45)),url("data:image/jpeg;base64,{_b64}") center/cover no-repeat !important;
+  background:linear-gradient(90deg,rgba(0,0,0,0.72) 0%,rgba(0,0,0,0.55) 55%,rgba(0,0,0,0.4) 100%),url("data:image/jpeg;base64,{_b64}") center/cover no-repeat !important;
   color:#FFFFFF !important;
   -webkit-text-fill-color:#FFFFFF !important;
   border:none !important;
@@ -1087,10 +1087,10 @@ for _vista, _archivo in _imagenes_menu.items():
   white-space:pre-line !important;
   line-height:1.5 !important;
   text-align:left !important;
-  text-shadow:0 1px 4px rgba(0,0,0,0.7) !important;
+  text-shadow:0 1px 3px rgba(0,0,0,0.9),0 2px 8px rgba(0,0,0,0.6) !important;
 }}
 .st-key-btn_{_vista} button:hover{{
-  background:linear-gradient(rgba(13,27,42,0.25),rgba(13,27,42,0.25)),url("data:image/jpeg;base64,{_b64}") center/cover no-repeat !important;
+  background:linear-gradient(90deg,rgba(0,0,0,0.6) 0%,rgba(0,0,0,0.42) 55%,rgba(0,0,0,0.28) 100%),url("data:image/jpeg;base64,{_b64}") center/cover no-repeat !important;
   box-shadow:0 5px 16px rgba(21,101,192,0.32) !important;
   opacity:1 !important;
 }}
