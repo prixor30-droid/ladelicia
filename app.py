@@ -989,10 +989,7 @@ label,.stSelectbox label,.stNumberInput label,.stDateInput label,.stTextInput la
 .section-label{font-size:0.69rem;font-weight:700;text-transform:uppercase;letter-spacing:0.7px;color:#B0185F;margin:16px 0 6px;}
 .stButton>button{width:100%;background:#1565C0 !important;color:white !important;-webkit-text-fill-color:white !important;border:none !important;border-radius:12px !important;padding:14px !important;font-size:1rem !important;font-weight:700 !important;cursor:pointer;margin-top:4px;box-shadow:0 4px 16px rgba(21,101,192,0.25);white-space:pre-line !important;line-height:1.4 !important;}
 .stButton>button:hover{opacity:0.88;}
-[data-testid="stButton-btn_produccion"] button,
-[data-testid="stButton-btn_carro"] button,
-[data-testid="stButton-btn_fabrica"] button,
-[data-testid="stButton-btn_resumen"] button{
+.st-key-btn_resumen button{
   background:linear-gradient(135deg,#FFFFFF,#EEF4FF) !important;
   color:#0D1B2A !important;
   -webkit-text-fill-color:#0D1B2A !important;
@@ -1007,10 +1004,7 @@ label,.stSelectbox label,.stNumberInput label,.stDateInput label,.stTextInput la
   line-height:1.5 !important;
   text-align:left !important;
 }
-[data-testid="stButton-btn_produccion"] button:hover,
-[data-testid="stButton-btn_carro"] button:hover,
-[data-testid="stButton-btn_fabrica"] button:hover,
-[data-testid="stButton-btn_resumen"] button:hover{
+.st-key-btn_resumen button:hover{
   box-shadow:0 5px 16px rgba(21,101,192,0.25) !important;
   opacity:1 !important;
 }
@@ -1058,6 +1052,52 @@ div[data-testid="stRadio"] input[type="radio"]{accent-color:#1565C0;}
 .main-btn-sub{font-size:0.78rem;color:#1565C0;}
 </style>
 """, unsafe_allow_html=True)
+
+# ══════════════════════════════════════════════════════════════════════════════
+# IMÁGENES DE FONDO DE LOS BOTONES DEL MENÚ
+# ══════════════════════════════════════════════════════════════════════════════
+def get_img_b64(nombre_archivo):
+    p = Path(nombre_archivo)
+    return base64.b64encode(p.read_bytes()).decode() if p.exists() else None
+
+_imagenes_menu = {
+    "produccion":    "Produccion.jpg",
+    "carro":         "Cargue.jpg",
+    "fabrica":       "Ventas_sofia_andrea.jpg",
+    "materia_prima": "Materia_prima.jpg",
+    "caja":          "Caja.jpg",
+}
+
+_css_botones_menu = ""
+for _vista, _archivo in _imagenes_menu.items():
+    _b64 = get_img_b64(_archivo)
+    if _b64:
+        _css_botones_menu += f"""
+.st-key-btn_{_vista} button{{
+  background:linear-gradient(rgba(13,27,42,0.45),rgba(13,27,42,0.45)),url("data:image/jpeg;base64,{_b64}") center/cover no-repeat !important;
+  color:#FFFFFF !important;
+  -webkit-text-fill-color:#FFFFFF !important;
+  border:none !important;
+  border-radius:18px !important;
+  box-shadow:0 3px 12px rgba(21,101,192,0.25) !important;
+  min-height:110px !important;
+  padding:18px 20px !important;
+  font-size:1rem !important;
+  font-weight:700 !important;
+  white-space:pre-line !important;
+  line-height:1.5 !important;
+  text-align:left !important;
+  text-shadow:0 1px 4px rgba(0,0,0,0.7) !important;
+}}
+.st-key-btn_{_vista} button:hover{{
+  background:linear-gradient(rgba(13,27,42,0.25),rgba(13,27,42,0.25)),url("data:image/jpeg;base64,{_b64}") center/cover no-repeat !important;
+  box-shadow:0 5px 16px rgba(21,101,192,0.32) !important;
+  opacity:1 !important;
+}}
+"""
+
+if _css_botones_menu:
+    st.markdown(f"<style>{_css_botones_menu}</style>", unsafe_allow_html=True)
 
 # Bloquear teclado virtual en los selectbox y fechas (solo permite tocar y elegir)
 components.html("""
