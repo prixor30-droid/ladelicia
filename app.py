@@ -441,7 +441,7 @@ def render_venta_canal(cfg, mostrar_creditos=True):
     cliente = st.text_input("Nombre del cliente", placeholder="Ej: Tienda Don Carlos", key="venta_cliente")
 
     st.markdown('<div class="section-label">Agregar al carrito</div>', unsafe_allow_html=True)
-    sabor = st.radio("Sabor", cfg["sabores_venta_fn"](), key="venta_sabor")
+    sabor = st.selectbox("Sabor", cfg["sabores_venta_fn"](), key="venta_sabor")
 
     disp_map = cfg["disponible_map_fn"]()
     en_carrito = st.session_state[key_carrito].get(sabor, 0)
@@ -507,7 +507,7 @@ def render_venta_canal(cfg, mostrar_creditos=True):
             st.session_state[key_precios] = nuevos_p
             st.rerun()
 
-        sabor_quitar = st.radio("Quitar un sabor del carrito", ["— Selecciona —"] + sabores_cart, horizontal=True, key="venta_sel_quitar")
+        sabor_quitar = st.selectbox("Quitar un sabor del carrito", ["— Selecciona —"] + sabores_cart, key="venta_sel_quitar")
         if sabor_quitar != "— Selecciona —" and st.button("✕ Quitar del carrito", key="venta_btn_quitar"):
             del st.session_state[key_carrito][sabor_quitar]
             st.session_state[key_precios].pop(sabor_quitar, None)
@@ -644,7 +644,7 @@ def render_venta_canal(cfg, mostrar_creditos=True):
             if not opciones_add:
                 st.markdown(f'<div class="warn-box">{ICO_WARN} No hay disponible para agregar.</div>', unsafe_allow_html=True)
             else:
-                sabor_add = st.radio("Sabor a agregar", opciones_add, horizontal=True, key="venta_add_sabor")
+                sabor_add = st.selectbox("Sabor a agregar", opciones_add, key="venta_add_sabor")
                 max_add = max(1, int(disp_add.get(sabor_add, 0)))
                 cant_add = st.number_input("Cantidad", min_value=1, max_value=max_add, value=1, step=1, key="venta_add_cant")
                 precio_add = fac["precios"].get(sabor_add, PRODUCTOS[sabor_add]) * cant_add
@@ -1086,8 +1086,6 @@ div[data-testid="stRadio"] input[type="radio"]{accent-color:#1565C0;}
 .main-btn-icon{font-size:2rem;}
 .main-btn-text{font-size:1.1rem;font-weight:700;color:#0D1B2A;}
 .main-btn-sub{font-size:0.78rem;color:#1565C0;}
-.st-key-venta_sabor > div{flex-direction:column !important;flex-wrap:nowrap !important;max-height:260px;overflow-y:auto;gap:6px !important;}
-.st-key-venta_sabor label[data-baseweb="radio"]{width:100%;box-sizing:border-box;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -1576,7 +1574,7 @@ elif st.session_state.vista == "produccion":
 
     # Ajuste manual
     st.markdown('<div class="section-label">Ajustar stock manualmente</div>', unsafe_allow_html=True)
-    sabor_adj = st.radio("Sabor", SABORES_LISTA, horizontal=True, key="sabor_adj")
+    sabor_adj = st.selectbox("Sabor", SABORES_LISTA, key="sabor_adj")
     stock_adj = get_stock(sabor_adj)
     nuevo_stock = st.number_input("Stock real", min_value=0, value=stock_adj, step=1, key=f"nuevo_s_{sabor_adj}")
     if st.button("💾 Guardar ajuste", key="btn_adj"):
@@ -1755,7 +1753,7 @@ elif st.session_state.vista == "carro":
     with sub3:
         st.markdown(f'<div class="section-label">Devolución al inventario {ICO_REFRESH}</div>', unsafe_allow_html=True)
         st.caption("Registra las bolsas que regresan al inventario.")
-        sabor_dev = st.radio("Sabor a devolver", SABORES_LISTA, horizontal=True, key="sabor_dev")
+        sabor_dev = st.selectbox("Sabor a devolver", SABORES_LISTA, key="sabor_dev")
 
         # Máximo a devolver = lo que cargaron de ese sabor hoy - lo ya devuelto
         raw_cg_dev = sb_get("cargues", f"select=cantidad&fecha=eq.{fecha_hoy()}&sabor=eq.{requests.utils.quote(sabor_dev)}")
@@ -1790,7 +1788,7 @@ elif st.session_state.vista == "carro":
         if not sabores_disp_r:
             st.markdown(f'<div class="warn-box">{ICO_WARN} No hay papas disponibles en el carro para regalar.</div>', unsafe_allow_html=True)
         else:
-            sabor_reg = st.radio("Sabor", sabores_disp_r, horizontal=True, key="sabor_reg")
+            sabor_reg = st.selectbox("Sabor", sabores_disp_r, key="sabor_reg")
             disp_reg = int(stock_carro_r.get(sabor_reg, 0))
             cant_reg = st.number_input("Cantidad", min_value=1, max_value=disp_reg, value=1, step=1, key="cant_reg")
             motivo_reg = st.text_input("Motivo (opcional)", placeholder="Ej: Cliente especial, muestra", key="motivo_reg")
