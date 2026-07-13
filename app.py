@@ -2271,6 +2271,15 @@ elif st.session_state.vista == "materia_prima":
         raw_ent = sb_get("materia_prima", f"select=*&fecha=gte.{f_ini_mp}&fecha=lte.{f_fin_mp}&order=fecha.desc") or []
         raw_sal = sb_get("salidas_mp",    f"select=*&fecha=gte.{f_ini_mp}&fecha=lte.{f_fin_mp}&order=fecha.desc") or []
 
+        # Stock actual real (acumulado de siempre, no solo del período filtrado arriba)
+        raw_ent_todo = sb_get("materia_prima", "select=insumo,cantidad") or []
+        raw_sal_todo = sb_get("salidas_mp", "select=insumo,cantidad") or []
+        stock_actual_todo = {}
+        for r in raw_ent_todo:
+            stock_actual_todo[r["insumo"]] = stock_actual_todo.get(r["insumo"], 0) + float(r["cantidad"])
+        for r in raw_sal_todo:
+            stock_actual_todo[r["insumo"]] = stock_actual_todo.get(r["insumo"], 0) - float(r["cantidad"])
+
         resumen = {}
         for r in raw_ent:
             k = r["insumo"]
@@ -2308,12 +2317,13 @@ elif st.session_state.vista == "materia_prima":
                     d = prom_pond.get(k, {"total_costo": 0, "total_cant": 0})
                     pu_prom = round(d["total_costo"] / d["total_cant"]) if d["total_cant"] > 0 else 0
                     costo_consumido = round(v["salidas"] * pu_prom) if pu_prom > 0 else 0
-                    stock_val = round((v["entradas"] - v["salidas"]) * pu_prom) if pu_prom > 0 else 0
+                    stock_actual = round(max(0.0, stock_actual_todo.get(k, 0)), 1)
+                    stock_val = round(stock_actual * pu_prom) if pu_prom > 0 else 0
                     filas_res.append({
                         "Insumo": k,
                         "Entradas": v["entradas"],
                         "Salidas": v["salidas"],
-                        "Stock": round(v["entradas"]-v["salidas"], 1),
+                        "Stock": stock_actual,
                         "Precio prom. pond.": fmt(pu_prom) if pu_prom > 0 else "—",
                         "Costo consumido": fmt(costo_consumido) if costo_consumido > 0 else "—",
                         "Inventario total": fmt(stock_val) if stock_val > 0 else "—",
