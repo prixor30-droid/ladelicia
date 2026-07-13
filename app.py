@@ -1410,8 +1410,8 @@ if st.session_state.vista == "menu":
 elif st.session_state.vista == "produccion":
     st.markdown('<div class="section-label">Registrar producción</div>', unsafe_allow_html=True)
 
-    empleado   = st.radio("¿Quién registra?", EMPLEADOS, horizontal=True, key="emp")
-    sabor_p    = st.radio("Sabor producido", sabores_produccion_frecuente(), horizontal=True, key="sabor_p")
+    empleado   = st.selectbox("¿Quién registra?", EMPLEADOS, key="emp")
+    sabor_p    = st.selectbox("Sabor producido", sabores_produccion_frecuente(), key="sabor_p")
     cantidad_p = st.number_input("Bolsas producidas", min_value=1, max_value=2000, value=50, step=10, key="cant_p")
 
     stock_act = get_stock(sabor_p)
