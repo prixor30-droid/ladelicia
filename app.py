@@ -2195,6 +2195,9 @@ elif st.session_state.vista == "materia_prima":
         else:
             st.markdown(f'<div class="info-box">{ICO_PACKAGE} Stock disponible de <b>{insumo_sal}</b>: <b>{stock_disp_sal:.1f} {unidad_sal}</b></div>', unsafe_allow_html=True)
 
+        fecha_sal = st.date_input("Fecha de la salida", value=datetime.now(COL_TZ).date(), max_value=datetime.now(COL_TZ).date(), key="fecha_sal")
+        if str(fecha_sal) != fecha_hoy():
+            st.markdown(f'<div class="warn-box">{ICO_CALENDAR} Se registrará con fecha {fecha_sal}, no con la de hoy.</div>', unsafe_allow_html=True)
         cant_sal = st.number_input(f"Cantidad ({unidad_sal})", min_value=0.1,
                                     max_value=max(0.1, stock_disp_sal),
                                     value=min(1.0, max(0.1, stock_disp_sal)),
@@ -2204,7 +2207,7 @@ elif st.session_state.vista == "materia_prima":
         if st.button("📤 Registrar salida", key="btn_sal", disabled=(stock_disp_sal == 0)):
             h = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}",
                  "Content-Type": "application/json", "Prefer": "return=minimal"}
-            data_sal = {"fecha": fecha_hoy(), "hora": ahora(), "insumo": insumo_sal,
+            data_sal = {"fecha": str(fecha_sal), "hora": ahora(), "insumo": insumo_sal,
                         "categoria": cat_key, "cantidad": float(cant_sal),
                         "unidad": unidad_sal, "motivo": motivo_sal.strip() or "Producción"}
             try:
