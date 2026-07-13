@@ -1060,6 +1060,11 @@ def get_img_b64(nombre_archivo):
     p = Path(nombre_archivo)
     return base64.b64encode(p.read_bytes()).decode() if p.exists() else None
 
+def get_svg_b64(paths_svg, stroke):
+    svg = (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" '
+           f'stroke="{stroke}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">{paths_svg}</svg>')
+    return base64.b64encode(svg.encode()).decode()
+
 _imagenes_menu = {
     "produccion":    "Produccion.jpg",
     "carro":         "Cargue.jpg",
@@ -1068,9 +1073,20 @@ _imagenes_menu = {
     "caja":          "Caja.jpg",
 }
 
+# Iconos vectoriales (reemplazan los emojis, que no siempre se ven igual en todos los dispositivos)
+_iconos_svg = {
+    "produccion":    '<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>',
+    "carro":         '<rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>',
+    "fabrica":       '<path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/>',
+    "materia_prima": '<polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>',
+    "caja":          '<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>',
+    "resumen":       '<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>',
+}
+
 _css_botones_menu = ""
 for _vista, _archivo in _imagenes_menu.items():
     _b64 = get_img_b64(_archivo)
+    _icon_b64 = get_svg_b64(_iconos_svg[_vista], "white")
     if _b64:
         _css_botones_menu += f"""
 .st-key-btn_{_vista} button{{
@@ -1081,18 +1097,47 @@ for _vista, _archivo in _imagenes_menu.items():
   border-radius:18px !important;
   box-shadow:0 3px 12px rgba(21,101,192,0.25) !important;
   min-height:110px !important;
-  padding:18px 20px !important;
+  padding:18px 20px 18px 60px !important;
   font-size:1rem !important;
   font-weight:700 !important;
   white-space:pre-line !important;
   line-height:1.5 !important;
   text-align:left !important;
   text-shadow:0 1px 3px rgba(0,0,0,0.9),0 2px 8px rgba(0,0,0,0.6) !important;
+  position:relative !important;
+}}
+.st-key-btn_{_vista} button::before{{
+  content:'';
+  position:absolute;
+  left:18px;
+  top:50%;
+  transform:translateY(-50%);
+  width:28px;
+  height:28px;
+  background:url("data:image/svg+xml;base64,{_icon_b64}") no-repeat center/contain;
 }}
 .st-key-btn_{_vista} button:hover{{
   background:linear-gradient(90deg,rgba(0,0,0,0.6) 0%,rgba(0,0,0,0.42) 55%,rgba(0,0,0,0.28) 100%),url("data:image/jpeg;base64,{_b64}") center/cover no-repeat !important;
   box-shadow:0 5px 16px rgba(21,101,192,0.32) !important;
   opacity:1 !important;
+}}
+"""
+
+_resumen_icon_b64 = get_svg_b64(_iconos_svg["resumen"], "#0D1B2A")
+_css_botones_menu += f"""
+.st-key-btn_resumen button{{
+  padding-left:60px !important;
+  position:relative !important;
+}}
+.st-key-btn_resumen button::before{{
+  content:'';
+  position:absolute;
+  left:18px;
+  top:50%;
+  transform:translateY(-50%);
+  width:28px;
+  height:28px;
+  background:url("data:image/svg+xml;base64,{_resumen_icon_b64}") no-repeat center/contain;
 }}
 """
 
@@ -1298,18 +1343,18 @@ if st.session_state.vista != "menu":
 # ══════════════════════════════════════════════════════════════════════════════
 if st.session_state.vista == "menu":
     opciones = [
-        ("produccion",    "📦", "Producción",      "Registrar bolsas fabricadas"),
-        ("carro",         "🚗", "Edison & Javier", "Cargues y ventas del carro"),
-        ("fabrica",       "🏭", "Fábrica",          "Ventas de Sofía y Andrea"),
-        ("materia_prima", "🌽", "Materia Prima",    "Insumos y proveedores"),
-        ("caja",          "💰", "Caja",              "Ingresos y egresos"),
+        ("produccion",    "Producción",      "Registrar bolsas fabricadas"),
+        ("carro",         "Edison & Javier", "Cargues y ventas del carro"),
+        ("fabrica",       "Fábrica",          "Ventas de Sofía y Andrea"),
+        ("materia_prima", "Materia Prima",    "Insumos y proveedores"),
+        ("caja",          "Caja",              "Ingresos y egresos"),
     ]
     if st.session_state.es_admin:
-        opciones.append(("resumen", "📊", "Resumen", "Ventas, facturas y exportar"))
+        opciones.append(("resumen", "Resumen", "Ventas, facturas y exportar"))
 
-    for vista, icon, titulo, sub in opciones:
+    for vista, titulo, sub in opciones:
         with st.container():
-            if st.button(f"{icon}  {titulo}\n{sub}", key=f"btn_{vista}", use_container_width=True):
+            if st.button(f"{titulo}\n{sub}", key=f"btn_{vista}", use_container_width=True):
                 st.session_state.vista = vista
                 st.rerun()
 
