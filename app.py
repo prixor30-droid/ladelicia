@@ -1946,7 +1946,7 @@ elif st.session_state.vista == "materia_prima":
         ("Aceite (caneca)",        "🛢️", "caneca", "mp"),
         ("ACPM (caneca)",          "⛽", "caneca",  "mp"),
         ("Plátano (bolsa/caja)",   "🍌", "caja",    "mp"),
-        ("Salsa de tomate (caja)", "🍅", "caja",    "mp"),
+        ("Salsa de tomate (unidad)", "🍅", "unidad", "mp"),
         ("Chicharrón (bulto)",     "🥩", "bulto",   "mp"),
         ("Tocineta (bulto)",       "🥓", "bulto",   "mp"),
     ]
@@ -2281,7 +2281,7 @@ elif st.session_state.vista == "materia_prima":
 
 elif st.session_state.vista == "caja":
     st.markdown(f'<div class="section-label">{ICO_DOLLAR} Caja</div>', unsafe_allow_html=True)
-    tab_caja1, tab_caja2, tab_caja3 = st.tabs(["📊 Resumen", "➕ Registrar egreso", "📋 Historial"])
+    tab_caja1, tab_caja2, tab_caja3 = st.tabs(["📊 Resumen", "➕ Ingreso / Egreso", "📋 Historial"])
 
     # Fechas del período
     hoy_caja = datetime.now(COL_TZ).date()
@@ -2301,6 +2301,7 @@ elif st.session_state.vista == "caja":
             f_cxc = ex.submit(sb_get, "ventas", "select=factura_id,cliente,canal,total,abono,saldo&saldo=gt.0&order=fecha.desc")
             f_cxp = ex.submit(sb_get, "materia_prima", "select=id,insumo,proveedor,precio_total,abono,saldo&estado=eq.pendiente&order=fecha.desc")
             f_cxc_m = ex.submit(sb_get, "creditos", "select=id,cliente,canal,total,pagado&estado=eq.pendiente")
+            f_ing = ex.submit(sb_get, "caja_ingresos", f"select=*&fecha=gte.{f_ini_caja}&fecha=lte.{f_fin_caja}&order=fecha.desc")
         raw_ventas_caja = f_vf.result() or []
         raw_creditos_cobrados = f_ab.result() or []
         raw_mp_pagos = f_mp.result() or []
@@ -2308,6 +2309,7 @@ elif st.session_state.vista == "caja":
         raw_cxc = f_cxc.result() or []
         raw_cxp = f_cxp.result() or []
         raw_cxc_m = f_cxc_m.result() or []
+        raw_ingresos_manuales = f_ing.result() or []
 
         # Calcular ingresos — una sola entrada por factura (la primera fila de cada una)
         facturas_vistas = {}
@@ -2316,13 +2318,15 @@ elif st.session_state.vista == "caja":
             if fid and fid not in facturas_vistas:
                 facturas_vistas[fid] = float(r.get("abono", 0))
         ingresos_ventas = sum(facturas_vistas.values())
+        ingresos_manuales = sum(float(r["valor"]) for r in raw_ingresos_manuales)
+        total_ingresos = ingresos_ventas + ingresos_manuales
 
         # Egresos: pagos de materia prima + gastos varios
         egresos_mp = sum(float(r["abono"]) for r in raw_mp_pagos)
         egresos_gastos = sum(float(r["valor"]) for r in raw_egresos)
         total_egresos = egresos_mp + egresos_gastos
 
-        saldo_caja = ingresos_ventas - total_egresos
+        saldo_caja = total_ingresos - total_egresos
 
         # Cuentas por cobrar a clientes (créditos de ventas, saldo pendiente) — una sola vez por factura
         facturas_cxc = {}
@@ -2340,7 +2344,7 @@ elif st.session_state.vista == "caja":
         color_saldo = "metric-green" if saldo_caja >= 0 else "metric-red"
         st.markdown(f"""
         <div class="metric-row">
-            <div class="metric-box metric-blue"><div class="val">{fmt(ingresos_ventas)}</div><div class="lbl">Ingresos</div></div>
+            <div class="metric-box metric-blue"><div class="val">{fmt(total_ingresos)}</div><div class="lbl">Ingresos</div></div>
             <div class="metric-box metric-yellow"><div class="val">{fmt(total_egresos)}</div><div class="lbl">Egresos</div></div>
             <div class="metric-box {color_saldo}"><div class="val">{fmt(saldo_caja)}</div><div class="lbl">Saldo caja</div></div>
         </div>
@@ -2353,6 +2357,18 @@ elif st.session_state.vista == "caja":
             <div class="metric-box metric-red"><div class="val">{fmt(cuentas_por_pagar)}</div><div class="lbl">Cuentas por pagar (proveedores)</div></div>
         </div>
         """, unsafe_allow_html=True)
+
+        # Detalle ingresos
+        if ingresos_ventas > 0 or ingresos_manuales > 0:
+            st.markdown('<div class="section-label">Detalle ingresos</div>', unsafe_allow_html=True)
+            st.markdown(
+                f'<div class="factura-box">'
+                f'<div class="factura-row"><span>{ICO_DOLLAR} Ventas</span><span><b>{fmt(ingresos_ventas)}</b></span></div>'
+                f'<div class="factura-row"><span>{ICO_NOTE} Dinero existente / aportes</span><span><b>{fmt(ingresos_manuales)}</b></span></div>'
+                f'<div class="factura-total"><span>Total ingresos</span><span>{fmt(total_ingresos)}</span></div>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
 
         # Detalle egresos
         if egresos_mp > 0 or egresos_gastos > 0:
@@ -2367,31 +2383,61 @@ elif st.session_state.vista == "caja":
             )
 
     with tab_caja2:
-        st.markdown('<div class="section-label">Registrar egreso / gasto</div>', unsafe_allow_html=True)
-        concepto_eg = st.text_input("Concepto", placeholder="Ej: Pago arriendo, gas, luz...", key="concepto_eg")
-        cat_eg = st.selectbox("Categoría", ["Servicios", "Arriendo", "Transporte", "Mantenimiento", "Salario", "Otro"], key="cat_eg")
-        valor_eg = st.number_input("Valor ($)", min_value=0, value=0, step=1000, key="valor_eg")
+        tipo_mov = st.radio("Tipo de movimiento", ["📤 Egreso (gasto)", "📥 Ingreso (dinero existente)"], key="tipo_mov_caja")
 
-        if st.button("✅ Registrar egreso", key="btn_eg"):
-            if not concepto_eg.strip():
-                st.markdown(f'<div class="alert-low">{ICO_WARN} Escribe el concepto del egreso.</div>', unsafe_allow_html=True)
-            elif valor_eg == 0:
-                st.markdown(f'<div class="alert-low">{ICO_WARN} Ingresa el valor.</div>', unsafe_allow_html=True)
-            else:
-                h = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}",
-                     "Content-Type": "application/json", "Prefer": "return=minimal"}
-                data_eg = {"fecha": fecha_hoy(), "hora": ahora(),
-                           "concepto": concepto_eg.strip(), "valor": float(valor_eg), "categoria": cat_eg}
-                try:
-                    r_eg = requests.post(f"{SUPABASE_URL}/rest/v1/caja_egresos", headers=h, json=data_eg, timeout=10)
-                    if r_eg.ok:
-                        st.markdown(f'<div class="success-toast">{ICO_CHECK} Egreso registrado.</div>', unsafe_allow_html=True)
-                        time.sleep(0.3)
-                        st.rerun()
-                    else:
-                        st.error(f"Error: {r_eg.status_code} — {r_eg.text}")
-                except Exception as e:
-                    st.error(f"Error: {e}")
+        if tipo_mov == "📤 Egreso (gasto)":
+            st.markdown('<div class="section-label">Registrar egreso / gasto</div>', unsafe_allow_html=True)
+            concepto_eg = st.text_input("Concepto", placeholder="Ej: Pago arriendo, gas, luz...", key="concepto_eg")
+            cat_eg = st.selectbox("Categoría", ["Servicios", "Arriendo", "Transporte", "Mantenimiento", "Salario", "Otro"], key="cat_eg")
+            valor_eg = st.number_input("Valor ($)", min_value=0, value=0, step=1000, key="valor_eg")
+
+            if st.button("✅ Registrar egreso", key="btn_eg"):
+                if not concepto_eg.strip():
+                    st.markdown(f'<div class="alert-low">{ICO_WARN} Escribe el concepto del egreso.</div>', unsafe_allow_html=True)
+                elif valor_eg == 0:
+                    st.markdown(f'<div class="alert-low">{ICO_WARN} Ingresa el valor.</div>', unsafe_allow_html=True)
+                else:
+                    h = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}",
+                         "Content-Type": "application/json", "Prefer": "return=minimal"}
+                    data_eg = {"fecha": fecha_hoy(), "hora": ahora(),
+                               "concepto": concepto_eg.strip(), "valor": float(valor_eg), "categoria": cat_eg}
+                    try:
+                        r_eg = requests.post(f"{SUPABASE_URL}/rest/v1/caja_egresos", headers=h, json=data_eg, timeout=10)
+                        if r_eg.ok:
+                            st.markdown(f'<div class="success-toast">{ICO_CHECK} Egreso registrado.</div>', unsafe_allow_html=True)
+                            time.sleep(0.3)
+                            st.rerun()
+                        else:
+                            st.error(f"Error: {r_eg.status_code} — {r_eg.text}")
+                    except Exception as e:
+                        st.error(f"Error: {e}")
+        else:
+            st.markdown('<div class="section-label">Registrar ingreso (dinero existente)</div>', unsafe_allow_html=True)
+            st.caption("Úsalo para sumar a caja dinero que ya tenías (efectivo inicial, aportes, etc.) sin que cuente como una venta.")
+            concepto_in = st.text_input("Concepto", placeholder="Ej: Efectivo en caja al iniciar", key="concepto_in")
+            cat_in = st.selectbox("Categoría", ["Dinero existente en caja", "Aporte / capital", "Otro ingreso"], key="cat_in")
+            valor_in = st.number_input("Valor ($)", min_value=0, value=0, step=1000, key="valor_in")
+
+            if st.button("✅ Registrar ingreso", key="btn_in"):
+                if not concepto_in.strip():
+                    st.markdown(f'<div class="alert-low">{ICO_WARN} Escribe el concepto del ingreso.</div>', unsafe_allow_html=True)
+                elif valor_in == 0:
+                    st.markdown(f'<div class="alert-low">{ICO_WARN} Ingresa el valor.</div>', unsafe_allow_html=True)
+                else:
+                    h = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}",
+                         "Content-Type": "application/json", "Prefer": "return=minimal"}
+                    data_in = {"fecha": fecha_hoy(), "hora": ahora(),
+                               "concepto": concepto_in.strip(), "valor": float(valor_in), "categoria": cat_in}
+                    try:
+                        r_in = requests.post(f"{SUPABASE_URL}/rest/v1/caja_ingresos", headers=h, json=data_in, timeout=10)
+                        if r_in.ok:
+                            st.markdown(f'<div class="success-toast">{ICO_CHECK} Ingreso registrado.</div>', unsafe_allow_html=True)
+                            time.sleep(0.3)
+                            st.rerun()
+                        else:
+                            st.error(f"Error: {r_in.status_code} — {r_in.text}")
+                    except Exception as e:
+                        st.error(f"Error: {e}")
 
     with tab_caja3:
         st.markdown('<div class="section-label">Historial de movimientos</div>', unsafe_allow_html=True)
@@ -2414,6 +2460,16 @@ elif st.session_state.vista == "caja":
                     "Categoría": "Ingreso ventas",
                     "Ingreso": fmt(r["abono"]), "Egreso": "—"
                 })
+
+        # Ingresos manuales (dinero existente / aportes)
+        raw_ing_h = sb_get("caja_ingresos", f"select=*&fecha=gte.{f_ini_h}&fecha=lte.{f_fin_h}&order=fecha.desc") or []
+        for r in raw_ing_h:
+            movimientos.append({
+                "Fecha": r["fecha"], "Hora": r["hora"],
+                "Concepto": r["concepto"],
+                "Categoría": r["categoria"],
+                "Ingreso": fmt(r["valor"]), "Egreso": "—"
+            })
 
         # Egresos materia prima
         raw_mp_h = sb_get("materia_prima", f"select=fecha,hora,insumo,proveedor,abono&fecha=gte.{f_ini_h}&fecha=lte.{f_fin_h}&abono=gt.0&order=fecha.desc") or []
