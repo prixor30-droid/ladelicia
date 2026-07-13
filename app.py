@@ -2038,7 +2038,7 @@ elif st.session_state.vista == "materia_prima":
             fecha_mp = st.date_input("Fecha de la entrada", value=datetime.now(COL_TZ).date(), max_value=datetime.now(COL_TZ).date(), key="fecha_mp")
             if fecha_mp != datetime.now(COL_TZ).date():
                 st.markdown(f'<div class="warn-box">{ICO_CALENDAR} Se registrará con fecha {fecha_mp}, no con la de hoy.</div>', unsafe_allow_html=True)
-            cant_mp        = st.number_input(f"Cantidad ({unidad_sel})", min_value=0.1, max_value=9999.0, value=1.0, step=0.5, key="cant_mp")
+            cant_mp        = st.number_input(f"Cantidad ({unidad_sel})", min_value=0.1, max_value=999999.0, value=1.0, step=0.5, key="cant_mp")
 
             tipo_entrada_mp = st.radio(
                 "Tipo de entrada",
