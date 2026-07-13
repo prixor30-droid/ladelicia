@@ -1188,19 +1188,18 @@ components.html("""
     const SEL_FECHAS   = '[data-testid="stDateInputField"], [data-baseweb="datepicker"] input';
     const SEL_NUMEROS  = '[data-testid="stNumberInputField"]';
 
+    function marcar(inp, modo) {
+        // Evita llamar setAttribute si ya está puesto, para no generar
+        // mutaciones de DOM innecesarias (eso causaba un bucle con el observer).
+        if (inp.getAttribute('inputmode') !== modo) inp.setAttribute('inputmode', modo);
+        if (modo !== 'numeric' && inp.getAttribute('readonly') !== 'true') inp.setAttribute('readonly', 'true');
+    }
+
     function bloquear(doc) {
         try {
-            doc.querySelectorAll(SEL_SELECTS).forEach(function (inp) {
-                inp.setAttribute('inputmode', 'none');
-                inp.setAttribute('readonly', 'true');
-            });
-            doc.querySelectorAll(SEL_FECHAS).forEach(function (inp) {
-                inp.setAttribute('inputmode', 'none');
-                inp.setAttribute('readonly', 'true');
-            });
-            doc.querySelectorAll(SEL_NUMEROS).forEach(function (inp) {
-                inp.setAttribute('inputmode', 'numeric');
-            });
+            doc.querySelectorAll(SEL_SELECTS).forEach(function (inp) { marcar(inp, 'none'); });
+            doc.querySelectorAll(SEL_FECHAS).forEach(function (inp) { marcar(inp, 'none'); });
+            doc.querySelectorAll(SEL_NUMEROS).forEach(function (inp) { marcar(inp, 'numeric'); });
         } catch (e) {}
     }
 
@@ -1208,9 +1207,10 @@ components.html("""
         const doc = window.parent.document;
         bloquear(doc);
 
-        // Reacciona al instante cuando Streamlit crea/re-renderiza los campos
+        // Reacciona cuando Streamlit crea nodos nuevos (no observamos atributos:
+        // como nosotros mismos los modificamos, eso provocaba un bucle infinito).
         const observer = new MutationObserver(function () { bloquear(doc); });
-        observer.observe(doc.body, { childList: true, subtree: true, attributes: true });
+        observer.observe(doc.body, { childList: true, subtree: true });
 
         // Refuerzo justo antes del toque: el dedo cae sobre el div contenedor,
         // no sobre el input, así que hay que buscar hacia arriba con closest().
@@ -1220,17 +1220,14 @@ components.html("""
             const cont = t.closest('[data-baseweb="select"], [data-baseweb="datepicker"], [data-testid="stDateInputField"]');
             if (!cont) return;
             const inp = cont.tagName === 'INPUT' ? cont : cont.querySelector('input');
-            if (inp) {
-                inp.setAttribute('inputmode', 'none');
-                inp.setAttribute('readonly', 'true');
-            }
+            if (inp) marcar(inp, 'none');
         }
         doc.addEventListener('touchstart', reforzarDesdeEvento, true);
         doc.addEventListener('pointerdown', reforzarDesdeEvento, true);
         doc.addEventListener('mousedown', reforzarDesdeEvento, true);
 
         // Respaldo por si el observer se pierde algún cambio
-        setInterval(function () { bloquear(doc); }, 200);
+        setInterval(function () { bloquear(doc); }, 300);
     } catch (e) {}
 })();
 </script>
