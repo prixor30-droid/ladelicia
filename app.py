@@ -17,6 +17,43 @@ def fecha_hoy():
 def ahora():
     return datetime.now(COL_TZ).strftime("%I:%M %p").lstrip("0")
 
+# ══════════════════════════════════════════════════════════════════════════════
+# ÍCONOS PARA TEXTOS HTML (reemplazan emojis en alertas, recibos, tarjetas, etc.)
+# ══════════════════════════════════════════════════════════════════════════════
+def _svg(paths, size=14):
+    return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="{size}" height="{size}" '
+            f'fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" '
+            f'style="display:inline-block;vertical-align:-2px;margin-right:3px">{paths}</svg>')
+
+def _dot(color, size=10):
+    return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="{size}" height="{size}" '
+            f'style="display:inline-block;vertical-align:-1px;margin-right:4px"><circle cx="12" cy="12" r="10" fill="{color}"/></svg>')
+
+ICO_WARN     = _svg('<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>')
+ICO_CHECK    = _svg('<polyline points="20 6 9 17 4 12"/>')
+ICO_CARD     = _svg('<rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/>')
+ICO_DOLLAR   = _svg('<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>')
+ICO_REFRESH  = _svg('<polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>')
+ICO_RECEIPT  = _svg('<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>')
+ICO_LOCK     = _svg('<rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>')
+ICO_GIFT     = _svg('<polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/>')
+ICO_USER     = _svg('<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>')
+ICO_CART     = _svg('<circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>')
+ICO_PACKAGE  = _svg('<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>')
+ICO_TROPHY   = _svg('<circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/>')
+ICO_CALENDAR = _svg('<rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>')
+ICO_LAYERS   = _svg('<polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>')
+ICO_PRINTER  = _svg('<polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>')
+ICO_CLIPBOARD = _svg('<path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>')
+ICO_NOTE     = _svg('<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>')
+ICO_TRUCK    = _svg('<rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>')
+ICO_FACTORY  = _svg('<path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/>')
+ICO_BULB     = _svg('<path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0 0 12 2z"/>')
+ICO_FLASK    = _svg('<path d="M9 2v6.5L4.5 17a2 2 0 0 0 1.8 3h11.4a2 2 0 0 0 1.8-3L15 8.5V2"/><line x1="9" y1="2" x2="15" y2="2"/>')
+ICO_DOT_RED    = _dot("#E53935")
+ICO_DOT_YELLOW = _dot("#FB8C00")
+ICO_DOT_GREEN  = _dot("#43A047")
+
 st.set_page_config(
     page_title="Productos La Delicia",
     page_icon="Logo.png",
@@ -163,7 +200,7 @@ def tabla_facturas_html(df_canal):
             <td>{r['vendedor']}</td>
             <td>{r['cliente']}</td>
             <td class="total-col">{fmt(r['total'])}</td>
-            <td class="estado-ok">✓ Aprobado</td>
+            <td class="estado-ok">{ICO_CHECK} Aprobado</td>
         </tr>""" for r in filas)
 
     return f"""
@@ -270,12 +307,12 @@ def mostrar_creditos_pendientes(canal):
         abono_cred = col_a.number_input("Abono ya pagado ($)", min_value=0, max_value=int(total_cred), step=1000, key=f"cred_abono_{canal}")
         if st.button("💾 Guardar crédito", key=f"btn_cred_guardar_{canal}"):
             if not cliente_cred.strip():
-                st.markdown('<div class="alert-low">⚠️ Escribe el nombre del cliente.</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="alert-low">{ICO_WARN} Escribe el nombre del cliente.</div>', unsafe_allow_html=True)
             elif total_cred <= 0:
-                st.markdown('<div class="alert-low">⚠️ Ingresa el monto adeudado.</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="alert-low">{ICO_WARN} Ingresa el monto adeudado.</div>', unsafe_allow_html=True)
             else:
                 _registrar_credito_manual(str(fecha_cred), cliente_cred.strip(), canal, vendedor_cred, float(total_cred), float(abono_cred))
-                st.markdown('<div class="success-toast">✅ Crédito registrado.</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="success-toast">{ICO_CHECK} Crédito registrado.</div>', unsafe_allow_html=True)
                 time.sleep(0.3)
                 st.rerun()
 
@@ -309,7 +346,7 @@ def mostrar_creditos_pendientes(canal):
     facturas = {k: d for k, d in facturas.items() if d["saldo"] > 0}
     if not facturas:
         return
-    st.markdown('<div class="section-label">💳 Créditos pendientes de cobro</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="section-label">{ICO_CARD} Créditos pendientes de cobro</div>', unsafe_allow_html=True)
     busqueda = st.text_input("🔍 Buscar por cliente", key=f"buscar_credito_{canal}", placeholder="Ej: Don Carlos")
     if busqueda.strip():
         facturas = {k: d for k, d in facturas.items() if _coincide_nombre(busqueda, d["cliente"])}
@@ -414,7 +451,7 @@ def render_venta_canal(cfg, mostrar_creditos=True):
     cant = col_c.number_input("Bolsas", min_value=1, max_value=max(1, disponible), value=1, step=1, key="venta_cant")
 
     if disponible < cant:
-        st.markdown(f'<div class="alert-low">⚠️ Solo hay {disponible} bolsas disponibles de {sabor}.</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="alert-low">{ICO_WARN} Solo hay {disponible} bolsas disponibles de {sabor}.</div>', unsafe_allow_html=True)
 
     if sabor in PRECIOS_RAPIDOS:
         opciones_p = [e if e.strip().startswith("$") else f"{e} — {fmt(p)}" for e, p in PRECIOS_RAPIDOS[sabor]]
@@ -486,11 +523,11 @@ def render_venta_canal(cfg, mostrar_creditos=True):
         abono = st.number_input("Abono del cliente ($)", min_value=0, value=int(total_venta), step=1000, key="venta_abono")
         if abono > 0:
             if abono >= total_venta:
-                st.markdown(f'<div class="info-box">💰 Total: <b>{fmt(total_venta)}</b> · Devolver: <b>{fmt(abono - total_venta)}</b></div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="info-box">{ICO_DOLLAR} Total: <b>{fmt(total_venta)}</b> · Devolver: <b>{fmt(abono - total_venta)}</b></div>', unsafe_allow_html=True)
             else:
-                st.markdown(f'<div class="warn-box">📋 Abono: <b>{fmt(abono)}</b> · Queda debiendo: <b>{fmt(total_venta - abono)}</b></div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="warn-box">{ICO_CLIPBOARD} Abono: <b>{fmt(abono)}</b> · Queda debiendo: <b>{fmt(total_venta - abono)}</b></div>', unsafe_allow_html=True)
         else:
-            st.markdown(f'<div class="warn-box">📋 Sin abono — queda debiendo: <b>{fmt(total_venta)}</b></div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="warn-box">{ICO_CLIPBOARD} Sin abono — queda debiendo: <b>{fmt(total_venta)}</b></div>', unsafe_allow_html=True)
 
         col_clr2, col_conf = st.columns(2)
         if col_clr2.button("🗑️ Vaciar carrito", key="venta_btn_clr2"):
@@ -500,12 +537,12 @@ def render_venta_canal(cfg, mostrar_creditos=True):
 
         if col_conf.button("✅ Confirmar venta", key="venta_btn_confirmar"):
             if not cliente.strip():
-                st.markdown('<div class="alert-low">⚠️ Escribe el nombre del cliente.</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="alert-low">{ICO_WARN} Escribe el nombre del cliente.</div>', unsafe_allow_html=True)
             else:
                 disp_check = cfg["disponible_map_fn"]()
                 sin_stock = [s for s, c in carrito.items() if disp_check.get(s, 0) < c]
                 if sin_stock:
-                    st.markdown(f'<div class="alert-low">⚠️ Stock insuficiente: <b>{", ".join(sin_stock)}</b>. Ajusta el carrito.</div>', unsafe_allow_html=True)
+                    st.markdown(f'<div class="alert-low">{ICO_WARN} Stock insuficiente: <b>{", ".join(sin_stock)}</b>. Ajusta el carrito.</div>', unsafe_allow_html=True)
                 else:
                     fid = str(uuid.uuid4())[:8].upper()
                     total_confirmado = 0
@@ -539,11 +576,11 @@ def render_venta_canal(cfg, mostrar_creditos=True):
         fac = st.session_state[key_factura]
         vuelto = fac["billete"] - fac["total"] if fac["billete"] >= fac["total"] and fac["billete"] > 0 else 0
         saldo_fac = fac.get("saldo", 0)
-        msg = f'✅ Venta registrada — <b>#{fac["id"]}</b> · {fac["cliente"]} · {fmt(fac["total"])}'
+        msg = f'{ICO_CHECK} Venta registrada — <b>#{fac["id"]}</b> · {fac["cliente"]} · {fmt(fac["total"])}'
         if vuelto > 0:
-            msg += f'<br>💵 Devolver: <b>{fmt(vuelto)}</b>'
+            msg += f'<br>{ICO_DOLLAR} Devolver: <b>{fmt(vuelto)}</b>'
         if saldo_fac > 0:
-            msg += f'<br>📋 Queda debiendo: <b>{fmt(saldo_fac)}</b>'
+            msg += f'<br>{ICO_CLIPBOARD} Queda debiendo: <b>{fmt(saldo_fac)}</b>'
         st.markdown(f'<div class="success-toast">{msg}</div>', unsafe_allow_html=True)
 
         st.markdown('<div class="section-label">¿El cliente quiere algo más?</div>', unsafe_allow_html=True)
@@ -568,11 +605,11 @@ def render_venta_canal(cfg, mostrar_creditos=True):
             valor_in  = fac["precios"].get(sabor_in,  PRODUCTOS[sabor_in])  * cant_in
             diferencia = valor_in - valor_out
             if diferencia > 0:
-                st.markdown(f'<div class="warn-box">💰 El cliente debe pagar <b>{fmt(diferencia)}</b> adicionales</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="warn-box">{ICO_DOLLAR} El cliente debe pagar <b>{fmt(diferencia)}</b> adicionales</div>', unsafe_allow_html=True)
             elif diferencia < 0:
-                st.markdown(f'<div class="info-box">💵 Hay que devolver <b>{fmt(abs(diferencia))}</b> al cliente</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="info-box">{ICO_DOLLAR} Hay que devolver <b>{fmt(abs(diferencia))}</b> al cliente</div>', unsafe_allow_html=True)
             else:
-                st.markdown('<div class="info-box">✅ Cambio sin diferencia de valor</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="info-box">{ICO_CHECK} Cambio sin diferencia de valor</div>', unsafe_allow_html=True)
 
             if st.button("🔁 Registrar cambio", key="venta_btn_cambio"):
                 sb_post("ventas", {
@@ -606,13 +643,13 @@ def render_venta_canal(cfg, mostrar_creditos=True):
             disp_add = cfg["disponible_map_fn"]()
             opciones_add = cfg["sabores_post_venta_fn"](disp_add)
             if not opciones_add:
-                st.markdown('<div class="warn-box">⚠️ No hay disponible para agregar.</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="warn-box">{ICO_WARN} No hay disponible para agregar.</div>', unsafe_allow_html=True)
             else:
                 sabor_add = st.selectbox("Sabor a agregar", opciones_add, key="venta_add_sabor")
                 max_add = max(1, int(disp_add.get(sabor_add, 0)))
                 cant_add = st.number_input("Cantidad", min_value=1, max_value=max_add, value=1, step=1, key="venta_add_cant")
                 precio_add = fac["precios"].get(sabor_add, PRODUCTOS[sabor_add]) * cant_add
-                st.markdown(f'<div class="info-box">📦 Disponible: <b>{max_add}</b> · 💰 A cobrar: <b>{fmt(precio_add)}</b></div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="info-box">{ICO_PACKAGE} Disponible: <b>{max_add}</b> · {ICO_DOLLAR} A cobrar: <b>{fmt(precio_add)}</b></div>', unsafe_allow_html=True)
 
                 if st.button("➕ Agregar a la factura", key="venta_btn_add_fac"):
                     sb_post("ventas", {
@@ -652,7 +689,7 @@ def render_venta_canal(cfg, mostrar_creditos=True):
 
 CONFIG_FABRICA = {
     "canal": "Fábrica",
-    "icono": "🏭",
+    "icono": ICO_FACTORY,
     "key_carrito": "carrito",
     "key_precios": "precios_carrito",
     "key_factura": "factura_guardada",
@@ -667,7 +704,7 @@ CONFIG_FABRICA = {
 
 CONFIG_CARRO = {
     "canal": "Carro",
-    "icono": "🚗",
+    "icono": ICO_TRUCK,
     "key_carrito": "carrito_carro",
     "key_precios": "precios_carro",
     "key_factura": "factura_carro_guardada",
@@ -1262,7 +1299,7 @@ total_vta = sum(_facturas_vta.values())
 if st.session_state.es_admin:
     tarjeta_ventas = f'<div class="metric-box metric-green"><div class="val">{fmt(total_vta)}</div><div class="lbl">Ventas hoy</div></div>'
 else:
-    tarjeta_ventas = '<div class="metric-box metric-green"><div class="val">🔒</div><div class="lbl">Solo admin</div></div>'
+    tarjeta_ventas = f'<div class="metric-box metric-green"><div class="val">{ICO_LOCK}</div><div class="lbl">Solo admin</div></div>'
 
 st.markdown(f"""
 <div class="metric-row">
@@ -1284,7 +1321,7 @@ if raw_inv_global:
         nombres_ag = ", ".join(r["sabor"] for r in agotados[:6])
         extra_ag = f" y {len(agotados)-6} más" if len(agotados) > 6 else ""
         st.markdown(
-            f'<div class="alert-low">🔴 <b>Agotado:</b> {nombres_ag}{extra_ag}</div>',
+            f'<div class="alert-low">{ICO_DOT_RED} <b>Agotado:</b> {nombres_ag}{extra_ag}</div>',
             unsafe_allow_html=True
         )
 
@@ -1292,7 +1329,7 @@ if raw_inv_global:
         nombres_bj = ", ".join(f"{r['sabor']} ({r['stock']})" for r in bajos_global[:6])
         extra_bj = f" y {len(bajos_global)-6} más" if len(bajos_global) > 6 else ""
         st.markdown(
-            f'<div class="warn-box">⚠️ <b>Stock bajo:</b> {nombres_bj}{extra_bj}</div>',
+            f'<div class="warn-box">{ICO_WARN} <b>Stock bajo:</b> {nombres_bj}{extra_bj}</div>',
             unsafe_allow_html=True
         )
 
@@ -1310,10 +1347,10 @@ if not st.session_state.es_admin:
                 st.session_state.admin_actual = u.lower().strip()
                 st.rerun()
             else:
-                st.markdown('<div class="alert-low">⚠️ Usuario o contraseña incorrectos.</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="alert-low">{ICO_WARN} Usuario o contraseña incorrectos.</div>', unsafe_allow_html=True)
 else:
     nombre_admin = NOMBRES_ADMIN.get(st.session_state.admin_actual, "Administrador")
-    st.markdown(f'<div class="info-box">✅ Sesión activa — <b>{nombre_admin} (Administrador)</b></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="info-box">{ICO_CHECK} Sesión activa — <b>{nombre_admin} (Administrador)</b></div>', unsafe_allow_html=True)
     if st.button("🔒 Cerrar sesión", key="btn_logout"):
         st.session_state.es_admin = False
         st.session_state.admin_actual = None
@@ -1369,7 +1406,7 @@ elif st.session_state.vista == "produccion":
     cantidad_p = st.number_input("Bolsas producidas", min_value=1, max_value=2000, value=50, step=10, key="cant_p")
 
     stock_act = get_stock(sabor_p)
-    st.markdown(f'<div class="info-box">📦 Stock actual de <b>{sabor_p}</b>: {stock_act} → quedará en <b>{stock_act + cantidad_p}</b></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="info-box">{ICO_PACKAGE} Stock actual de <b>{sabor_p}</b>: {stock_act} → quedará en <b>{stock_act + cantidad_p}</b></div>', unsafe_allow_html=True)
 
     def _registrar_produccion(empleado, sabor, cantidad):
         sb_post("produccion", {
@@ -1387,7 +1424,7 @@ elif st.session_state.vista == "produccion":
         st.rerun()
 
     if st.session_state.ok_prod:
-        st.markdown('<div class="success-toast">✅ ¡Producción registrada!</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="success-toast">{ICO_CHECK} ¡Producción registrada!</div>', unsafe_allow_html=True)
         st.session_state.ok_prod = False
 
     # Producción de un día — selector de fecha + tabla totalmente editable
@@ -1499,7 +1536,7 @@ elif st.session_state.vista == "produccion":
         time.sleep(0.3)
         st.rerun()
     if st.session_state.ok_stock:
-        st.markdown('<div class="success-toast">✅ Stock ajustado.</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="success-toast">{ICO_CHECK} Stock ajustado.</div>', unsafe_allow_html=True)
         st.session_state.ok_stock = False
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1540,7 +1577,7 @@ elif st.session_state.vista == "carro":
                 st.rerun()
 
         if st.session_state.ok_cargue:
-            st.markdown('<div class="success-toast">✅ Cargue registrado.</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="success-toast">{ICO_CHECK} Cargue registrado.</div>', unsafe_allow_html=True)
             st.session_state.ok_cargue = False
 
         # Lo que lleva el carro (histórico — incluye días anteriores)
@@ -1660,14 +1697,14 @@ elif st.session_state.vista == "carro":
                 st.markdown('<div class="section-label">Resumen del día — Javier & Edison</div>', unsafe_allow_html=True)
                 st.markdown(
                     f'<div class="factura-box">'
-                    f'<div class="factura-row"><span>🛒 Bolsas vendidas hoy</span><span><b>{bolsas_carro_dia}</b></span></div>'
-                    f'<div class="factura-total"><span>💰 Total a entregar</span><span>{fmt(total_carro_dia)}</span></div>'
+                    f'<div class="factura-row"><span>{ICO_CART} Bolsas vendidas hoy</span><span><b>{bolsas_carro_dia}</b></span></div>'
+                    f'<div class="factura-total"><span>{ICO_DOLLAR} Total a entregar</span><span>{fmt(total_carro_dia)}</span></div>'
                     f'</div>',
                     unsafe_allow_html=True
                 )
 
     with sub3:
-        st.markdown('<div class="section-label">Devolución al inventario 🔄</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="section-label">Devolución al inventario {ICO_REFRESH}</div>', unsafe_allow_html=True)
         st.caption("Registra las bolsas que regresan al inventario.")
         sabor_dev = st.selectbox("Sabor a devolver", SABORES_LISTA, key="sabor_dev")
 
@@ -1680,7 +1717,7 @@ elif st.session_state.vista == "carro":
 
         cant_dev  = st.number_input("Bolsas devueltas", min_value=1, max_value=max_dev, value=1, step=1, key="cant_dev")
         fecha_dev = st.date_input("Fecha de devolución", value=datetime.now(COL_TZ).date(), key="fecha_dev")
-        st.markdown(f'<div class="info-box">📦 Máximo a devolver de <b>{sabor_dev}</b> hoy: <b>{max_dev}</b> bolsas</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="info-box">{ICO_PACKAGE} Máximo a devolver de <b>{sabor_dev}</b> hoy: <b>{max_dev}</b> bolsas</div>', unsafe_allow_html=True)
 
         if st.button("🔄 Registrar devolución", key="btn_dev"):
             sb_post("devoluciones", {"fecha": str(fecha_dev), "sabor": sabor_dev, "cantidad": cant_dev})
@@ -1690,11 +1727,11 @@ elif st.session_state.vista == "carro":
             st.rerun()
 
         if st.session_state.ok_dev:
-            st.markdown('<div class="success-toast">✅ Devolución registrada. Stock actualizado.</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="success-toast">{ICO_CHECK} Devolución registrada. Stock actualizado.</div>', unsafe_allow_html=True)
             st.session_state.ok_dev = False
 
     with sub4:
-        st.markdown('<div class="section-label">Regalar bolsa 🎁</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="section-label">Regalar bolsa {ICO_GIFT}</div>', unsafe_allow_html=True)
         st.caption("Registra las bolsas que se regalan — se descuentan del carro pero no cuentan como venta.")
 
         # Solo sabores disponibles en el carro (histórico)
@@ -1702,13 +1739,13 @@ elif st.session_state.vista == "carro":
         sabores_disp_r = [s for s, v in stock_carro_r.items() if v > 0]
 
         if not sabores_disp_r:
-            st.markdown('<div class="warn-box">⚠️ No hay papas disponibles en el carro para regalar.</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="warn-box">{ICO_WARN} No hay papas disponibles en el carro para regalar.</div>', unsafe_allow_html=True)
         else:
             sabor_reg = st.selectbox("Sabor", sabores_disp_r, key="sabor_reg")
             disp_reg = int(stock_carro_r.get(sabor_reg, 0))
             cant_reg = st.number_input("Cantidad", min_value=1, max_value=disp_reg, value=1, step=1, key="cant_reg")
             motivo_reg = st.text_input("Motivo (opcional)", placeholder="Ej: Cliente especial, muestra", key="motivo_reg")
-            st.markdown(f'<div class="info-box">🎁 Regalando <b>{cant_reg}</b> bolsas de <b>{sabor_reg}</b> · Quedan: <b>{disp_reg - cant_reg}</b></div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="info-box">{ICO_GIFT} Regalando <b>{cant_reg}</b> bolsas de <b>{sabor_reg}</b> · Quedan: <b>{disp_reg - cant_reg}</b></div>', unsafe_allow_html=True)
 
             if st.button("🎁 Registrar regalo", key="btn_reg"):
                 sb_post("ventas", {
@@ -1724,7 +1761,7 @@ elif st.session_state.vista == "carro":
                 st.rerun()
 
         if st.session_state.get("ok_reg"):
-            st.markdown('<div class="success-toast">✅ Regalo registrado. Descontado del carro.</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="success-toast">{ICO_CHECK} Regalo registrado. Descontado del carro.</div>', unsafe_allow_html=True)
             st.session_state.ok_reg = False
 
         # Historial de regalos del día
@@ -1766,13 +1803,13 @@ elif st.session_state.vista == "fabrica":
                     por_vendedor[v] = por_vendedor.get(v, 0) + r["total"]
             st.markdown('<div class="section-label">Resumen del día — Fábrica</div>', unsafe_allow_html=True)
             filas_v = "".join(
-                f'<div class="factura-row"><span>👤 {v}</span><span><b>{fmt(t)}</b></span></div>'
+                f'<div class="factura-row"><span>{ICO_USER} {v}</span><span><b>{fmt(t)}</b></span></div>'
                 for v, t in por_vendedor.items()
             )
             st.markdown(
                 f'<div class="factura-box">{filas_v}'
-                f'<div class="factura-row"><span>🛒 Bolsas vendidas hoy</span><span><b>{bolsas_fab_dia}</b></span></div>'
-                f'<div class="factura-total"><span>💰 Total a entregar</span><span>{fmt(total_fab_dia)}</span></div>'
+                f'<div class="factura-row"><span>{ICO_CART} Bolsas vendidas hoy</span><span><b>{bolsas_fab_dia}</b></span></div>'
+                f'<div class="factura-total"><span>{ICO_DOLLAR} Total a entregar</span><span>{fmt(total_fab_dia)}</span></div>'
                 f'</div>',
                 unsafe_allow_html=True
             )
@@ -1786,14 +1823,14 @@ elif st.session_state.vista == "recibo":
         st.markdown(render_recibo(registros_recibo), unsafe_allow_html=True)
 
         # Botón imprimir
-        components.html("""
+        _html_btn_imprimir = """
         <div style="text-align:center;margin-top:12px;">
             <button onclick="window.print()" style="
                 background:#1565C0;color:white;border:none;
                 border-radius:12px;padding:14px 32px;
                 font-size:1rem;font-weight:700;cursor:pointer;
                 box-shadow:0 4px 12px rgba(21,101,192,0.3);
-            ">🖨️ Imprimir recibo</button>
+            ">ICONO_PRINTER Imprimir recibo</button>
         </div>
         <style>
         @media print {
@@ -1810,7 +1847,8 @@ elif st.session_state.vista == "recibo":
             }
         }
         </style>
-        """, height=80)
+        """.replace("ICONO_PRINTER", ICO_PRINTER)
+        components.html(_html_btn_imprimir, height=80)
 
         # Eliminar factura — visible para todos
         if True:
@@ -1818,7 +1856,7 @@ elif st.session_state.vista == "recibo":
             canal_recibo = registros_recibo[0].get("canal", "") if registros_recibo else ""
 
             st.markdown("---")
-            st.markdown('<div class="section-label">⚠️ Zona de administrador</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="section-label">{ICO_WARN} Zona de administrador</div>', unsafe_allow_html=True)
 
             if st.session_state.get("confirmar_eliminar_fac") == fid_recibo:
                 st.markdown('<div class="alert-low">¿Seguro que quieres eliminar esta factura? Esta acción devolverá las bolsas al inventario.</div>', unsafe_allow_html=True)
@@ -1898,16 +1936,16 @@ elif st.session_state.vista == "materia_prima":
     SABORIZANTES_NAMES = {n for n,_,_,_ in SABORIZANTES_INFO}
     EMPAQUES_NAMES     = {n for n,_,_,_ in EMPAQUES_INFO}
 
-    st.markdown('<div class="section-label">Materia Prima e Insumos 🌽</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="section-label">Materia Prima e Insumos {ICO_LAYERS}</div>', unsafe_allow_html=True)
     tab_mp1, tab_mp2, tab_mp3, tab_mp4 = st.tabs(["➕ Entrada", "📤 Salida", "💳 Créditos", "📋 Historial"])
 
     def registrar_entrada_mp(nombre_sel, unidad_sel, cant_mp, prov_mp, precio_mp, abono_mp, saldo_mp, precio_unit_mp=0, fecha_mp=None, es_stock_existente=False):
         if not es_stock_existente:
             if not prov_mp.strip():
-                st.markdown('<div class="alert-low">⚠️ Escribe el nombre del proveedor.</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="alert-low">{ICO_WARN} Escribe el nombre del proveedor.</div>', unsafe_allow_html=True)
                 return False
             if precio_mp == 0:
-                st.markdown('<div class="alert-low">⚠️ Ingresa el precio total.</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="alert-low">{ICO_WARN} Ingresa el precio total.</div>', unsafe_allow_html=True)
                 return False
         data_mp = {
             "fecha": str(fecha_mp) if fecha_mp else fecha_hoy(), "hora": ahora(),
@@ -1952,7 +1990,7 @@ elif st.session_state.vista == "materia_prima":
             st.markdown(f'<div class="section-label">Entrada — {nombre_sel}</div>', unsafe_allow_html=True)
             fecha_mp = st.date_input("Fecha de la entrada", value=datetime.now(COL_TZ).date(), max_value=datetime.now(COL_TZ).date(), key="fecha_mp")
             if fecha_mp != datetime.now(COL_TZ).date():
-                st.markdown(f'<div class="warn-box">📅 Se registrará con fecha {fecha_mp}, no con la de hoy.</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="warn-box">{ICO_CALENDAR} Se registrará con fecha {fecha_mp}, no con la de hoy.</div>', unsafe_allow_html=True)
             cant_mp        = st.number_input(f"Cantidad ({unidad_sel})", min_value=0.1, max_value=9999.0, value=1.0, step=0.5, key="cant_mp")
 
             ya_tengo_mp = st.checkbox(
@@ -1973,22 +2011,22 @@ elif st.session_state.vista == "materia_prima":
             precio_mp = round(precio_unit_mp * cant_mp)
             if precio_mp > 0:
                 nota_caja = " (solo de referencia, no se cobra en caja)" if ya_tengo_mp else ""
-                st.markdown(f'<div class="info-box">💰 {cant_mp} × {fmt(precio_unit_mp)} = <b>{fmt(precio_mp)}</b> total{nota_caja}</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="info-box">{ICO_DOLLAR} {cant_mp} × {fmt(precio_unit_mp)} = <b>{fmt(precio_mp)}</b> total{nota_caja}</div>', unsafe_allow_html=True)
 
             if ya_tengo_mp:
                 abono_mp = 0
                 saldo_mp = 0
-                st.markdown('<div class="info-box">✅ Se sumará al stock. No se descuenta de caja ni queda como deuda con proveedor.</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="info-box">{ICO_CHECK} Se sumará al stock. No se descuenta de caja ni queda como deuda con proveedor.</div>', unsafe_allow_html=True)
             elif con_credito:
                 abono_mp = st.number_input("Abono inicial ($)", min_value=0, max_value=max(0, precio_mp), value=0, step=1000, key="abono_mp")
                 saldo_mp = max(0, precio_mp - abono_mp)
                 if precio_mp > 0:
                     if abono_mp >= precio_mp:
-                        st.markdown(f'<div class="info-box">✅ Pago completo</div>', unsafe_allow_html=True)
+                        st.markdown(f'<div class="info-box">{ICO_CHECK} Pago completo</div>', unsafe_allow_html=True)
                     elif abono_mp > 0:
-                        st.markdown(f'<div class="warn-box">📋 Debe: <b>{fmt(saldo_mp)}</b></div>', unsafe_allow_html=True)
+                        st.markdown(f'<div class="warn-box">{ICO_CLIPBOARD} Debe: <b>{fmt(saldo_mp)}</b></div>', unsafe_allow_html=True)
                     else:
-                        st.markdown(f'<div class="warn-box">📋 Fiado: <b>{fmt(precio_mp)}</b></div>', unsafe_allow_html=True)
+                        st.markdown(f'<div class="warn-box">{ICO_CLIPBOARD} Fiado: <b>{fmt(precio_mp)}</b></div>', unsafe_allow_html=True)
             else:
                 abono_mp = precio_mp; saldo_mp = 0
             col1, col2 = st.columns(2)
@@ -2017,7 +2055,7 @@ elif st.session_state.vista == "materia_prima":
                 st.caption(f"Aún no hay entradas de {nombre_sel} este mes.")
 
         if st.session_state.get("ok_mp"):
-            st.markdown('<div class="success-toast">✅ Entrada registrada.</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="success-toast">{ICO_CHECK} Entrada registrada.</div>', unsafe_allow_html=True)
             st.session_state.ok_mp = False
 
     with tab_mp2:
@@ -2046,9 +2084,9 @@ elif st.session_state.vista == "materia_prima":
         stock_disp_sal = max(0, total_ent_sal - total_sal_sal)
 
         if stock_disp_sal == 0:
-            st.markdown(f'<div class="alert-low">🔴 No hay stock disponible de <b>{insumo_sal}</b>. Registra una entrada primero.</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="alert-low">{ICO_DOT_RED} No hay stock disponible de <b>{insumo_sal}</b>. Registra una entrada primero.</div>', unsafe_allow_html=True)
         else:
-            st.markdown(f'<div class="info-box">📦 Stock disponible de <b>{insumo_sal}</b>: <b>{stock_disp_sal:.1f} {unidad_sal}</b></div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="info-box">{ICO_PACKAGE} Stock disponible de <b>{insumo_sal}</b>: <b>{stock_disp_sal:.1f} {unidad_sal}</b></div>', unsafe_allow_html=True)
 
         cant_sal = st.number_input(f"Cantidad ({unidad_sal})", min_value=0.1,
                                     max_value=max(0.1, stock_disp_sal),
@@ -2065,7 +2103,7 @@ elif st.session_state.vista == "materia_prima":
             try:
                 r = requests.post(f"{SUPABASE_URL}/rest/v1/salidas_mp", headers=h, json=data_sal, timeout=10)
                 if r.ok:
-                    st.markdown('<div class="success-toast">✅ Salida registrada.</div>', unsafe_allow_html=True)
+                    st.markdown(f'<div class="success-toast">{ICO_CHECK} Salida registrada.</div>', unsafe_allow_html=True)
                     time.sleep(0.3); st.rerun()
                 else:
                     st.error(f"Error: {r.status_code} — {r.text}")
@@ -2081,7 +2119,7 @@ elif st.session_state.vista == "materia_prima":
             if not lista:
                 st.info("No hay créditos pendientes."); return
             total = sum(float(r["saldo"]) for r in lista)
-            st.markdown(f'<div class="warn-box">💳 Total pendiente: <b>{fmt(total)}</b></div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="warn-box">{ICO_CARD} Total pendiente: <b>{fmt(total)}</b></div>', unsafe_allow_html=True)
             for r in lista:
                 saldo_r = float(r["saldo"])
                 st.markdown(
@@ -2103,10 +2141,10 @@ elif st.session_state.vista == "materia_prima":
         sc1, sc2 = st.tabs(["🌽 Materia Prima", "🧪 Saborizantes"])
         with sc1:
             st.markdown('<div class="section-label">Créditos — Materia Prima</div>', unsafe_allow_html=True)
-            mostrar_creditos_mp(pend_mp, "🌽")
+            mostrar_creditos_mp(pend_mp, ICO_LAYERS)
         with sc2:
             st.markdown('<div class="section-label">Créditos — Saborizantes</div>', unsafe_allow_html=True)
-            mostrar_creditos_mp(pend_sab, "🧂")
+            mostrar_creditos_mp(pend_sab, ICO_FLASK)
 
     with tab_mp4:
         st.markdown('<div class="section-label">Resumen del período</div>', unsafe_allow_html=True)
@@ -2183,16 +2221,16 @@ elif st.session_state.vista == "materia_prima":
 
             sh1, sh2, sh3 = st.tabs(["🌽 Materia Prima", "🧪 Saborizantes", "📦 Empaque"])
             with sh1:
-                tabla_resumen(res_mp,  "Materia Prima", "🌽", ent_mp,  sal_mp)
+                tabla_resumen(res_mp,  "Materia Prima", ICO_LAYERS, ent_mp,  sal_mp)
             with sh2:
-                tabla_resumen(res_sab, "Saborizantes",  "🧂", ent_sab, sal_sab)
+                tabla_resumen(res_sab, "Saborizantes",  ICO_FLASK, ent_sab, sal_sab)
             with sh3:
-                tabla_resumen(res_emp, "Empaque",       "📦", ent_emp, sal_emp)
+                tabla_resumen(res_emp, "Empaque",       ICO_PACKAGE, ent_emp, sal_emp)
         else:
             st.info("No hay registros en ese período.")
 
 elif st.session_state.vista == "caja":
-    st.markdown('<div class="section-label">💰 Caja</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="section-label">{ICO_DOLLAR} Caja</div>', unsafe_allow_html=True)
     tab_caja1, tab_caja2, tab_caja3 = st.tabs(["📊 Resumen", "➕ Registrar egreso", "📋 Historial"])
 
     # Fechas del período
@@ -2258,7 +2296,7 @@ elif st.session_state.vista == "caja":
         </div>
         """, unsafe_allow_html=True)
 
-        st.markdown('<div class="section-label">🧾 Para contabilidad — créditos vigentes</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="section-label">{ICO_RECEIPT} Para contabilidad — créditos vigentes</div>', unsafe_allow_html=True)
         st.markdown(f"""
         <div class="metric-row">
             <div class="metric-box metric-blue"><div class="val">{fmt(cuentas_por_cobrar)}</div><div class="lbl">Cuentas por cobrar (clientes)</div></div>
@@ -2271,8 +2309,8 @@ elif st.session_state.vista == "caja":
             st.markdown('<div class="section-label">Detalle egresos</div>', unsafe_allow_html=True)
             st.markdown(
                 f'<div class="factura-box">'
-                f'<div class="factura-row"><span>🌽 Pagos materia prima</span><span><b>{fmt(egresos_mp)}</b></span></div>'
-                f'<div class="factura-row"><span>📝 Gastos varios</span><span><b>{fmt(egresos_gastos)}</b></span></div>'
+                f'<div class="factura-row"><span>{ICO_LAYERS} Pagos materia prima</span><span><b>{fmt(egresos_mp)}</b></span></div>'
+                f'<div class="factura-row"><span>{ICO_NOTE} Gastos varios</span><span><b>{fmt(egresos_gastos)}</b></span></div>'
                 f'<div class="factura-total"><span>Total egresos</span><span>{fmt(total_egresos)}</span></div>'
                 f'</div>',
                 unsafe_allow_html=True
@@ -2286,9 +2324,9 @@ elif st.session_state.vista == "caja":
 
         if st.button("✅ Registrar egreso", key="btn_eg"):
             if not concepto_eg.strip():
-                st.markdown('<div class="alert-low">⚠️ Escribe el concepto del egreso.</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="alert-low">{ICO_WARN} Escribe el concepto del egreso.</div>', unsafe_allow_html=True)
             elif valor_eg == 0:
-                st.markdown('<div class="alert-low">⚠️ Ingresa el valor.</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="alert-low">{ICO_WARN} Ingresa el valor.</div>', unsafe_allow_html=True)
             else:
                 h = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}",
                      "Content-Type": "application/json", "Prefer": "return=minimal"}
@@ -2297,7 +2335,7 @@ elif st.session_state.vista == "caja":
                 try:
                     r_eg = requests.post(f"{SUPABASE_URL}/rest/v1/caja_egresos", headers=h, json=data_eg, timeout=10)
                     if r_eg.ok:
-                        st.markdown('<div class="success-toast">✅ Egreso registrado.</div>', unsafe_allow_html=True)
+                        st.markdown(f'<div class="success-toast">{ICO_CHECK} Egreso registrado.</div>', unsafe_allow_html=True)
                         time.sleep(0.3)
                         st.rerun()
                     else:
@@ -2514,13 +2552,13 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
             </div>""", unsafe_allow_html=True)
             st.caption("💰 \"Cobrado\" es el dinero que efectivamente entró. Los créditos sin pagar se muestran aparte.")
 
-            st.markdown(f'<div class="info-box">📦 Producción total del mes: <b>{prod_mes} bolsas</b></div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="info-box">{ICO_PACKAGE} Producción total del mes: <b>{prod_mes} bolsas</b></div>', unsafe_allow_html=True)
 
             st.markdown('<div class="section-label">Sabor más vendido</div>', unsafe_allow_html=True)
             top_sabores = df_mes.groupby("sabor")["cantidad"].sum().reset_index().sort_values("cantidad", ascending=False)
             if not top_sabores.empty:
                 top1 = top_sabores.iloc[0]
-                st.markdown(f'<div class="info-box">🏆 <b>{top1["sabor"]}</b> con {int(top1["cantidad"])} bolsas vendidas</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="info-box">{ICO_TROPHY} <b>{top1["sabor"]}</b> con {int(top1["cantidad"])} bolsas vendidas</div>', unsafe_allow_html=True)
 
             st.markdown('<div class="section-label">Evolución de ventas en el mes</div>', unsafe_allow_html=True)
             por_dia_mes = df_mes.groupby("fecha")["total"].sum().reset_index()
@@ -2630,4 +2668,4 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
                 pdf_bytes = generar_pdf("Inventario Actual", df_i, f"inventario_{fecha_hoy()}")
                 st.download_button("⬇️ Descargar inventario PDF", pdf_bytes, f"inventario_{fecha_hoy()}.pdf", "application/pdf", key="dl_pdf_i")
 
-        st.markdown('<div class="warn-box">💡 Guarda estos archivos semanalmente como respaldo.</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="warn-box">{ICO_BULB} Guarda estos archivos semanalmente como respaldo.</div>', unsafe_allow_html=True)
