@@ -2035,6 +2035,12 @@ elif st.session_state.vista == "materia_prima":
             nombre_sel, unidad_sel, cat_sel = st.session_state.insumo_sel
             con_credito = cat_sel != "emp"
             st.markdown(f'<div class="section-label">Entrada — {nombre_sel}</div>', unsafe_allow_html=True)
+
+            raw_ent_actual = sb_get("materia_prima", f"select=cantidad&insumo=eq.{requests.utils.quote(nombre_sel)}") or []
+            raw_sal_actual = sb_get("salidas_mp",    f"select=cantidad&insumo=eq.{requests.utils.quote(nombre_sel)}") or []
+            stock_actual_ins = max(0, sum(float(r["cantidad"]) for r in raw_ent_actual) - sum(float(r["cantidad"]) for r in raw_sal_actual))
+            st.markdown(f'<div class="info-box">{ICO_PACKAGE} Stock disponible de <b>{nombre_sel}</b>: <b>{stock_actual_ins:.1f} {unidad_sel}</b></div>', unsafe_allow_html=True)
+
             fecha_mp = st.date_input("Fecha de la entrada", value=datetime.now(COL_TZ).date(), max_value=datetime.now(COL_TZ).date(), key="fecha_mp")
             if fecha_mp != datetime.now(COL_TZ).date():
                 st.markdown(f'<div class="warn-box">{ICO_CALENDAR} Se registrará con fecha {fecha_mp}, no con la de hoy.</div>', unsafe_allow_html=True)
@@ -2166,26 +2172,6 @@ elif st.session_state.vista == "materia_prima":
             st.session_state.ok_mp = False
 
     with tab_mp2:
-        with st.expander("📋 Inventario actual de insumos", expanded=False):
-            raw_ent_all = sb_get("materia_prima", "select=insumo,cantidad") or []
-            raw_sal_all = sb_get("salidas_mp", "select=insumo,cantidad") or []
-            ent_por_insumo, sal_por_insumo = {}, {}
-            for r in raw_ent_all:
-                ent_por_insumo[r["insumo"]] = ent_por_insumo.get(r["insumo"], 0) + float(r["cantidad"])
-            for r in raw_sal_all:
-                sal_por_insumo[r["insumo"]] = sal_por_insumo.get(r["insumo"], 0) + float(r["cantidad"])
-
-            def _fila_stock(nombre, icono, unidad):
-                stock = round(ent_por_insumo.get(nombre, 0) - sal_por_insumo.get(nombre, 0), 1)
-                return {"Insumo": f"{icono} {nombre}", "Stock": stock, "Unidad": unidad}
-
-            st.markdown("**🌽 Materia Prima**")
-            st.dataframe(pd.DataFrame([_fila_stock(n, ic, u) for n, ic, u, _ in INSUMOS_INFO]), use_container_width=True, hide_index=True)
-            st.markdown("**🧪 Saborizantes**")
-            st.dataframe(pd.DataFrame([_fila_stock(n, ic, u) for n, ic, u, _ in SABORIZANTES_INFO]), use_container_width=True, hide_index=True)
-            st.markdown("**📦 Empaque**")
-            st.dataframe(pd.DataFrame([_fila_stock(n, ic, u) for n, ic, u, _ in EMPAQUES_INFO]), use_container_width=True, hide_index=True)
-
         st.markdown('<div class="section-label">Registrar salida (uso en producción)</div>', unsafe_allow_html=True)
         cat_sal = st.selectbox("Categoría", ["🌽 Materia Prima", "🧪 Saborizantes", "📦 Empaque"], key="cat_sal")
         if "Materia Prima" in cat_sal:
