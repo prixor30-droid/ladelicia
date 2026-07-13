@@ -1184,6 +1184,7 @@ if _css_botones_menu:
 components.html("""
 <script>
 (function () {
+    if (true) return; // TEMP: desactivado para diagnosticar el toggle en tablet
     const SEL_SELECTS = '[data-baseweb="select"] input';
     const SEL_FECHAS   = '[data-testid="stDateInputField"], [data-baseweb="datepicker"] input';
     const SEL_NUMEROS  = '[data-testid="stNumberInputField"]';
