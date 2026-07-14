@@ -1970,6 +1970,7 @@ elif st.session_state.vista == "materia_prima":
         ("Mayonesa",      "🧂", "kg", "sab"),
         ("Queso",         "🧂", "kg", "sab"),
         ("Picante",       "🧂", "kg", "sab"),
+        ("Pimienta",      "🧂", "kg", "sab"),
     ]
     EMPAQUES_INFO = [
         ("BBQ emp",            "📦", "kg", "emp"),
