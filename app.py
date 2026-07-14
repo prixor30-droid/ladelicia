@@ -253,18 +253,27 @@ def mostrar_facturas_seleccionables(df_canal, key_prefix):
     if not filas:
         return
     filas.sort(key=lambda r: (r["Fecha"], r["_fid"]), reverse=True)
+    df_tabla = pd.DataFrame(filas)
 
-    for i, r in enumerate(filas):
-        label = f"{r['Fecha']} · {r['N° Comprobante']} · {r['Vendedor']} · {r['Cliente']} · {r['Total']} · {r['Estado']}"
-        if st.button(label, key=f"fact_sel_{key_prefix}_{i}", use_container_width=True):
-            fid_sel = r["_fid"]
-            # Cargar TODOS los registros de esta factura incluyendo cambios
-            todos = sb_get("ventas", f"select=*&factura_id=eq.{requests.utils.quote(fid_sel)}")
-            st.session_state.recibo_a_mostrar = fid_sel
-            st.session_state.recibo_canal_df = todos if todos else []
-            st.session_state.vista_anterior = st.session_state.vista  # guardar de dónde venimos
-            st.session_state.vista = "recibo"
-            st.rerun()
+    evento = st.dataframe(
+        df_tabla.drop(columns=["_fid"]),
+        use_container_width=True,
+        hide_index=True,
+        on_select="rerun",
+        selection_mode="single-row",
+        key=f"tabla_sel_{key_prefix}"
+    )
+
+    if evento.selection and evento.selection.rows:
+        idx = evento.selection.rows[0]
+        fid_sel = df_tabla.iloc[idx]["_fid"]
+        # Cargar TODOS los registros de esta factura incluyendo cambios
+        todos = sb_get("ventas", f"select=*&factura_id=eq.{requests.utils.quote(fid_sel)}")
+        st.session_state.recibo_a_mostrar = fid_sel
+        st.session_state.recibo_canal_df = todos if todos else []
+        st.session_state.vista_anterior = st.session_state.vista  # guardar de dónde venimos
+        st.session_state.vista = "recibo"
+        st.rerun()
 
 def _colapsar_repetidas(s):
     """Reduce letras repetidas seguidas: 'bettos' -> 'betos'."""
