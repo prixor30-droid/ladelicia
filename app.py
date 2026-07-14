@@ -1960,15 +1960,15 @@ elif st.session_state.vista == "materia_prima":
         ("Tocineta (bulto)",       "🥓", "bulto",   "mp"),
     ]
     SABORIZANTES_INFO = [
-        ("BBQ",           "🧂", "bolsa", "sab"),
-        ("Limón",         "🧂", "bolsa", "sab"),
-        ("Sal",           "🧂", "bolsa", "sab"),
-        ("Pollo",         "🧂", "bolsa", "sab"),
-        ("Parrillada",    "🧂", "bolsa", "sab"),
-        ("Chorizo Limón", "🧂", "bolsa", "sab"),
-        ("Mayonesa",      "🧂", "bolsa", "sab"),
-        ("Queso",         "🧂", "bolsa", "sab"),
-        ("Picante",       "🧂", "bolsa", "sab"),
+        ("BBQ",           "🧂", "kg", "sab"),
+        ("Limón",         "🧂", "kg", "sab"),
+        ("Sal",           "🧂", "kg", "sab"),
+        ("Pollo",         "🧂", "kg", "sab"),
+        ("Parrillada",    "🧂", "kg", "sab"),
+        ("Chorizo Limón", "🧂", "kg", "sab"),
+        ("Mayonesa",      "🧂", "kg", "sab"),
+        ("Queso",         "🧂", "kg", "sab"),
+        ("Picante",       "🧂", "kg", "sab"),
     ]
     EMPAQUES_INFO = [
         ("BBQ emp",            "📦", "kg", "emp"),
