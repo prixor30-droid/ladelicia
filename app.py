@@ -2048,12 +2048,12 @@ elif st.session_state.vista == "materia_prima":
             raw_ent_actual = sb_get("materia_prima", f"select=cantidad&insumo=eq.{requests.utils.quote(nombre_sel)}") or []
             raw_sal_actual = sb_get("salidas_mp",    f"select=cantidad&insumo=eq.{requests.utils.quote(nombre_sel)}") or []
             stock_actual_ins = max(0, sum(float(r["cantidad"]) for r in raw_ent_actual) - sum(float(r["cantidad"]) for r in raw_sal_actual))
-            st.markdown(f'<div class="info-box">{ICO_PACKAGE} Stock disponible de <b>{nombre_sel}</b>: <b>{stock_actual_ins:.1f} {unidad_sel}</b></div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="info-box">{ICO_PACKAGE} Stock disponible de <b>{nombre_sel}</b>: <b>{stock_actual_ins:.3f} {unidad_sel}</b></div>', unsafe_allow_html=True)
 
             fecha_mp = st.date_input("Fecha de la entrada", value=datetime.now(COL_TZ).date(), max_value=datetime.now(COL_TZ).date(), key="fecha_mp")
             if fecha_mp != datetime.now(COL_TZ).date():
                 st.markdown(f'<div class="warn-box">{ICO_CALENDAR} Se registrará con fecha {fecha_mp}, no con la de hoy.</div>', unsafe_allow_html=True)
-            cant_mp        = st.number_input(f"Cantidad ({unidad_sel})", min_value=0.1, max_value=999999.0, value=1.0, step=0.5, key="cant_mp")
+            cant_mp        = st.number_input(f"Cantidad ({unidad_sel})", min_value=0.001, max_value=999999.0, value=1.0, step=0.001, format="%.3f", key="cant_mp")
 
             tipo_entrada_mp = st.radio(
                 "Tipo de entrada",
@@ -2111,7 +2111,7 @@ elif st.session_state.vista == "materia_prima":
                 f"select=id,fecha,hora,cantidad,precio_unitario,precio_total,abono,saldo,estado,proveedor&insumo=eq.{requests.utils.quote(nombre_sel)}&fecha=gte.{primer_dia}&fecha=lte.{hoy_ins}&order=fecha.desc,hora.desc") or []
             if raw_ins_mes:
                 total_cant_mes = sum(float(r["cantidad"]) for r in raw_ins_mes)
-                st.caption(f"Total ingresado este mes: {total_cant_mes:.1f} {unidad_sel} — toca cualquier celda para editar, luego Guardar cambios.")
+                st.caption(f"Total ingresado este mes: {total_cant_mes:.3f} {unidad_sel} — toca cualquier celda para editar, luego Guardar cambios.")
                 df_ins_mes = pd.DataFrame(raw_ins_mes)
                 df_edit_mp = df_ins_mes[["fecha", "hora", "cantidad", "precio_unitario", "proveedor"]].copy()
                 df_edit_mp.columns = ["Fecha", "Hora", f"Cantidad ({unidad_sel})", "Precio unitario", "Proveedor"]
@@ -2123,7 +2123,7 @@ elif st.session_state.vista == "materia_prima":
                     column_config={
                         "Fecha":                      st.column_config.TextColumn("Fecha"),
                         "Hora":                       st.column_config.TextColumn("Hora"),
-                        f"Cantidad ({unidad_sel})":   st.column_config.NumberColumn(f"Cantidad ({unidad_sel})", min_value=0.1, step=0.5),
+                        f"Cantidad ({unidad_sel})":   st.column_config.NumberColumn(f"Cantidad ({unidad_sel})", min_value=0.001, step=0.001, format="%.3f"),
                         "Precio unitario":            st.column_config.NumberColumn("Precio unitario", min_value=0, step=1000),
                         "Proveedor":                  st.column_config.TextColumn("Proveedor"),
                     },
@@ -2208,15 +2208,15 @@ elif st.session_state.vista == "materia_prima":
         if stock_disp_sal == 0:
             st.markdown(f'<div class="alert-low">{ICO_DOT_RED} No hay stock disponible de <b>{insumo_sal}</b>. Registra una entrada primero.</div>', unsafe_allow_html=True)
         else:
-            st.markdown(f'<div class="info-box">{ICO_PACKAGE} Stock disponible de <b>{insumo_sal}</b>: <b>{stock_disp_sal:.1f} {unidad_sal}</b></div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="info-box">{ICO_PACKAGE} Stock disponible de <b>{insumo_sal}</b>: <b>{stock_disp_sal:.3f} {unidad_sal}</b></div>', unsafe_allow_html=True)
 
         fecha_sal = st.date_input("Fecha de la salida", value=datetime.now(COL_TZ).date(), max_value=datetime.now(COL_TZ).date(), key="fecha_sal")
         if str(fecha_sal) != fecha_hoy():
             st.markdown(f'<div class="warn-box">{ICO_CALENDAR} Se registrará con fecha {fecha_sal}, no con la de hoy.</div>', unsafe_allow_html=True)
-        cant_sal = st.number_input(f"Cantidad ({unidad_sal})", min_value=0.1,
-                                    max_value=max(0.1, stock_disp_sal),
-                                    value=min(1.0, max(0.1, stock_disp_sal)),
-                                    step=0.5, key="cant_sal")
+        cant_sal = st.number_input(f"Cantidad ({unidad_sal})", min_value=0.001,
+                                    max_value=max(0.001, stock_disp_sal),
+                                    value=min(1.0, max(0.001, stock_disp_sal)),
+                                    step=0.001, format="%.3f", key="cant_sal")
         motivo_sal = st.text_input("Motivo", value="Producción", key="motivo_sal")
 
         if st.button("📤 Registrar salida", key="btn_sal", disabled=(stock_disp_sal == 0)):
