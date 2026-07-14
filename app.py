@@ -175,6 +175,10 @@ STOCK_MINIMO = 10  # alerta cuando un sabor tenga menos de esta cantidad
 def fmt(n):
     return f"${int(n):,.0f}".replace(",", ".")
 
+def tabla_view(df):
+    """Tabla de solo consulta, estática (sin ordenar/arrastrar columnas al tocar en tablet)."""
+    st.table(df.style.hide(axis="index"))
+
 def tabla_facturas_html(df_canal):
     """Genera tabla HTML estilo factura electrónica: Fecha, N° comprobante, Vendedor, Cliente, Total, Estado."""
     filas = []
@@ -1579,7 +1583,7 @@ elif st.session_state.vista == "produccion":
         df_inv["precio"] = df_inv["precio"].apply(fmt)
         df_inv["estado"] = df_inv["stock"].apply(lambda x: "🔴 Agotado" if x==0 else ("🟡 Poco" if x<10 else "🟢 OK"))
         df_inv.columns = ["Sabor","Bolsas","Precio","Estado"]
-        st.dataframe(df_inv, use_container_width=True, hide_index=True)
+        tabla_view(df_inv)
 
     # Ajuste manual
     st.markdown('<div class="section-label">Ajustar stock manualmente</div>', unsafe_allow_html=True)
@@ -1645,7 +1649,7 @@ elif st.session_state.vista == "carro":
         if pendientes_sub1:
             st.markdown('<div class="section-label">Lo que lleva el carro ahora</div>', unsafe_allow_html=True)
             df_pend = pd.DataFrame(pendientes_sub1, columns=["Sabor", "Bolsas pendientes"])
-            st.dataframe(df_pend, use_container_width=True, hide_index=True)
+            tabla_view(df_pend)
 
         # Tabla editable de cargues — consulta por fecha
         st.markdown('<div class="section-label">Consultar cargues por fecha</div>', unsafe_allow_html=True)
@@ -2368,7 +2372,7 @@ elif st.session_state.vista == "materia_prima":
                         "Costo consumido": fmt(costo_consumido) if costo_consumido > 0 else "—",
                         "Inventario total": fmt(stock_val) if stock_val > 0 else "—",
                     })
-                st.dataframe(pd.DataFrame(filas_res), use_container_width=True, hide_index=True)
+                tabla_view(pd.DataFrame(filas_res))
                 # Nota explicativa
                 st.caption("💡 Precio promedio ponderado: promedio de todos los lotes del período, ponderado por cantidad ingresada.")
             else:
@@ -2609,7 +2613,7 @@ elif st.session_state.vista == "caja":
 
         if movimientos:
             movimientos.sort(key=lambda x: (x["Fecha"], x["Hora"]), reverse=True)
-            st.dataframe(pd.DataFrame(movimientos), use_container_width=True, hide_index=True)
+            tabla_view(pd.DataFrame(movimientos))
         else:
             st.info("No hay movimientos en ese período.")
 
@@ -2657,7 +2661,7 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
 
             por_sabor["total"] = por_sabor["total"].apply(fmt)
             por_sabor.columns = ["Sabor","Bolsas","Total $"]
-            st.dataframe(por_sabor, use_container_width=True, hide_index=True)
+            tabla_view(por_sabor)
 
             st.markdown('<div class="section-label">Facturas fábrica</div>', unsafe_allow_html=True)
             st.caption("Toca una fila para ver el recibo completo.")
@@ -2711,13 +2715,13 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
             por_dia = df_r.groupby("fecha").agg(bolsas=("cantidad","sum"), total=("total","sum")).reset_index()
             por_dia["total"] = por_dia["total"].apply(fmt)
             por_dia.columns  = ["Fecha","Bolsas","Total $"]
-            st.dataframe(por_dia, use_container_width=True, hide_index=True)
+            tabla_view(por_dia)
 
             st.markdown('<div class="section-label">Por canal</div>', unsafe_allow_html=True)
             por_canal = df_r.groupby("canal").agg(bolsas=("cantidad","sum"), total=("total","sum")).reset_index()
             por_canal["total"] = por_canal["total"].apply(fmt)
             por_canal.columns  = ["Canal","Bolsas","Total $"]
-            st.dataframe(por_canal, use_container_width=True, hide_index=True)
+            tabla_view(por_canal)
 
             # Facturas individuales del rango, en formato tabla
             df_fab_r = df_r[df_r["canal"]=="Fábrica"]
@@ -2788,7 +2792,7 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
 
             st.markdown('<div class="section-label">Tendencia por sabor</div>', unsafe_allow_html=True)
             top_sabores.columns = ["Sabor","Bolsas"]
-            st.dataframe(top_sabores, use_container_width=True, hide_index=True)
+            tabla_view(top_sabores)
 
     with sub_r4:
         st.markdown('<div class="section-label">Exportar datos</div>', unsafe_allow_html=True)
