@@ -2273,12 +2273,29 @@ elif st.session_state.vista == "materia_prima":
             key_peso_inicial = f"rollo_peso_inicial_nuevo_{insumo_rollo}"
             key_peso_final    = f"rollo_peso_final_{insumo_rollo}"
 
+            # Stock disponible en bodega (total comprado - total consumido), igual que en
+            # Materia Prima/Saborizantes — evita pesar un rollo "nuevo" que no está
+            # respaldado por ninguna Entrada registrada.
+            raw_ent_emp = sb_get("materia_prima", f"select=cantidad&insumo=eq.{requests.utils.quote(insumo_rollo)}") or []
+            raw_sal_emp = sb_get("salidas_mp",    f"select=cantidad&insumo=eq.{requests.utils.quote(insumo_rollo)}") or []
+            stock_disp_emp = max(0.0, sum(float(r["cantidad"]) for r in raw_ent_emp) - sum(float(r["cantidad"]) for r in raw_sal_emp))
+
+            if stock_disp_emp == 0:
+                st.markdown(f'<div class="alert-low">{ICO_DOT_RED} No hay stock disponible de <b>{insumo_rollo}</b> en bodega. Registra una entrada primero.</div>', unsafe_allow_html=True)
+            else:
+                st.markdown(f'<div class="info-box">{ICO_PACKAGE} Stock disponible de <b>{insumo_rollo}</b> en bodega: <b>{stock_disp_emp:.3f} kg</b></div>', unsafe_allow_html=True)
+
             if hay_rollo_activo:
                 peso_inicial_rollo = float(rollo_previo["peso_actual"])
                 st.markdown(f'<div class="info-box">{ICO_PACKAGE} Rollo activo de <b>{insumo_rollo}</b> — peso inicial (último registrado): <b>{peso_inicial_rollo:.3f} kg</b></div>', unsafe_allow_html=True)
             else:
                 st.markdown(f'<div class="warn-box">{ICO_WARN} No hay rollo activo de <b>{insumo_rollo}</b>. Pesa el rollo nuevo que sacaste de bodega y anota su peso inicial.</div>', unsafe_allow_html=True)
-                peso_inicial_rollo = st.number_input("Peso inicial del rollo nuevo (kg)", min_value=0.001, value=1.0, step=0.001, format="%.3f", key=key_peso_inicial)
+                peso_inicial_rollo = st.number_input(
+                    "Peso inicial del rollo nuevo (kg)",
+                    min_value=0.001, max_value=max(0.001, stock_disp_emp),
+                    value=min(1.0, max(0.001, stock_disp_emp)),
+                    step=0.001, format="%.3f", key=key_peso_inicial
+                )
 
             peso_final_rollo = st.number_input(
                 "Peso final (después de producir, kg)",
@@ -2291,7 +2308,8 @@ elif st.session_state.vista == "materia_prima":
             if peso_final_rollo < UMBRAL_ROLLO_AGOTADO:
                 st.markdown(f'<div class="warn-box">{ICO_WARN} Con este peso final, el rollo queda por debajo de {UMBRAL_ROLLO_AGOTADO:.0f}kg — la próxima vez la app va a pedir pesar un rollo nuevo.</div>', unsafe_allow_html=True)
 
-            if st.button("📤 Registrar salida", key="btn_rollo_registrar", disabled=(consumo_rollo <= 0)):
+            sin_stock_para_rollo_nuevo = not hay_rollo_activo and stock_disp_emp <= 0
+            if st.button("📤 Registrar salida", key="btn_rollo_registrar", disabled=(consumo_rollo <= 0 or sin_stock_para_rollo_nuevo)):
                 ok_salida = sb_post("salidas_mp", {
                     "fecha": fecha_hoy(), "hora": ahora(), "insumo": insumo_rollo,
                     "categoria": "emp", "cantidad": consumo_rollo, "unidad": "kg",
