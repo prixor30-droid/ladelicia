@@ -2270,17 +2270,20 @@ elif st.session_state.vista == "materia_prima":
             rollo_previo = raw_rollo[0] if raw_rollo else None
             hay_rollo_activo = rollo_previo is not None and float(rollo_previo["peso_actual"]) >= UMBRAL_ROLLO_AGOTADO
 
+            key_peso_inicial = f"rollo_peso_inicial_nuevo_{insumo_rollo}"
+            key_peso_final    = f"rollo_peso_final_{insumo_rollo}"
+
             if hay_rollo_activo:
                 peso_inicial_rollo = float(rollo_previo["peso_actual"])
                 st.markdown(f'<div class="info-box">{ICO_PACKAGE} Rollo activo de <b>{insumo_rollo}</b> — peso inicial (último registrado): <b>{peso_inicial_rollo:.3f} kg</b></div>', unsafe_allow_html=True)
             else:
                 st.markdown(f'<div class="warn-box">{ICO_WARN} No hay rollo activo de <b>{insumo_rollo}</b>. Pesa el rollo nuevo que sacaste de bodega y anota su peso inicial.</div>', unsafe_allow_html=True)
-                peso_inicial_rollo = st.number_input("Peso inicial del rollo nuevo (kg)", min_value=0.001, value=1.0, step=0.001, format="%.3f", key="rollo_peso_inicial_nuevo")
+                peso_inicial_rollo = st.number_input("Peso inicial del rollo nuevo (kg)", min_value=0.001, value=1.0, step=0.001, format="%.3f", key=key_peso_inicial)
 
             peso_final_rollo = st.number_input(
                 "Peso final (después de producir, kg)",
                 min_value=0.0, max_value=peso_inicial_rollo, value=peso_inicial_rollo,
-                step=0.001, format="%.3f", key="rollo_peso_final"
+                step=0.001, format="%.3f", key=key_peso_final
             )
             consumo_rollo = max(0.0, peso_inicial_rollo - peso_final_rollo)
             st.markdown(f'<div class="calc-box">⚖️ Consumo de esta producción: <b>{consumo_rollo:.3f} kg</b></div>', unsafe_allow_html=True)
@@ -2301,6 +2304,12 @@ elif st.session_state.vista == "materia_prima":
                     else:
                         ok_rollo = sb_post("rollos_empaque", {"insumo": insumo_rollo, "peso_actual": peso_final_rollo, "fecha": fecha_hoy(), "hora": ahora()})
                     if ok_rollo:
+                        # Sin esto, Streamlit reusa el último valor tecleado en estas keys la
+                        # próxima vez (aunque cambie el "value=" por defecto) — por eso al
+                        # agotarse un rollo, el campo de peso inicial nuevo mostraba el peso
+                        # del rollo anterior en vez de pedir uno limpio.
+                        for k in (key_peso_inicial, key_peso_final):
+                            st.session_state.pop(k, None)
                         st.markdown(f'<div class="success-toast">{ICO_CHECK} Pesaje registrado — {consumo_rollo:.3f}kg de {insumo_rollo} descontados del stock de empaque.</div>', unsafe_allow_html=True)
                         time.sleep(0.3); st.rerun()
 
