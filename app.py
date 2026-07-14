@@ -766,7 +766,7 @@ def render_recibo(registros):
 
     partes = [
         '<div class="recibo-wrap"><div class="recibo-ticket">',
-        f'<div class="recibo-logo">{logo_html}</div>',
+        f'<div class="recibo-logo">{logo_recibo_html}</div>',
         '<div class="recibo-titulo">Productos La Delicia</div>',
         '<div class="recibo-sub">Factura electrónica de venta</div>',
         f'<div class="recibo-sub">No. FV-{fid}</div>',
@@ -975,6 +975,16 @@ logo_b64 = get_logo_b64()
 logo_html = (
     f'<img src="data:image/png;base64,{logo_b64}" style="height:120px;object-fit:contain;margin-bottom:6px;">'
     if logo_b64 else "🍟"
+)
+
+def get_logo_recibo_b64():
+    p = Path("Ladelicia.png")
+    return base64.b64encode(p.read_bytes()).decode() if p.exists() else None
+
+logo_recibo_b64 = get_logo_recibo_b64()
+logo_recibo_html = (
+    f'<img src="data:image/png;base64,{logo_recibo_b64}" style="height:120px;object-fit:contain;margin-bottom:6px;">'
+    if logo_recibo_b64 else logo_html
 )
 
 # ══════════════════════════════════════════════════════════════════════════════
