@@ -1968,7 +1968,9 @@ elif st.session_state.vista == "materia_prima":
         ("Parrillada",    "🧂", "kg", "sab"),
         ("Chorizo Limón", "🧂", "kg", "sab"),
         ("Mayonesa",      "🧂", "kg", "sab"),
-        ("Queso",         "🧂", "kg", "sab"),
+        ("Queso Cheddar",   "🧂", "kg", "sab"),
+        ("Queso Agridulce", "🧂", "kg", "sab"),
+        ("Queso Picante",   "🧂", "kg", "sab"),
         ("Picante",       "🧂", "kg", "sab"),
         ("Pimienta",      "🧂", "kg", "sab"),
     ]
