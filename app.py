@@ -1023,8 +1023,9 @@ label,.stSelectbox label,.stNumberInput label,.stDateInput label,.stTextInput la
 .warn-box{background:#FFFFFF;border-left:3px solid #E68900;border-radius:10px;padding:12px 14px;margin:8px 0 14px;font-size:0.82rem;color:#8D6E00;box-shadow:0 1px 6px rgba(0,0,0,0.05);}
 .success-toast{background:#E8F5E9;border:1px solid #A5D6A7;border-radius:12px;padding:14px 16px;text-align:center;font-weight:600;color:#1B5E20;font-size:0.95rem;margin-top:10px;}
 .section-label{font-size:0.69rem;font-weight:700;text-transform:uppercase;letter-spacing:0.7px;color:#B0185F;margin:16px 0 6px;}
-.stButton>button{width:100%;background:#1565C0 !important;color:white !important;-webkit-text-fill-color:white !important;border:none !important;border-radius:12px !important;padding:14px !important;font-size:1rem !important;font-weight:700 !important;cursor:pointer;margin-top:4px;box-shadow:0 4px 16px rgba(21,101,192,0.25);white-space:pre-line !important;line-height:1.4 !important;}
-.stButton>button:hover{opacity:0.88;}
+.stButton>button{width:100%;background:#1565C0 !important;color:white !important;-webkit-text-fill-color:white !important;border:none !important;border-radius:12px !important;padding:14px !important;font-size:1rem !important;font-weight:700 !important;cursor:pointer;margin-top:4px;box-shadow:0 4px 16px rgba(21,101,192,0.25);white-space:pre-line !important;line-height:1.4 !important;transition:transform 0.12s ease,box-shadow 0.12s ease,opacity 0.12s ease !important;}
+.stButton>button:hover{opacity:0.88;box-shadow:0 6px 20px rgba(21,101,192,0.35);transform:translateY(-1px);}
+.stButton>button:active{transform:scale(0.97) translateY(0);box-shadow:0 2px 8px rgba(21,101,192,0.25);opacity:1;}
 .st-key-btn_resumen button{
   background:linear-gradient(135deg,#FFFFFF,#EEF4FF) !important;
   color:#0D1B2A !important;
@@ -1039,10 +1040,16 @@ label,.stSelectbox label,.stNumberInput label,.stDateInput label,.stTextInput la
   white-space:pre-line !important;
   line-height:1.5 !important;
   text-align:left !important;
+  transition:transform 0.12s ease,box-shadow 0.12s ease !important;
 }
 .st-key-btn_resumen button:hover{
   box-shadow:0 5px 16px rgba(21,101,192,0.25) !important;
   opacity:1 !important;
+  transform:translateY(-2px) !important;
+}
+.st-key-btn_resumen button:active{
+  transform:scale(0.98) !important;
+  box-shadow:0 2px 8px rgba(21,101,192,0.15) !important;
 }
 
 [data-testid="stMetricLabel"] p{color:#1565C0 !important;}
