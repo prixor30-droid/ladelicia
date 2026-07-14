@@ -2054,7 +2054,9 @@ elif st.session_state.vista == "materia_prima":
     EMPAQUES_NAMES     = {n for n,_,_,_ in EMPAQUES_INFO}
 
     st.markdown(f'<div class="section-label">Materia Prima e Insumos {ICO_LAYERS}</div>', unsafe_allow_html=True)
-    tab_mp1, tab_mp2, tab_mp3, tab_mp4 = st.tabs(["➕ Entrada", "📤 Salida", "💳 Créditos", "📋 Historial"])
+    tab_mp1, tab_mp2, tab_mp3, tab_mp4, tab_mp5 = st.tabs(["➕ Entrada", "📤 Salida", "💳 Créditos", "📋 Historial", "⚖️ Rollos"])
+
+    UMBRAL_ROLLO_AGOTADO = 1.0  # kg — por debajo de esto se considera que el rollo se acabó
 
     def registrar_entrada_mp(nombre_sel, unidad_sel, cant_mp, prov_mp, precio_mp, abono_mp, saldo_mp, precio_unit_mp=0, fecha_mp=None, es_stock_existente=False):
         if not es_stock_existente:
@@ -2452,6 +2454,66 @@ elif st.session_state.vista == "materia_prima":
                 tabla_resumen(res_emp, "Empaque",       ICO_PACKAGE, ent_emp, sal_emp)
         else:
             st.info("No hay registros en ese período.")
+
+    with tab_mp5:
+        st.markdown('<div class="section-label">Control de rollos de empaque</div>', unsafe_allow_html=True)
+        st.caption("Pesa el rollo antes y después de producir. La próxima vez que uses ese mismo rollo, el peso inicial ya viene precargado con el último peso registrado — no hace falta pesarlo de nuevo hasta que se acabe.")
+
+        insumo_rollo = st.selectbox("Empaque", [n for n, _, _, _ in EMPAQUES_INFO], key="rollo_insumo")
+
+        raw_rollo = sb_get("rollos_empaque", f"select=*&insumo=eq.{requests.utils.quote(insumo_rollo)}&limit=1") or []
+        rollo_previo = raw_rollo[0] if raw_rollo else None
+        hay_rollo_activo = rollo_previo is not None and float(rollo_previo["peso_actual"]) >= UMBRAL_ROLLO_AGOTADO
+
+        if hay_rollo_activo:
+            peso_inicial_rollo = float(rollo_previo["peso_actual"])
+            st.markdown(f'<div class="info-box">{ICO_PACKAGE} Rollo activo de <b>{insumo_rollo}</b> — peso inicial (último registrado): <b>{peso_inicial_rollo:.3f} kg</b></div>', unsafe_allow_html=True)
+        else:
+            st.markdown(f'<div class="warn-box">{ICO_WARN} No hay rollo activo de <b>{insumo_rollo}</b>. Pesa el rollo nuevo que sacaste de bodega y anota su peso inicial.</div>', unsafe_allow_html=True)
+            peso_inicial_rollo = st.number_input("Peso inicial del rollo nuevo (kg)", min_value=0.001, value=1.0, step=0.001, format="%.3f", key="rollo_peso_inicial_nuevo")
+
+        peso_final_rollo = st.number_input(
+            "Peso final (después de producir, kg)",
+            min_value=0.0, max_value=peso_inicial_rollo, value=peso_inicial_rollo,
+            step=0.001, format="%.3f", key="rollo_peso_final"
+        )
+        consumo_rollo = max(0.0, peso_inicial_rollo - peso_final_rollo)
+        st.markdown(f'<div class="calc-box">⚖️ Consumo de esta producción: <b>{consumo_rollo:.3f} kg</b></div>', unsafe_allow_html=True)
+
+        if peso_final_rollo < UMBRAL_ROLLO_AGOTADO:
+            st.markdown(f'<div class="warn-box">{ICO_WARN} Con este peso final, el rollo queda por debajo de {UMBRAL_ROLLO_AGOTADO:.0f}kg — la próxima vez la app va a pedir pesar un rollo nuevo.</div>', unsafe_allow_html=True)
+
+        if st.button("✅ Registrar pesaje", key="btn_rollo_registrar", disabled=(consumo_rollo <= 0)):
+            ok_salida = sb_post("salidas_mp", {
+                "fecha": fecha_hoy(), "hora": ahora(), "insumo": insumo_rollo,
+                "categoria": "emp", "cantidad": consumo_rollo, "unidad": "kg",
+                "motivo": "Producción (control de rollo)",
+                "peso_antes": peso_inicial_rollo, "peso_despues": peso_final_rollo
+            })
+            if ok_salida:
+                datos_rollo = {"insumo": insumo_rollo, "peso_actual": peso_final_rollo, "fecha": fecha_hoy(), "hora": ahora()}
+                if rollo_previo:
+                    ok_rollo = sb_patch("rollos_empaque", f"id=eq.{rollo_previo['id']}", {"peso_actual": peso_final_rollo, "fecha": fecha_hoy(), "hora": ahora()})
+                else:
+                    ok_rollo = sb_post("rollos_empaque", datos_rollo)
+                if ok_rollo:
+                    st.markdown(f'<div class="success-toast">{ICO_CHECK} Pesaje registrado — {consumo_rollo:.3f}kg de {insumo_rollo} descontados del stock de empaque.</div>', unsafe_allow_html=True)
+                    time.sleep(0.3); st.rerun()
+
+        raw_hist_rollo = sb_get(
+            "salidas_mp",
+            f"select=fecha,hora,peso_antes,peso_despues,cantidad&insumo=eq.{requests.utils.quote(insumo_rollo)}"
+            "&peso_antes=not.is.null&order=fecha.desc,hora.desc&limit=5"
+        ) or []
+        if raw_hist_rollo:
+            st.markdown('<div class="section-label">Últimos pesajes</div>', unsafe_allow_html=True)
+            df_hist_rollo = pd.DataFrame([{
+                "Fecha": r["fecha"], "Hora": r["hora"],
+                "Peso antes": f'{float(r["peso_antes"]):.3f}',
+                "Peso después": f'{float(r["peso_despues"]):.3f}',
+                "Consumo": f'{float(r["cantidad"]):.3f}',
+            } for r in raw_hist_rollo])
+            tabla_view(df_hist_rollo)
 
 elif st.session_state.vista == "caja":
     st.markdown(f'<div class="section-label">{ICO_DOLLAR} Caja</div>', unsafe_allow_html=True)
