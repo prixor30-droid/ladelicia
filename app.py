@@ -1986,6 +1986,7 @@ elif st.session_state.vista == "materia_prima":
         ("Pimienta",      "🧂", "kg", "sab"),
     ]
     EMPAQUES_INFO = [
+        ("Transparente",       "📦", "kg", "emp"),
         ("BBQ emp",            "📦", "kg", "emp"),
         ("Limón emp",          "📦", "kg", "emp"),
         ("Natural",            "📦", "kg", "emp"),
