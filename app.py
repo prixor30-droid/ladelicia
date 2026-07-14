@@ -1018,6 +1018,8 @@ label,.stSelectbox label,.stNumberInput label,.stDateInput label,.stTextInput la
 .metric-box .val{font-size:1.2rem;font-weight:700;line-height:1.1;}
 .metric-box .lbl{font-size:0.65rem;color:#1565C0;margin-top:3px;}
 .metric-blue .val{color:#1565C0;}.metric-green .val{color:#1B9E5A;}.metric-red .val{color:#D32F2F;}.metric-yellow .val{color:#E68900;}
+@keyframes fadeInUp{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:translateY(0);}}
+.alert-low,.info-box,.warn-box,.success-toast,.factura-box,.recibo-ticket,.metric-box{animation:fadeInUp 0.25s ease both;}
 .alert-low{background:#FFEBEE;border-left:3px solid #D32F2F;border-radius:0 10px 10px 0;padding:10px 14px;margin-bottom:9px;font-size:0.83rem;color:#B71C1C;}
 .info-box{background:#FFFFFF;border-left:3px solid #1B9E5A;border-radius:10px;padding:12px 14px;margin:8px 0 14px;font-size:0.82rem;color:#1B5E20;box-shadow:0 1px 6px rgba(0,0,0,0.05);}
 .warn-box{background:#FFFFFF;border-left:3px solid #E68900;border-radius:10px;padding:12px 14px;margin:8px 0 14px;font-size:0.82rem;color:#8D6E00;box-shadow:0 1px 6px rgba(0,0,0,0.05);}
