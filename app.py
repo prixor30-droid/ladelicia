@@ -1890,30 +1890,44 @@ elif st.session_state.vista == "recibo":
         st.markdown(render_recibo(registros_recibo), unsafe_allow_html=True)
 
         # Botón imprimir
+        # window.print() debe llamarse sobre la ventana padre: components.html()
+        # renderiza este botón dentro de un iframe aislado, así que imprimir "aquí"
+        # imprime el iframe vacío (solo el botón) en vez de la página con el recibo.
+        # Por el mismo motivo, el <style> @media print se inyecta en el <head> del
+        # documento padre, no en el del iframe.
         _html_btn_imprimir = """
         <div style="text-align:center;margin-top:12px;">
-            <button onclick="window.print()" style="
+            <button onclick="window.parent.print()" style="
                 background:#1565C0;color:white;border:none;
                 border-radius:12px;padding:14px 32px;
                 font-size:1rem;font-weight:700;cursor:pointer;
                 box-shadow:0 4px 12px rgba(21,101,192,0.3);
             ">ICONO_PRINTER Imprimir recibo</button>
         </div>
-        <style>
-        @media print {
-            body > * { display: none !important; }
-            .recibo-wrap { display: flex !important; }
-            .recibo-ticket {
-                width: 58mm !important;
-                margin: 0 auto !important;
-                box-shadow: none !important;
-                font-size: 11px !important;
-            }
-            .stButton, .stApp header, footer, [data-testid="stToolbar"] {
-                display: none !important;
-            }
-        }
-        </style>
+        <script>
+        (function() {
+            var doc = window.parent.document;
+            if (doc.getElementById("fabrica-print-style")) return;
+            var style = doc.createElement("style");
+            style.id = "fabrica-print-style";
+            style.innerHTML = `
+                @media print {
+                    body > * { display: none !important; }
+                    .recibo-wrap { display: flex !important; }
+                    .recibo-ticket {
+                        width: 58mm !important;
+                        margin: 0 auto !important;
+                        box-shadow: none !important;
+                        font-size: 11px !important;
+                    }
+                    .stButton, .stApp header, footer, [data-testid="stToolbar"] {
+                        display: none !important;
+                    }
+                }
+            `;
+            doc.head.appendChild(style);
+        })();
+        </script>
         """.replace("ICONO_PRINTER", ICO_PRINTER)
         components.html(_html_btn_imprimir, height=80)
 
