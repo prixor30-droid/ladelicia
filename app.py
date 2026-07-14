@@ -452,7 +452,7 @@ def render_venta_canal(cfg, mostrar_creditos=True):
     cliente = st.text_input("Nombre del cliente", placeholder="Ej: Tienda Don Carlos", key="venta_cliente")
 
     st.markdown('<div class="section-label">Agregar al carrito</div>', unsafe_allow_html=True)
-    sabor = st.selectbox("Sabor", cfg["sabores_venta_fn"](), key="venta_sabor")
+    sabor = st.radio("Sabor", cfg["sabores_venta_fn"](), key="venta_sabor")
 
     disp_map = cfg["disponible_map_fn"]()
     en_carrito = st.session_state[key_carrito].get(sabor, 0)
@@ -1111,6 +1111,8 @@ div[data-testid="stRadio"] > div{display:flex;flex-wrap:wrap;gap:8px;}
 div[data-testid="stRadio"] label[data-baseweb="radio"]{background:#1565C0 !important;border:2px solid #1565C0 !important;border-radius:8px !important;padding:8px 16px !important;cursor:pointer;}
 div[data-testid="stRadio"] label[data-baseweb="radio"] p, div[data-testid="stRadio"] label[data-baseweb="radio"] span{color:white !important;font-weight:600 !important;}
 div[data-testid="stRadio"] input[type="radio"]{accent-color:#1565C0;}
+.st-key-venta_sabor div[data-testid="stRadio"] > div{flex-direction:column;flex-wrap:nowrap;max-height:260px;overflow-y:auto;gap:6px;border:1px solid #BBDEFB;border-radius:10px;padding:8px;background:#F0F7FF;}
+.st-key-venta_sabor div[data-testid="stRadio"] label[data-baseweb="radio"]{width:100%;box-sizing:border-box;}
 .calc-box{background:#FFFFFF;border-radius:14px;padding:14px;margin-bottom:14px;box-shadow:0 2px 10px rgba(21,101,192,0.10);}
 .main-btn{background:#F0F7FF;border:1px solid #BBDEFB;border-radius:14px;padding:20px 16px;margin-bottom:10px;cursor:pointer;display:flex;align-items:center;gap:14px;}
 .main-btn-icon{font-size:2rem;}
