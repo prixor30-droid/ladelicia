@@ -175,9 +175,16 @@ STOCK_MINIMO = 10  # alerta cuando un sabor tenga menos de esta cantidad
 def fmt(n):
     return f"${int(n):,.0f}".replace(",", ".")
 
+def _fmt_celda(v):
+    if isinstance(v, float):
+        if v == int(v):
+            return str(int(v))
+        return f"{v:.3f}".rstrip("0").rstrip(".")
+    return v
+
 def tabla_view(df):
     """Tabla de solo consulta, estática (sin ordenar/arrastrar columnas al tocar en tablet)."""
-    st.table(df.style.hide(axis="index"))
+    st.table(df.style.hide(axis="index").format(_fmt_celda))
 
 def tabla_facturas_html(df_canal):
     """Genera tabla HTML estilo factura electrónica: Fecha, N° comprobante, Vendedor, Cliente, Total, Estado."""
@@ -246,27 +253,18 @@ def mostrar_facturas_seleccionables(df_canal, key_prefix):
     if not filas:
         return
     filas.sort(key=lambda r: (r["Fecha"], r["_fid"]), reverse=True)
-    df_tabla = pd.DataFrame(filas)
 
-    evento = st.dataframe(
-        df_tabla.drop(columns=["_fid"]),
-        use_container_width=True,
-        hide_index=True,
-        on_select="rerun",
-        selection_mode="single-row",
-        key=f"tabla_sel_{key_prefix}"
-    )
-
-    if evento.selection and evento.selection.rows:
-        idx = evento.selection.rows[0]
-        fid_sel = df_tabla.iloc[idx]["_fid"]
-        # Cargar TODOS los registros de esta factura incluyendo cambios
-        todos = sb_get("ventas", f"select=*&factura_id=eq.{requests.utils.quote(fid_sel)}")
-        st.session_state.recibo_a_mostrar = fid_sel
-        st.session_state.recibo_canal_df = todos if todos else []
-        st.session_state.vista_anterior = st.session_state.vista  # guardar de dónde venimos
-        st.session_state.vista = "recibo"
-        st.rerun()
+    for i, r in enumerate(filas):
+        label = f"{r['Fecha']} · {r['N° Comprobante']} · {r['Vendedor']} · {r['Cliente']} · {r['Total']} · {r['Estado']}"
+        if st.button(label, key=f"fact_sel_{key_prefix}_{i}", use_container_width=True):
+            fid_sel = r["_fid"]
+            # Cargar TODOS los registros de esta factura incluyendo cambios
+            todos = sb_get("ventas", f"select=*&factura_id=eq.{requests.utils.quote(fid_sel)}")
+            st.session_state.recibo_a_mostrar = fid_sel
+            st.session_state.recibo_canal_df = todos if todos else []
+            st.session_state.vista_anterior = st.session_state.vista  # guardar de dónde venimos
+            st.session_state.vista = "recibo"
+            st.rerun()
 
 def _colapsar_repetidas(s):
     """Reduce letras repetidas seguidas: 'bettos' -> 'betos'."""
