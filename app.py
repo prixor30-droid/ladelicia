@@ -1987,22 +1987,22 @@ elif st.session_state.vista == "materia_prima":
     ]
     EMPAQUES_INFO = [
         ("Transparente",       "📦", "kg", "emp"),
-        ("BBQ ",            "📦", "kg", "emp"),
-        ("Limón ",          "📦", "kg", "emp"),
+        ("BBQ emp",            "📦", "kg", "emp"),
+        ("Limón emp",          "📦", "kg", "emp"),
         ("Natural",            "📦", "kg", "emp"),
-        ("Pollo ",          "📦", "kg", "emp"),
-        ("Chorizo Limón ",  "📦", "kg", "emp"),
-        ("Mayoneza ",       "📦", "kg", "emp"),
-        ("Parrillada ",     "📦", "kg", "emp"),
-        ("Queso ",          "📦", "kg", "emp"),
-        ("Almuerzo Limón ", "📦", "kg", "emp"),
-        ("Almuerzo Pollo ", "📦", "kg", "emp"),
-        ("Almuerzo Picante ","📦", "kg", "emp"),
-        ("Picante ",        "📦", "kg", "emp"),
-        ("Mega ",           "📦", "kg", "emp"),
+        ("Pollo emp",          "📦", "kg", "emp"),
+        ("Chorizo Limón emp",  "📦", "kg", "emp"),
+        ("Mayoneza emp",       "📦", "kg", "emp"),
+        ("Parrillada emp",     "📦", "kg", "emp"),
+        ("Queso emp",          "📦", "kg", "emp"),
+        ("Almuerzo Limón emp", "📦", "kg", "emp"),
+        ("Almuerzo Pollo emp", "📦", "kg", "emp"),
+        ("Almuerzo Picante emp","📦", "kg", "emp"),
+        ("Picante emp",        "📦", "kg", "emp"),
+        ("Mega emp",           "📦", "kg", "emp"),
         ("Mega Familiar",      "📦", "kg", "emp"),
-        ("Fósforo 70g ",    "📦", "kg", "emp"),
-        ("Fósforo 140g ",   "📦", "kg", "emp"),
+        ("Fósforo 70g emp",    "📦", "kg", "emp"),
+        ("Fósforo 140g emp",   "📦", "kg", "emp"),
         ("Funda Endocenar",    "📦", "kg", "emp"),
     ]
     SABORIZANTES_NAMES = {n for n,_,_,_ in SABORIZANTES_INFO}
@@ -2371,8 +2371,9 @@ elif st.session_state.vista == "materia_prima":
                     es_kg = v["unidad"] == "kg"
                     stock_actual = round(max(0.0, stock_actual_todo.get(k, 0)), 3 if es_kg else 1)
                     stock_val = round(stock_actual * pu_prom) if pu_prom > 0 else 0
+                    nombre_disp = k[:-4] if titulo == "Empaque" and k.endswith(" emp") else k
                     filas_res.append({
-                        "Insumo": k,
+                        "Insumo": nombre_disp,
                         "Entradas": f'{v["entradas"]:.3f}' if es_kg else v["entradas"],
                         "Salidas": f'{v["salidas"]:.3f}' if es_kg else v["salidas"],
                         "Stock": f'{stock_actual:.3f}' if es_kg else stock_actual,
