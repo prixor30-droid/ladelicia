@@ -1912,16 +1912,19 @@ elif st.session_state.vista == "recibo":
             style.id = "fabrica-print-style";
             style.innerHTML = `
                 @media print {
-                    body > * { display: none !important; }
-                    .recibo-wrap { display: flex !important; }
+                    body * { visibility: hidden !important; }
+                    .recibo-wrap, .recibo-wrap * { visibility: visible !important; }
+                    .recibo-wrap {
+                        position: absolute !important;
+                        left: 0 !important; top: 0 !important;
+                        width: 100% !important;
+                        padding: 0 !important;
+                    }
                     .recibo-ticket {
                         width: 58mm !important;
                         margin: 0 auto !important;
                         box-shadow: none !important;
                         font-size: 11px !important;
-                    }
-                    .stButton, .stApp header, footer, [data-testid="stToolbar"] {
-                        display: none !important;
                     }
                 }
             `;
