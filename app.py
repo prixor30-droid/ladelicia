@@ -1960,7 +1960,8 @@ elif st.session_state.vista == "materia_prima":
         ("Tocineta (bulto)",       "🥓", "bulto",   "mp"),
     ]
     SABORIZANTES_INFO = [
-        ("BBQ",           "🧂", "kg", "sab"),
+        ("BBQ Normal",    "🧂", "kg", "sab"),
+        ("BBQ Dulce",     "🧂", "kg", "sab"),
         ("Limón",         "🧂", "kg", "sab"),
         ("Sal",           "🧂", "kg", "sab"),
         ("Pollo",         "🧂", "kg", "sab"),
