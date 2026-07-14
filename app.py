@@ -2170,7 +2170,9 @@ elif st.session_state.vista == "materia_prima":
                     time.sleep(1)
                     st.rerun()
 
-                ids_mp = {f"{r['fecha']} {r['hora']} — {r['cantidad']} {unidad_sel} — {r['proveedor']}": r for r in raw_ins_mes}
+                def _fmt_cant_mp(c):
+                    return f"{float(c):.3f}" if unidad_sel == "kg" else c
+                ids_mp = {f"{r['fecha']} {r['hora']} — {_fmt_cant_mp(r['cantidad'])} {unidad_sel} — {r['proveedor']}": r for r in raw_ins_mes}
                 sel_del_mp = st.selectbox("Eliminar registro", ["— Selecciona —"] + list(ids_mp.keys()), key="sel_del_mp")
                 if sel_del_mp != "— Selecciona —" and col_dmp.button("🗑️ Eliminar", key="btn_del_mp"):
                     reg_del_mp = ids_mp[sel_del_mp]
@@ -2274,10 +2276,11 @@ elif st.session_state.vista == "materia_prima":
             st.markdown(f'<div class="warn-box">{ICO_CARD} Total pendiente de {insumo_sel_cred}: <b>{fmt(total_ins)}</b></div>', unsafe_allow_html=True)
             for r in lista_ins:
                 saldo_r = float(r["saldo"])
+                cant_disp_r = f'{float(r["cantidad"]):.3f}' if r["unidad"] == "kg" else r["cantidad"]
                 st.markdown(
                     f'<div class="factura-box"><div class="factura-header">{icono} {r["insumo"]} · {r["proveedor"]}</div>'
                     f'<div class="factura-row"><span>Fecha</span><span>{r["fecha"]}</span></div>'
-                    f'<div class="factura-row"><span>Cantidad</span><span>{r["cantidad"]} {r["unidad"]}</span></div>'
+                    f'<div class="factura-row"><span>Cantidad</span><span>{cant_disp_r} {r["unidad"]}</span></div>'
                     f'<div class="factura-row"><span>Total</span><span>{fmt(r["precio_total"])}</span></div>'
                     f'<div class="factura-row"><span>Abonado</span><span>{fmt(r["abono"])}</span></div>'
                     f'<div class="factura-total"><span>Saldo</span><span>{fmt(saldo_r)}</span></div></div>',
@@ -2353,13 +2356,14 @@ elif st.session_state.vista == "materia_prima":
                     d = prom_pond.get(k, {"total_costo": 0, "total_cant": 0})
                     pu_prom = round(d["total_costo"] / d["total_cant"]) if d["total_cant"] > 0 else 0
                     costo_consumido = round(v["salidas"] * pu_prom) if pu_prom > 0 else 0
-                    stock_actual = round(max(0.0, stock_actual_todo.get(k, 0)), 1)
+                    es_kg = v["unidad"] == "kg"
+                    stock_actual = round(max(0.0, stock_actual_todo.get(k, 0)), 3 if es_kg else 1)
                     stock_val = round(stock_actual * pu_prom) if pu_prom > 0 else 0
                     filas_res.append({
                         "Insumo": k,
-                        "Entradas": v["entradas"],
-                        "Salidas": v["salidas"],
-                        "Stock": stock_actual,
+                        "Entradas": f'{v["entradas"]:.3f}' if es_kg else v["entradas"],
+                        "Salidas": f'{v["salidas"]:.3f}' if es_kg else v["salidas"],
+                        "Stock": f'{stock_actual:.3f}' if es_kg else stock_actual,
                         "Precio prom. pond.": fmt(pu_prom) if pu_prom > 0 else "—",
                         "Costo consumido": fmt(costo_consumido) if costo_consumido > 0 else "—",
                         "Inventario total": fmt(stock_val) if stock_val > 0 else "—",
@@ -2372,7 +2376,7 @@ elif st.session_state.vista == "materia_prima":
 
         if resumen or raw_ent or raw_sal:
             res_mp  = {k: v for k, v in resumen.items() if k not in SABORIZANTES_NAMES and k not in EMPAQUES_NAMES}
-            res_sab = {k: v for k, v in resumen.items() if k in SABORIZANTES_NAMES}
+            res_sab = {n: resumen.get(n, {"entradas": 0, "salidas": 0, "unidad": u, "gasto": 0}) for n, _, u, _ in SABORIZANTES_INFO}
             res_emp = {k: v for k, v in resumen.items() if k in EMPAQUES_NAMES}
             ent_mp  = [r for r in raw_ent if r["insumo"] not in SABORIZANTES_NAMES and r["insumo"] not in EMPAQUES_NAMES]
             ent_sab = [r for r in raw_ent if r["insumo"] in SABORIZANTES_NAMES]
