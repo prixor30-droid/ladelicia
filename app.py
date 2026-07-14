@@ -1245,10 +1245,18 @@ components.html("""
         if (doc.defaultView.__fabricaTecladoInit) return;
         doc.defaultView.__fabricaTecladoInit = true;
 
-        // Reacciona cuando Streamlit crea nodos nuevos (no observamos atributos:
-        // como nosotros mismos los modificamos, eso provocaba un bucle infinito).
+        // Reacciona cuando Streamlit crea nodos nuevos, y también cuando React
+        // le quita el atributo readonly/inputmode a un input ya existente (pasa
+        // en algunos selects al reabrir la lista). marcar() ya evita setAttribute
+        // si el valor no cambió, así que observar atributos no genera bucle: solo
+        // reacciona cuando el valor real cambia (por ejemplo, cuando React lo borra).
         const observer = new MutationObserver(function () { bloquear(doc); });
-        observer.observe(doc.body, { childList: true, subtree: true });
+        observer.observe(doc.body, {
+            childList: true,
+            subtree: true,
+            attributes: true,
+            attributeFilter: ['readonly', 'inputmode']
+        });
 
         // Refuerzo justo antes del toque: el dedo cae sobre el div contenedor,
         // no sobre el input, así que hay que buscar hacia arriba con closest().
@@ -1261,6 +1269,7 @@ components.html("""
             if (inp) marcar(inp, 'none');
         }
         doc.addEventListener('touchstart', reforzarDesdeEvento, true);
+        doc.addEventListener('touchend', reforzarDesdeEvento, true);
         doc.addEventListener('pointerdown', reforzarDesdeEvento, true);
         doc.addEventListener('mousedown', reforzarDesdeEvento, true);
 
@@ -1279,8 +1288,9 @@ components.html("""
             t.focus();
         }, true);
 
-        // Respaldo por si el observer se pierde algún cambio
-        setInterval(function () { bloquear(doc); }, 300);
+        // Respaldo por si el observer se pierde algún cambio. 100ms en vez de 300ms
+        // para achicar la ventana en la que un input puede quedar sin bloquear.
+        setInterval(function () { bloquear(doc); }, 100);
     } catch (e) {}
 })();
 </script>
