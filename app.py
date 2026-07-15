@@ -2113,11 +2113,20 @@ elif st.session_state.vista == "materia_prima":
             cats = {"mp": INSUMOS_INFO, "sab": SABORIZANTES_INFO, "emp": EMPAQUES_INFO}
             labels = {"mp": "Materia Prima", "sab": "Saborizantes", "emp": "Empaque"}
             st.markdown(f'<div class="section-label">¿Qué {labels[st.session_state.categoria_mp]} ingresó?</div>', unsafe_allow_html=True)
-            for nombre, icono, unidad, cat in cats[st.session_state.categoria_mp]:
-                if st.button(f"{icono}  {nombre}", key=f"btn_ins_{nombre}", use_container_width=True):
-                    st.session_state.insumo_sel = (nombre, unidad, cat); st.rerun()
+            opciones_ins = cats[st.session_state.categoria_mp]
+            datos_por_etiqueta = {f"{icono}  {nombre}": (nombre, unidad, cat) for nombre, icono, unidad, cat in opciones_ins}
+            etiqueta_ins_sel = st.radio(
+                "Insumo", list(datos_por_etiqueta.keys()),
+                key="radio_insumo_mp", label_visibility="collapsed"
+            )
+            if st.button("Continuar →", key="btn_confirmar_ins", use_container_width=True):
+                st.session_state.insumo_sel = datos_por_etiqueta[etiqueta_ins_sel]
+                st.session_state.pop("radio_insumo_mp", None)
+                st.rerun()
             if st.button("← Volver", key="btn_volver_cat"):
-                st.session_state.categoria_mp = None; st.rerun()
+                st.session_state.categoria_mp = None
+                st.session_state.pop("radio_insumo_mp", None)
+                st.rerun()
 
         else:
             nombre_sel, unidad_sel, cat_sel = st.session_state.insumo_sel
