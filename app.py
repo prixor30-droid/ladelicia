@@ -2361,6 +2361,26 @@ elif st.session_state.vista == "materia_prima":
                 } for r in raw_hist_rollo])
                 tabla_view(df_hist_rollo)
 
+            if st.session_state.es_admin:
+                st.markdown("---")
+                st.markdown(f'<div class="section-label">{ICO_WARN} Zona de administrador</div>', unsafe_allow_html=True)
+                if st.session_state.get("confirmar_borrar_emp"):
+                    st.markdown('<div class="alert-low">¿Seguro que quieres borrar TODAS las salidas de empaque y reiniciar los rollos activos? Esto no se puede deshacer.</div>', unsafe_allow_html=True)
+                    col_si_emp, col_no_emp = st.columns(2)
+                    if col_si_emp.button("✅ Sí, borrar todo", key="btn_confirmar_borrar_emp"):
+                        sb_delete("salidas_mp", "categoria=eq.emp")
+                        sb_delete("rollos_empaque", "id=gt.0")
+                        st.session_state.confirmar_borrar_emp = False
+                        st.markdown(f'<div class="success-toast">{ICO_CHECK} Salidas de empaque y rollos activos borrados.</div>', unsafe_allow_html=True)
+                        time.sleep(0.3); st.rerun()
+                    if col_no_emp.button("✗ Cancelar", key="btn_cancelar_borrar_emp"):
+                        st.session_state.confirmar_borrar_emp = False
+                        st.rerun()
+                else:
+                    if st.button("🗑️ Borrar todas las salidas de empaque", key="btn_borrar_emp"):
+                        st.session_state.confirmar_borrar_emp = True
+                        st.rerun()
+
         else:
             insumo_sal = st.selectbox("Insumo", opciones_sal, key="insumo_sal")
             unidad_sal = unidades_sal[insumo_sal]
