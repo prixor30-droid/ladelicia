@@ -1119,6 +1119,22 @@ div[data-testid="stRadio"] input[type="radio"]{accent-color:#1565C0;}
 .st-key-venta_sabor div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked){background:#1565C0 !important;border-color:#1565C0 !important;box-shadow:0 2px 8px rgba(21,101,192,0.35);}
 .st-key-venta_sabor div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked) p,
 .st-key-venta_sabor div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked) span{color:#FFFFFF !important;}
+.st-key-cat_sal div[data-testid="stRadio"] > div,
+.st-key-rollo_insumo div[data-testid="stRadio"] > div{flex-direction:column;flex-wrap:nowrap;max-height:280px;overflow-y:auto;gap:8px;border:1px solid #BBDEFB;border-radius:14px;padding:10px;background:#F8FBFF;box-shadow:inset 0 1px 4px rgba(21,101,192,0.08);}
+.st-key-cat_sal div[data-testid="stRadio"] label[data-baseweb="radio"],
+.st-key-rollo_insumo div[data-testid="stRadio"] label[data-baseweb="radio"]{width:100%;box-sizing:border-box;background:#FFFFFF !important;border:1.5px solid #BBDEFB !important;border-radius:10px !important;padding:12px 16px !important;transition:background .15s ease,border-color .15s ease;}
+.st-key-cat_sal div[data-testid="stRadio"] label[data-baseweb="radio"] p,
+.st-key-cat_sal div[data-testid="stRadio"] label[data-baseweb="radio"] span,
+.st-key-rollo_insumo div[data-testid="stRadio"] label[data-baseweb="radio"] p,
+.st-key-rollo_insumo div[data-testid="stRadio"] label[data-baseweb="radio"] span{color:#0D1B2A !important;font-weight:600 !important;}
+.st-key-cat_sal div[data-testid="stRadio"] label[data-baseweb="radio"]:active,
+.st-key-rollo_insumo div[data-testid="stRadio"] label[data-baseweb="radio"]:active{background:#E3F0FF !important;}
+.st-key-cat_sal div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked),
+.st-key-rollo_insumo div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked){background:#1565C0 !important;border-color:#1565C0 !important;box-shadow:0 2px 8px rgba(21,101,192,0.35);}
+.st-key-cat_sal div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked) p,
+.st-key-cat_sal div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked) span,
+.st-key-rollo_insumo div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked) p,
+.st-key-rollo_insumo div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked) span{color:#FFFFFF !important;}
 .calc-box{background:#FFFFFF;border-radius:14px;padding:14px;margin-bottom:14px;box-shadow:0 2px 10px rgba(21,101,192,0.10);}
 .main-btn{background:#F0F7FF;border:1px solid #BBDEFB;border-radius:14px;padding:20px 16px;margin-bottom:10px;cursor:pointer;display:flex;align-items:center;gap:14px;}
 .main-btn-icon{font-size:2rem;}
@@ -2247,7 +2263,7 @@ elif st.session_state.vista == "materia_prima":
 
     with tab_mp2:
         st.markdown('<div class="section-label">Registrar salida (uso en producción)</div>', unsafe_allow_html=True)
-        cat_sal = st.selectbox("Categoría", ["🌽 Materia Prima", "🧪 Saborizantes", "📦 Empaque"], key="cat_sal")
+        cat_sal = st.radio("Categoría", ["🌽 Materia Prima", "🧪 Saborizantes", "📦 Empaque"], key="cat_sal")
         if "Materia Prima" in cat_sal:
             opciones_sal = [n for n,_,_,_ in INSUMOS_INFO]
             unidades_sal = {n: u for n,_,u,_ in INSUMOS_INFO}
@@ -2264,7 +2280,7 @@ elif st.session_state.vista == "materia_prima":
         if cat_key == "emp":
             st.caption("Pesa el rollo antes y después de producir. La próxima vez que uses ese mismo rollo, el peso inicial ya viene precargado con el último peso registrado — no hace falta pesarlo de nuevo hasta que se acabe.")
 
-            insumo_rollo = st.selectbox("Empaque", opciones_sal, key="rollo_insumo")
+            insumo_rollo = st.radio("Empaque", opciones_sal, key="rollo_insumo")
 
             raw_rollo = sb_get("rollos_empaque", f"select=*&insumo=eq.{requests.utils.quote(insumo_rollo)}&limit=1") or []
             rollo_previo = raw_rollo[0] if raw_rollo else None
