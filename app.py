@@ -2420,7 +2420,28 @@ elif st.session_state.vista == "materia_prima":
                 sel_del_hist_rollo = st.selectbox("Eliminar registro", ["— Selecciona —"] + list(ids_hist_rollo.keys()), key="sel_del_hist_rollo")
                 if sel_del_hist_rollo != "— Selecciona —" and st.button("🗑️ Eliminar", key="btn_del_hist_rollo"):
                     reg_del_hist_rollo = ids_hist_rollo[sel_del_hist_rollo]
+                    # Si el registro borrado era el que definía el peso_actual del rollo activo
+                    # (mismo fecha/hora/peso_despues guardados en rollos_empaque), hay que
+                    # retroceder al pesaje anterior — si no, la app se queda mostrando un
+                    # "rollo activo" con un peso que ya no está respaldado por ningún registro.
+                    era_el_estado_actual = (
+                        rollo_previo is not None
+                        and rollo_previo["fecha"] == reg_del_hist_rollo["fecha"]
+                        and rollo_previo["hora"] == reg_del_hist_rollo["hora"]
+                        and float(rollo_previo["peso_actual"]) == float(reg_del_hist_rollo["peso_despues"])
+                    )
                     sb_delete("salidas_mp", f"id=eq.{reg_del_hist_rollo['id']}")
+                    if era_el_estado_actual:
+                        raw_anterior_rollo = sb_get(
+                            "salidas_mp",
+                            f"select=fecha,hora,peso_despues&insumo=eq.{requests.utils.quote(insumo_rollo)}"
+                            "&peso_antes=not.is.null&order=fecha.desc,hora.desc&limit=1"
+                        ) or []
+                        if raw_anterior_rollo:
+                            ant = raw_anterior_rollo[0]
+                            sb_patch("rollos_empaque", f"id=eq.{rollo_previo['id']}", {"peso_actual": float(ant["peso_despues"]), "fecha": ant["fecha"], "hora": ant["hora"]})
+                        else:
+                            sb_delete("rollos_empaque", f"id=eq.{rollo_previo['id']}")
                     time.sleep(0.3)
                     st.rerun()
 
