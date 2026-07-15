@@ -1816,20 +1816,20 @@ elif st.session_state.vista == "carro":
         else:
             st.caption("No hay cargue activo hoy.")
 
-        # Solo admin ve resumen del carro
-        if st.session_state.es_admin:
-            raw_resumen_carro = sb_get("ventas", f"select=total,cantidad&fecha=eq.{fecha_hoy()}&canal=eq.Carro")
-            if raw_resumen_carro:
-                total_carro_dia  = sum(r["total"]    for r in raw_resumen_carro if r["total"] > 0)
-                bolsas_carro_dia = sum(r["cantidad"] for r in raw_resumen_carro if r["cantidad"] > 0)
-                st.markdown('<div class="section-label">Resumen del día — Javier & Edison</div>', unsafe_allow_html=True)
-                st.markdown(
-                    f'<div class="factura-box">'
-                    f'<div class="factura-row"><span>{ICO_CART} Bolsas vendidas hoy</span><span><b>{bolsas_carro_dia}</b></span></div>'
-                    f'<div class="factura-total"><span>{ICO_DOLLAR} Total a entregar</span><span>{fmt(total_carro_dia)}</span></div>'
-                    f'</div>',
-                    unsafe_allow_html=True
-                )
+        # Visible para todos (no solo admin) — Javier y Edison lo necesitan para
+        # saber cuánto entregar al final del día.
+        raw_resumen_carro = sb_get("ventas", f"select=total,cantidad&fecha=eq.{fecha_hoy()}&canal=eq.Carro")
+        if raw_resumen_carro:
+            total_carro_dia  = sum(r["total"]    for r in raw_resumen_carro if r["total"] > 0)
+            bolsas_carro_dia = sum(r["cantidad"] for r in raw_resumen_carro if r["cantidad"] > 0)
+            st.markdown('<div class="section-label">Resumen del día — Javier & Edison</div>', unsafe_allow_html=True)
+            st.markdown(
+                f'<div class="factura-box">'
+                f'<div class="factura-row"><span>{ICO_CART} Bolsas vendidas hoy</span><span><b>{bolsas_carro_dia}</b></span></div>'
+                f'<div class="factura-total"><span>{ICO_DOLLAR} Total a entregar</span><span>{fmt(total_carro_dia)}</span></div>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
 
     with sub3:
         st.markdown(f'<div class="section-label">Devolución al inventario {ICO_REFRESH}</div>', unsafe_allow_html=True)
@@ -1918,29 +1918,29 @@ elif st.session_state.vista == "fabrica":
 
     render_venta_canal(CONFIG_FABRICA)
 
-    # Solo admin ve resumen y historial
-    if st.session_state.es_admin:
-        raw_vf = sb_get("ventas", f"select=total,cantidad,vendedor&fecha=eq.{fecha_hoy()}&canal=in.(Fábrica,Cambio)")
-        if raw_vf:
-            total_fab_dia  = sum(r["total"]    for r in raw_vf if r["total"] > 0)
-            bolsas_fab_dia = sum(r["cantidad"] for r in raw_vf if r["cantidad"] > 0)
-            por_vendedor = {}
-            for r in raw_vf:
-                if r["total"] > 0:
-                    v = r["vendedor"]
-                    por_vendedor[v] = por_vendedor.get(v, 0) + r["total"]
-            st.markdown('<div class="section-label">Resumen del día — Fábrica</div>', unsafe_allow_html=True)
-            filas_v = "".join(
-                f'<div class="factura-row"><span>{ICO_USER} {v}</span><span><b>{fmt(t)}</b></span></div>'
-                for v, t in por_vendedor.items()
-            )
-            st.markdown(
-                f'<div class="factura-box">{filas_v}'
-                f'<div class="factura-row"><span>{ICO_CART} Bolsas vendidas hoy</span><span><b>{bolsas_fab_dia}</b></span></div>'
-                f'<div class="factura-total"><span>{ICO_DOLLAR} Total a entregar</span><span>{fmt(total_fab_dia)}</span></div>'
-                f'</div>',
-                unsafe_allow_html=True
-            )
+    # Visible para todos (no solo admin) — Sofía y Andrea lo necesitan para
+    # saber cuánto entregar al final del día.
+    raw_vf = sb_get("ventas", f"select=total,cantidad,vendedor&fecha=eq.{fecha_hoy()}&canal=in.(Fábrica,Cambio)")
+    if raw_vf:
+        total_fab_dia  = sum(r["total"]    for r in raw_vf if r["total"] > 0)
+        bolsas_fab_dia = sum(r["cantidad"] for r in raw_vf if r["cantidad"] > 0)
+        por_vendedor = {}
+        for r in raw_vf:
+            if r["total"] > 0:
+                v = r["vendedor"]
+                por_vendedor[v] = por_vendedor.get(v, 0) + r["total"]
+        st.markdown('<div class="section-label">Resumen del día — Fábrica</div>', unsafe_allow_html=True)
+        filas_v = "".join(
+            f'<div class="factura-row"><span>{ICO_USER} {v}</span><span><b>{fmt(t)}</b></span></div>'
+            for v, t in por_vendedor.items()
+        )
+        st.markdown(
+            f'<div class="factura-box">{filas_v}'
+            f'<div class="factura-row"><span>{ICO_CART} Bolsas vendidas hoy</span><span><b>{bolsas_fab_dia}</b></span></div>'
+            f'<div class="factura-total"><span>{ICO_DOLLAR} Total a entregar</span><span>{fmt(total_fab_dia)}</span></div>'
+            f'</div>',
+            unsafe_allow_html=True
+        )
 
 # ══════════════════════════════════════════════════════════════════════════════
 # VISTA: RESUMEN (solo admin)
