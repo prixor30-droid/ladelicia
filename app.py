@@ -2524,14 +2524,40 @@ elif st.session_state.vista == "materia_prima":
         raw_ent = sb_get("materia_prima", f"select=*&fecha=gte.{f_ini_mp}&fecha=lte.{f_fin_mp}&order=fecha.desc") or []
         raw_sal = sb_get("salidas_mp",    f"select=*&fecha=gte.{f_ini_mp}&fecha=lte.{f_fin_mp}&order=fecha.desc") or []
 
-        # Stock actual real (acumulado de siempre, no solo del período filtrado arriba)
-        raw_ent_todo = sb_get("materia_prima", "select=insumo,cantidad") or []
+        # Stock actual real y precio promedio (acumulado de siempre, no solo del período
+        # filtrado arriba) — así el valor del inventario no cambia según qué rango se elija.
+        raw_ent_todo = sb_get("materia_prima", "select=insumo,cantidad,precio_unitario,precio_total") or []
         raw_sal_todo = sb_get("salidas_mp", "select=insumo,cantidad") or []
         stock_actual_todo = {}
         for r in raw_ent_todo:
             stock_actual_todo[r["insumo"]] = stock_actual_todo.get(r["insumo"], 0) + float(r["cantidad"])
         for r in raw_sal_todo:
             stock_actual_todo[r["insumo"]] = stock_actual_todo.get(r["insumo"], 0) - float(r["cantidad"])
+
+        # Promedio ponderado por insumo sobre TODO el histórico de compras (no el período
+        # filtrado): total_costo/total_cant por insumo, usado tanto en la tabla por categoría
+        # como en el total general de abajo.
+        prom_pond_todo = {}
+        for r in raw_ent_todo:
+            k = r["insumo"]
+            pu = float(r.get("precio_unitario", 0))
+            cant = float(r.get("cantidad", 0))
+            if pu > 0 and cant > 0:
+                if k not in prom_pond_todo:
+                    prom_pond_todo[k] = {"total_costo": 0, "total_cant": 0}
+                prom_pond_todo[k]["total_costo"] += pu * cant
+                prom_pond_todo[k]["total_cant"]  += cant
+
+        total_invertido = 0
+        for k, cant_stock in stock_actual_todo.items():
+            d = prom_pond_todo.get(k)
+            if d and d["total_cant"] > 0 and cant_stock > 0:
+                total_invertido += cant_stock * (d["total_costo"] / d["total_cant"])
+        st.markdown(
+            f'<div class="calc-box">💰 Inventario total invertido ahora mismo '
+            f'(materia prima + saborizantes + empaque): <b>{fmt(round(total_invertido))}</b></div>',
+            unsafe_allow_html=True
+        )
 
         resumen = {}
         for r in raw_ent:
@@ -2553,21 +2579,9 @@ elif st.session_state.vista == "materia_prima":
             if not data and not raw_ent_cat and not raw_sal_cat: return
             st.markdown(f'<div class="section-label">{icono} {titulo}</div>', unsafe_allow_html=True)
             if data:
-                # Promedio ponderado por insumo: suma(cant*precio_unit) / suma(cant)
-                prom_pond = {}
-                for r in raw_ent_cat:
-                    k = r["insumo"]
-                    pu = float(r.get("precio_unitario", 0))
-                    cant = float(r.get("cantidad", 0))
-                    if pu > 0 and cant > 0:
-                        if k not in prom_pond:
-                            prom_pond[k] = {"total_costo": 0, "total_cant": 0}
-                        prom_pond[k]["total_costo"] += pu * cant
-                        prom_pond[k]["total_cant"]  += cant
-
                 filas_res = []
                 for k, v in data.items():
-                    d = prom_pond.get(k, {"total_costo": 0, "total_cant": 0})
+                    d = prom_pond_todo.get(k, {"total_costo": 0, "total_cant": 0})
                     pu_prom = round(d["total_costo"] / d["total_cant"]) if d["total_cant"] > 0 else 0
                     costo_consumido = round(v["salidas"] * pu_prom) if pu_prom > 0 else 0
                     es_kg = v["unidad"] == "kg"
@@ -2585,7 +2599,7 @@ elif st.session_state.vista == "materia_prima":
                     })
                 tabla_view(pd.DataFrame(filas_res))
                 # Nota explicativa
-                st.caption("💡 Precio promedio ponderado: promedio de todos los lotes del período, ponderado por cantidad ingresada.")
+                st.caption("💡 Precio promedio ponderado: promedio de todo el histórico de compras (no solo el período filtrado arriba), ponderado por cantidad ingresada.")
             else:
                 st.info("No hay registros en este período.")
 
