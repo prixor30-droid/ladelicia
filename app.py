@@ -727,6 +727,18 @@ CONFIG_CARRO = {
     "sabores_post_venta_fn": lambda disp: [s for s, v in disp.items() if v > 0],
 }
 
+def _consolidar_items_recibo(registros):
+    """Cantidad y total netos por sabor, sumando venta original + cambios (canal='Cambio')."""
+    items_cons = {}
+    totales_cons = {}
+    for r in registros:
+        s = r["sabor"]
+        items_cons[s]  = items_cons.get(s, 0) + r["cantidad"]
+        totales_cons[s] = totales_cons.get(s, 0) + r["total"]
+    # Filtrar items con cantidad > 0 (los que quedaron después de cambios)
+    items_finales = {s: c for s, c in items_cons.items() if c > 0}
+    return items_finales, totales_cons
+
 def render_recibo(registros):
     """Genera el HTML de un recibo tipo ticket consolidando originales + cambios."""
     if not registros:
@@ -738,16 +750,7 @@ def render_recibo(registros):
     cliente_r = r0.get("cliente", "Consumidor Final") or "Consumidor Final"
     vendedor_r = r0["vendedor"]
 
-    # Consolidar items: sumar cantidades y totales por sabor (incluyendo negativos de cambios)
-    items_cons = {}
-    totales_cons = {}
-    for r in registros:
-        s = r["sabor"]
-        items_cons[s]  = items_cons.get(s, 0) + r["cantidad"]
-        totales_cons[s] = totales_cons.get(s, 0) + r["total"]
-
-    # Filtrar items con cantidad > 0 (los que quedaron después de cambios)
-    items_finales = {s: c for s, c in items_cons.items() if c > 0}
+    items_finales, totales_cons = _consolidar_items_recibo(registros)
     total_r = sum(totales_cons[s] for s in items_finales)
 
     items_partes = []
@@ -1997,44 +2000,164 @@ elif st.session_state.vista == "recibo":
         """.replace("ICONO_PRINTER", ICO_PRINTER)
         components.html(_html_btn_imprimir, height=80)
 
-        # Eliminar factura — visible para todos
-        if True:
-            fid_recibo = registros_recibo[0].get("factura_id", "") if registros_recibo else ""
-            canal_recibo = registros_recibo[0].get("canal", "") if registros_recibo else ""
+        fid_recibo = registros_recibo[0].get("factura_id", "") if registros_recibo else ""
+        canal_recibo = registros_recibo[0].get("canal", "") if registros_recibo else ""
 
-            st.markdown("---")
-            st.markdown(f'<div class="section-label">{ICO_WARN} Zona de administrador</div>', unsafe_allow_html=True)
+        st.markdown("---")
+        st.markdown(f'<div class="section-label">{ICO_WARN} Zona de administrador</div>', unsafe_allow_html=True)
 
-            if st.session_state.get("confirmar_eliminar_fac") == fid_recibo:
-                st.markdown('<div class="alert-low">¿Seguro que quieres eliminar esta factura? Esta acción devolverá las bolsas al inventario.</div>', unsafe_allow_html=True)
-                col_si, col_no = st.columns(2)
-                if col_si.button("✅ Sí, eliminar", key="btn_confirmar_elim"):
-                    # Obtener todos los registros de la factura
-                    regs = sb_get("ventas", f"select=sabor,cantidad,canal&factura_id=eq.{fid_recibo}")
-                    if regs:
-                        for r in regs:
-                            cant = int(r.get("cantidad", 0))
-                            sabor = r.get("sabor", "")
-                            canal_r = r.get("canal", "")
-                            if cant > 0 and sabor:
-                                # Fábrica: devolver al inventario general
-                                # Carro: NO tocar inventario general (el stock ya estaba descontado en el cargue)
-                                if canal_r in ("Fábrica",):
-                                    agregar_stock(sabor, cant)
-                        # Eliminar todos los registros de la factura
-                        sb_delete("ventas", f"factura_id=eq.{fid_recibo}")
-                    st.session_state.confirmar_eliminar_fac = None
-                    st.session_state.recibo_canal_df = []
-                    st.session_state.vista = st.session_state.get("vista_anterior", "resumen")
-                    time.sleep(0.3)
-                    st.rerun()
-                if col_no.button("✗ Cancelar", key="btn_cancelar_elim"):
-                    st.session_state.confirmar_eliminar_fac = None
-                    st.rerun()
+        # Editar factura — funciona con facturas de cualquier fecha (no depende de
+        # la sesión activa como el cambio/agregar del flujo de venta en vivo).
+        cfg_edit = CONFIG_FABRICA if canal_recibo == "Fábrica" else CONFIG_CARRO
+        vendedor_recibo = registros_recibo[0].get("vendedor", "") if registros_recibo else ""
+        cliente_recibo = (registros_recibo[0].get("cliente", "") if registros_recibo else "") or "Consumidor Final"
+        items_recibo, totales_recibo = _consolidar_items_recibo(registros_recibo)
+        precios_recibo = {s: (totales_recibo[s] / c if c else 0) for s, c in items_recibo.items()}
+
+        def _recargar_recibo():
+            st.session_state.recibo_canal_df = sb_get("ventas", f"select=*&factura_id=eq.{fid_recibo}") or []
+
+        def _ajustar_saldo(delta):
+            if delta == 0:
+                return
+            raw_saldo = sb_get("ventas", f"select=saldo&factura_id=eq.{fid_recibo}&canal=eq.{canal_recibo}&limit=1")
+            saldo_actual = float(raw_saldo[0]["saldo"]) if raw_saldo else 0
+            sb_patch("ventas", f"factura_id=eq.{fid_recibo}&canal=eq.{canal_recibo}", {"saldo": max(0, saldo_actual + delta)})
+
+        with st.expander("✏️ Editar factura"):
+            if not items_recibo:
+                st.caption("Esta factura no tiene productos activos para editar.")
             else:
-                if st.button("🗑️ Eliminar esta factura", key="btn_eliminar_fac"):
-                    st.session_state.confirmar_eliminar_fac = fid_recibo
-                    st.rerun()
+                tab_ed_cambio, tab_ed_agregar, tab_ed_quitar = st.tabs(
+                    ["🔁 Cambiar producto", "➕ Agregar producto", "➖ Quitar producto"])
+
+                with tab_ed_cambio:
+                    col_a, col_b = st.columns(2)
+                    sabor_out = col_a.selectbox("Devuelve", list(items_recibo.keys()), key="edit_cambio_out")
+                    max_out = items_recibo.get(sabor_out, 1)
+                    cant_out = col_a.number_input("Cantidad que devuelve", min_value=1, max_value=max_out, value=1, step=1, key="edit_cant_out")
+
+                    disp_cambio = cfg_edit["disponible_map_fn"]()
+                    disp_cambio[sabor_out] = disp_cambio.get(sabor_out, 0) + cant_out
+                    opciones_in = cfg_edit["sabores_post_venta_fn"](disp_cambio)
+                    sabor_in = col_b.selectbox("Lleva en cambio", opciones_in, key="edit_cambio_in")
+                    max_in = max(1, int(disp_cambio.get(sabor_in, 0)))
+                    cant_in = col_b.number_input("Cantidad que lleva", min_value=1, max_value=max_in, value=1, step=1, key="edit_cant_in")
+
+                    valor_out = precios_recibo.get(sabor_out, PRODUCTOS[sabor_out]) * cant_out
+                    valor_in  = precios_recibo.get(sabor_in,  PRODUCTOS[sabor_in])  * cant_in
+                    diferencia = valor_in - valor_out
+                    if diferencia > 0:
+                        st.markdown(f'<div class="warn-box">{ICO_DOLLAR} El cliente debe pagar <b>{fmt(diferencia)}</b> adicionales</div>', unsafe_allow_html=True)
+                    elif diferencia < 0:
+                        st.markdown(f'<div class="info-box">{ICO_DOLLAR} Hay que devolver <b>{fmt(abs(diferencia))}</b> al cliente</div>', unsafe_allow_html=True)
+                    else:
+                        st.markdown(f'<div class="info-box">{ICO_CHECK} Cambio sin diferencia de valor</div>', unsafe_allow_html=True)
+
+                    if st.button("🔁 Registrar cambio", key="edit_btn_cambio"):
+                        sb_post("ventas", {
+                            "fecha": fecha_hoy(), "hora": ahora(), "canal": "Cambio",
+                            "vendedor": vendedor_recibo, "sabor": sabor_out,
+                            "cantidad": -cant_out, "total": -valor_out,
+                            "cliente": cliente_recibo, "factura_id": fid_recibo,
+                            "abono": 0, "saldo": 0
+                        })
+                        if cfg_edit["mutar_stock"]:
+                            agregar_stock(sabor_out, cant_out)
+                        sb_post("ventas", {
+                            "fecha": fecha_hoy(), "hora": ahora(), "canal": "Cambio",
+                            "vendedor": vendedor_recibo, "sabor": sabor_in,
+                            "cantidad": cant_in, "total": valor_in,
+                            "cliente": cliente_recibo, "factura_id": fid_recibo,
+                            "abono": 0, "saldo": 0
+                        })
+                        if cfg_edit["mutar_stock"]:
+                            restar_stock(sabor_in, cant_in)
+                        _ajustar_saldo(diferencia)
+                        _recargar_recibo()
+                        time.sleep(0.3)
+                        st.rerun()
+
+                with tab_ed_agregar:
+                    disp_add = cfg_edit["disponible_map_fn"]()
+                    opciones_add = cfg_edit["sabores_post_venta_fn"](disp_add)
+                    if not opciones_add:
+                        st.markdown(f'<div class="warn-box">{ICO_WARN} No hay disponible para agregar.</div>', unsafe_allow_html=True)
+                    else:
+                        sabor_add = st.selectbox("Sabor a agregar", opciones_add, key="edit_add_sabor")
+                        max_add = max(1, int(disp_add.get(sabor_add, 0)))
+                        cant_add = st.number_input("Cantidad", min_value=1, max_value=max_add, value=1, step=1, key="edit_add_cant")
+                        precio_add = precios_recibo.get(sabor_add, PRODUCTOS[sabor_add]) * cant_add
+                        st.markdown(f'<div class="info-box">{ICO_PACKAGE} Disponible: <b>{max_add}</b> · {ICO_DOLLAR} A cobrar: <b>{fmt(precio_add)}</b></div>', unsafe_allow_html=True)
+
+                        if st.button("➕ Agregar a la factura", key="edit_btn_add"):
+                            sb_post("ventas", {
+                                "fecha": fecha_hoy(), "hora": ahora(), "canal": "Cambio",
+                                "vendedor": vendedor_recibo, "sabor": sabor_add,
+                                "cantidad": cant_add, "total": precio_add,
+                                "cliente": cliente_recibo, "factura_id": fid_recibo,
+                                "abono": 0, "saldo": 0
+                            })
+                            if cfg_edit["mutar_stock"]:
+                                restar_stock(sabor_add, cant_add)
+                            _ajustar_saldo(precio_add)
+                            _recargar_recibo()
+                            time.sleep(0.3)
+                            st.rerun()
+
+                with tab_ed_quitar:
+                    sabor_quitar = st.selectbox("Producto a quitar", list(items_recibo.keys()), key="edit_quitar_sabor")
+                    max_quitar = items_recibo.get(sabor_quitar, 1)
+                    cant_quitar = st.number_input("Cantidad a quitar", min_value=1, max_value=max_quitar, value=1, step=1, key="edit_quitar_cant")
+                    valor_quitar = precios_recibo.get(sabor_quitar, PRODUCTOS[sabor_quitar]) * cant_quitar
+                    st.markdown(f'<div class="info-box">{ICO_DOLLAR} Se descuenta <b>{fmt(valor_quitar)}</b> de la factura</div>', unsafe_allow_html=True)
+
+                    if st.button("➖ Quitar de la factura", key="edit_btn_quitar"):
+                        sb_post("ventas", {
+                            "fecha": fecha_hoy(), "hora": ahora(), "canal": "Cambio",
+                            "vendedor": vendedor_recibo, "sabor": sabor_quitar,
+                            "cantidad": -cant_quitar, "total": -valor_quitar,
+                            "cliente": cliente_recibo, "factura_id": fid_recibo,
+                            "abono": 0, "saldo": 0
+                        })
+                        if cfg_edit["mutar_stock"]:
+                            agregar_stock(sabor_quitar, cant_quitar)
+                        _ajustar_saldo(-valor_quitar)
+                        _recargar_recibo()
+                        time.sleep(0.3)
+                        st.rerun()
+
+        # Eliminar factura — visible para todos
+        if st.session_state.get("confirmar_eliminar_fac") == fid_recibo:
+            st.markdown('<div class="alert-low">¿Seguro que quieres eliminar esta factura? Esta acción devolverá las bolsas al inventario.</div>', unsafe_allow_html=True)
+            col_si, col_no = st.columns(2)
+            if col_si.button("✅ Sí, eliminar", key="btn_confirmar_elim"):
+                # Obtener todos los registros de la factura
+                regs = sb_get("ventas", f"select=sabor,cantidad,canal&factura_id=eq.{fid_recibo}")
+                if regs:
+                    for r in regs:
+                        cant = int(r.get("cantidad", 0))
+                        sabor = r.get("sabor", "")
+                        canal_r = r.get("canal", "")
+                        if cant > 0 and sabor:
+                            # Fábrica: devolver al inventario general
+                            # Carro: NO tocar inventario general (el stock ya estaba descontado en el cargue)
+                            if canal_r in ("Fábrica",):
+                                agregar_stock(sabor, cant)
+                    # Eliminar todos los registros de la factura
+                    sb_delete("ventas", f"factura_id=eq.{fid_recibo}")
+                st.session_state.confirmar_eliminar_fac = None
+                st.session_state.recibo_canal_df = []
+                st.session_state.vista = st.session_state.get("vista_anterior", "resumen")
+                time.sleep(0.3)
+                st.rerun()
+            if col_no.button("✗ Cancelar", key="btn_cancelar_elim"):
+                st.session_state.confirmar_eliminar_fac = None
+                st.rerun()
+        else:
+            if st.button("🗑️ Eliminar esta factura", key="btn_eliminar_fac"):
+                st.session_state.confirmar_eliminar_fac = fid_recibo
+                st.rerun()
     else:
         st.info("No se encontró la factura seleccionada.")
 
