@@ -2740,6 +2740,9 @@ elif st.session_state.vista == "caja":
                 help="Para el costo de producción (mano de obra de planta, servicios/mantenimiento de la fábrica) vs. gastos que no entran al costo del producto (arriendo de oficina, transporte de venta, etc.)."
             )
             tipo_eg = "costo" if "producción" in tipo_eg_label else "gasto"
+            empleado_eg = ""
+            if cat_eg == "Salario":
+                empleado_eg = st.text_input("Nombre del empleado", placeholder="Ej: Juan Pérez", key="empleado_eg")
             valor_eg = st.number_input("Valor ($)", min_value=0, value=0, step=1000, key="valor_eg")
 
             if st.button("✅ Registrar egreso", key="btn_eg"):
@@ -2747,12 +2750,14 @@ elif st.session_state.vista == "caja":
                     st.markdown(f'<div class="alert-low">{ICO_WARN} Escribe el concepto del egreso.</div>', unsafe_allow_html=True)
                 elif valor_eg == 0:
                     st.markdown(f'<div class="alert-low">{ICO_WARN} Ingresa el valor.</div>', unsafe_allow_html=True)
+                elif cat_eg == "Salario" and not empleado_eg.strip():
+                    st.markdown(f'<div class="alert-low">{ICO_WARN} Escribe el nombre del empleado.</div>', unsafe_allow_html=True)
                 else:
                     h = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}",
                          "Content-Type": "application/json", "Prefer": "return=minimal"}
                     data_eg = {"fecha": fecha_hoy(), "hora": ahora(),
                                "concepto": concepto_eg.strip(), "valor": float(valor_eg), "categoria": cat_eg,
-                               "tipo": tipo_eg}
+                               "tipo": tipo_eg, "empleado": empleado_eg.strip() or None}
                     try:
                         r_eg = requests.post(f"{SUPABASE_URL}/rest/v1/caja_egresos", headers=h, json=data_eg, timeout=10)
                         if r_eg.ok:
@@ -3243,3 +3248,20 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
     </div>
     """, unsafe_allow_html=True)
     st.caption(f"💡 Costo de producción = materia prima+saborizantes+empaque consumidos en el período (a precio promedio histórico) + egresos marcados como \"costo de producción\" ({fmt(round(costo_planta_c))}). Costo unitario = ese total ÷ {unidades_producidas_periodo_c:.0f} unidades producidas en el período. Los egresos sin clasificar no cuentan aquí.")
+
+    # --- Historial de pagos por empleado ---
+    st.markdown(f'<div class="section-label">{ICO_RECEIPT} Historial por empleado</div>', unsafe_allow_html=True)
+    raw_salarios = sb_get("caja_egresos", "select=fecha,hora,concepto,valor,empleado&categoria=eq.Salario&empleado=not.is.null&order=fecha.desc,hora.desc") or []
+    nombres_empleados = sorted({r["empleado"] for r in raw_salarios if r.get("empleado")})
+    if not nombres_empleados:
+        st.info("Todavía no hay pagos de salario con nombre de empleado registrados.")
+    else:
+        emp_sel_cont = st.selectbox("Empleado", nombres_empleados, key="emp_sel_cont")
+        pagos_emp = [r for r in raw_salarios if r["empleado"] == emp_sel_cont]
+        total_pagado_emp = sum(float(r["valor"]) for r in pagos_emp)
+        st.markdown(f'<div class="calc-box">💵 Total pagado a <b>{emp_sel_cont}</b>: <b>{fmt(total_pagado_emp)}</b> ({len(pagos_emp)} pagos)</div>', unsafe_allow_html=True)
+        df_emp = pd.DataFrame([{
+            "Fecha": r["fecha"], "Hora": r["hora"],
+            "Concepto": r["concepto"], "Valor": fmt(r["valor"]),
+        } for r in pagos_emp])
+        tabla_view(df_emp)
