@@ -1120,21 +1120,29 @@ div[data-testid="stRadio"] input[type="radio"]{accent-color:#1565C0;}
 .st-key-venta_sabor div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked) p,
 .st-key-venta_sabor div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked) span{color:#FFFFFF !important;}
 .st-key-cat_sal div[data-testid="stRadio"] > div,
-.st-key-rollo_insumo div[data-testid="stRadio"] > div{flex-direction:column;flex-wrap:nowrap;max-height:280px;overflow-y:auto;gap:8px;border:1px solid #BBDEFB;border-radius:14px;padding:10px;background:#F8FBFF;box-shadow:inset 0 1px 4px rgba(21,101,192,0.08);}
+.st-key-rollo_insumo div[data-testid="stRadio"] > div,
+.st-key-radio_insumo_mp div[data-testid="stRadio"] > div{flex-direction:column;flex-wrap:nowrap;max-height:280px;overflow-y:auto;gap:8px;border:1px solid #BBDEFB;border-radius:14px;padding:10px;background:#F8FBFF;box-shadow:inset 0 1px 4px rgba(21,101,192,0.08);}
 .st-key-cat_sal div[data-testid="stRadio"] label[data-baseweb="radio"],
-.st-key-rollo_insumo div[data-testid="stRadio"] label[data-baseweb="radio"]{width:100%;box-sizing:border-box;background:#FFFFFF !important;border:1.5px solid #BBDEFB !important;border-radius:10px !important;padding:12px 16px !important;transition:background .15s ease,border-color .15s ease;}
+.st-key-rollo_insumo div[data-testid="stRadio"] label[data-baseweb="radio"],
+.st-key-radio_insumo_mp div[data-testid="stRadio"] label[data-baseweb="radio"]{width:100%;box-sizing:border-box;background:#FFFFFF !important;border:1.5px solid #BBDEFB !important;border-radius:10px !important;padding:12px 16px !important;transition:background .15s ease,border-color .15s ease;}
 .st-key-cat_sal div[data-testid="stRadio"] label[data-baseweb="radio"] p,
 .st-key-cat_sal div[data-testid="stRadio"] label[data-baseweb="radio"] span,
 .st-key-rollo_insumo div[data-testid="stRadio"] label[data-baseweb="radio"] p,
-.st-key-rollo_insumo div[data-testid="stRadio"] label[data-baseweb="radio"] span{color:#0D1B2A !important;font-weight:600 !important;}
+.st-key-rollo_insumo div[data-testid="stRadio"] label[data-baseweb="radio"] span,
+.st-key-radio_insumo_mp div[data-testid="stRadio"] label[data-baseweb="radio"] p,
+.st-key-radio_insumo_mp div[data-testid="stRadio"] label[data-baseweb="radio"] span{color:#0D1B2A !important;font-weight:600 !important;}
 .st-key-cat_sal div[data-testid="stRadio"] label[data-baseweb="radio"]:active,
-.st-key-rollo_insumo div[data-testid="stRadio"] label[data-baseweb="radio"]:active{background:#E3F0FF !important;}
+.st-key-rollo_insumo div[data-testid="stRadio"] label[data-baseweb="radio"]:active,
+.st-key-radio_insumo_mp div[data-testid="stRadio"] label[data-baseweb="radio"]:active{background:#E3F0FF !important;}
 .st-key-cat_sal div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked),
-.st-key-rollo_insumo div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked){background:#1565C0 !important;border-color:#1565C0 !important;box-shadow:0 2px 8px rgba(21,101,192,0.35);}
+.st-key-rollo_insumo div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked),
+.st-key-radio_insumo_mp div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked){background:#1565C0 !important;border-color:#1565C0 !important;box-shadow:0 2px 8px rgba(21,101,192,0.35);}
 .st-key-cat_sal div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked) p,
 .st-key-cat_sal div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked) span,
 .st-key-rollo_insumo div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked) p,
-.st-key-rollo_insumo div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked) span{color:#FFFFFF !important;}
+.st-key-rollo_insumo div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked) span,
+.st-key-radio_insumo_mp div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked) p,
+.st-key-radio_insumo_mp div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked) span{color:#FFFFFF !important;}
 .calc-box{background:#FFFFFF;border-radius:14px;padding:14px;margin-bottom:14px;box-shadow:0 2px 10px rgba(21,101,192,0.10);}
 .main-btn{background:#F0F7FF;border:1px solid #BBDEFB;border-radius:14px;padding:20px 16px;margin-bottom:10px;cursor:pointer;display:flex;align-items:center;gap:14px;}
 .main-btn-icon{font-size:2rem;}
