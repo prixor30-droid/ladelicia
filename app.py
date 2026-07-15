@@ -2291,12 +2291,22 @@ elif st.session_state.vista == "materia_prima":
                 st.markdown(f'<div class="info-box">{ICO_PACKAGE} Rollo activo de <b>{insumo_rollo}</b> — peso inicial (último registrado): <b>{peso_inicial_rollo:.3f} kg</b></div>', unsafe_allow_html=True)
             else:
                 st.markdown(f'<div class="warn-box">{ICO_WARN} No hay rollo activo de <b>{insumo_rollo}</b>. Pesa el rollo nuevo que sacaste de bodega y anota su peso inicial.</div>', unsafe_allow_html=True)
-                peso_bruto_rollo = st.number_input(
+                # text_input (no number_input) y sin valor precargado: en una tablet Samsung
+                # específica, el number_input con un valor por defecto ya escrito (ej "1.000")
+                # no seleccionaba todo el texto al tocarlo, así que lo tecleado se insertaba
+                # junto al valor viejo en vez de reemplazarlo, dañando el cálculo. Con el campo
+                # vacío no hay nada con qué mezclarse.
+                texto_bruto_rollo = st.text_input(
                     "Peso en báscula del rollo nuevo (incluye cono de cartón, kg)",
-                    min_value=0.001, max_value=max(0.001, stock_disp_emp),
-                    value=min(1.0, max(0.001, stock_disp_emp)),
-                    step=0.001, format="%.3f", key=key_peso_inicial
+                    value="", placeholder="Ej: 30.000", key=key_peso_inicial
                 )
+                tope_bruto_rollo = max(0.001, stock_disp_emp)
+                try:
+                    peso_bruto_rollo = max(0.001, min(tope_bruto_rollo, round(float(texto_bruto_rollo.strip().replace(",", ".")), 3)))
+                except ValueError:
+                    peso_bruto_rollo = 0.0
+                    if texto_bruto_rollo.strip():
+                        st.markdown(f'<div class="alert-low">{ICO_WARN} Ese peso no es un número válido.</div>', unsafe_allow_html=True)
                 peso_cono_rollo = st.number_input(
                     "Peso del cono de cartón (dato de la etiqueta, kg)",
                     min_value=0.0, max_value=peso_bruto_rollo,
