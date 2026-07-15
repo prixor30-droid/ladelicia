@@ -2327,6 +2327,10 @@ elif st.session_state.vista == "materia_prima":
             else:
                 st.markdown(f'<div class="info-box">{ICO_PACKAGE} Stock disponible de <b>{insumo_rollo}</b> en bodega: <b>{stock_disp_emp:.3f} kg</b></div>', unsafe_allow_html=True)
 
+            fecha_sal_rollo = st.date_input("Fecha de la salida", value=datetime.now(COL_TZ).date(), max_value=datetime.now(COL_TZ).date(), key=f"fecha_sal_rollo_{insumo_rollo}")
+            if str(fecha_sal_rollo) != fecha_hoy():
+                st.markdown(f'<div class="warn-box">{ICO_CALENDAR} Se registrará con fecha {fecha_sal_rollo}, no con la de hoy.</div>', unsafe_allow_html=True)
+
             if hay_rollo_activo:
                 peso_inicial_rollo = float(rollo_previo["peso_actual"])
                 st.markdown(f'<div class="info-box">{ICO_PACKAGE} Rollo activo de <b>{insumo_rollo}</b> — peso inicial (último registrado): <b>{peso_inicial_rollo:.3f} kg</b></div>', unsafe_allow_html=True)
@@ -2367,16 +2371,16 @@ elif st.session_state.vista == "materia_prima":
             sin_stock_para_rollo_nuevo = not hay_rollo_activo and stock_disp_emp <= 0
             if st.button("📤 Registrar salida", key="btn_rollo_registrar", disabled=(consumo_rollo <= 0 or sin_stock_para_rollo_nuevo)):
                 ok_salida = sb_post("salidas_mp", {
-                    "fecha": fecha_hoy(), "hora": ahora(), "insumo": insumo_rollo,
+                    "fecha": str(fecha_sal_rollo), "hora": ahora(), "insumo": insumo_rollo,
                     "categoria": "emp", "cantidad": consumo_rollo, "unidad": "kg",
                     "motivo": "Producción (control de rollo)",
                     "peso_antes": peso_inicial_rollo, "peso_despues": peso_final_rollo
                 })
                 if ok_salida:
                     if rollo_previo:
-                        ok_rollo = sb_patch("rollos_empaque", f"id=eq.{rollo_previo['id']}", {"peso_actual": peso_final_rollo, "fecha": fecha_hoy(), "hora": ahora()})
+                        ok_rollo = sb_patch("rollos_empaque", f"id=eq.{rollo_previo['id']}", {"peso_actual": peso_final_rollo, "fecha": str(fecha_sal_rollo), "hora": ahora()})
                     else:
-                        ok_rollo = sb_post("rollos_empaque", {"insumo": insumo_rollo, "peso_actual": peso_final_rollo, "fecha": fecha_hoy(), "hora": ahora()})
+                        ok_rollo = sb_post("rollos_empaque", {"insumo": insumo_rollo, "peso_actual": peso_final_rollo, "fecha": str(fecha_sal_rollo), "hora": ahora()})
                     if ok_rollo:
                         # Sin esto, Streamlit reusa el último valor tecleado en estas keys la
                         # próxima vez (aunque cambie el "value=" por defecto) — por eso al
