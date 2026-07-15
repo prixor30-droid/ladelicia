@@ -2377,7 +2377,15 @@ elif st.session_state.vista == "materia_prima":
                     "peso_antes": peso_inicial_rollo, "peso_despues": peso_final_rollo
                 })
                 if ok_salida:
-                    if rollo_previo:
+                    # Si la fecha elegida es más vieja que el último estado registrado del rollo
+                    # (backdateando un papel atrasado después de ya haber pesado en tiempo real),
+                    # no tocamos peso_actual/fecha — el registro histórico ya quedó en salidas_mp,
+                    # pero el "estado actual" del rollo (lo que se precarga la próxima vez) no
+                    # debe retroceder.
+                    es_backdate_viejo = rollo_previo is not None and str(fecha_sal_rollo) < rollo_previo["fecha"]
+                    if es_backdate_viejo:
+                        ok_rollo = True
+                    elif rollo_previo:
                         ok_rollo = sb_patch("rollos_empaque", f"id=eq.{rollo_previo['id']}", {"peso_actual": peso_final_rollo, "fecha": str(fecha_sal_rollo), "hora": ahora()})
                     else:
                         ok_rollo = sb_post("rollos_empaque", {"insumo": insumo_rollo, "peso_actual": peso_final_rollo, "fecha": str(fecha_sal_rollo), "hora": ahora()})
@@ -2389,6 +2397,8 @@ elif st.session_state.vista == "materia_prima":
                         for k in (key_peso_inicial, key_peso_cono, key_peso_final):
                             st.session_state.pop(k, None)
                         st.markdown(f'<div class="success-toast">{ICO_CHECK} Pesaje registrado — {consumo_rollo:.3f}kg de {insumo_rollo} descontados del stock de empaque.</div>', unsafe_allow_html=True)
+                        if es_backdate_viejo:
+                            st.markdown(f'<div class="warn-box">{ICO_CALENDAR} Como esta fecha es anterior al último pesaje registrado ({rollo_previo["fecha"]}), no se modificó el estado actual del rollo — solo quedó guardado el registro histórico.</div>', unsafe_allow_html=True)
                         time.sleep(0.3); st.rerun()
 
             raw_hist_rollo = sb_get(
