@@ -1515,6 +1515,7 @@ if st.session_state.vista == "menu":
     ]
     if st.session_state.es_admin:
         opciones.append(("resumen", "Resumen", "Ventas, facturas y exportar"))
+        opciones.append(("contador", "Contador", "Costos, inventario y utilidad"))
 
     for vista, titulo, sub in opciones:
         with st.container():
@@ -2579,17 +2580,8 @@ elif st.session_state.vista == "materia_prima":
                 prom_pond_todo[k]["total_costo"] += pu * cant
                 prom_pond_todo[k]["total_cant"]  += cant
 
-        total_invertido = 0
-        for k, cant_stock in stock_actual_todo.items():
-            d = prom_pond_todo.get(k)
-            if d and d["total_cant"] > 0 and cant_stock > 0:
-                total_invertido += cant_stock * (d["total_costo"] / d["total_cant"])
-        st.markdown(
-            f'<div class="calc-box">💰 Inventario total invertido ahora mismo '
-            f'(materia prima + saborizantes + empaque): <b>{fmt(round(total_invertido))}</b></div>',
-            unsafe_allow_html=True
-        )
-
+        # El total de $ invertido en inventario se ve en Contador (solo admin) — aquí solo
+        # se mantiene el detalle operativo por insumo/categoría.
         resumen = {}
         for r in raw_ent:
             k = r["insumo"]
@@ -2670,21 +2662,15 @@ elif st.session_state.vista == "caja":
         f_fin_caja = col_c2.date_input("Hasta", value=hoy_caja, key="f_fin_caja")
 
         # INGRESOS — ventas pagadas (total - saldo = abonado)
-        with ThreadPoolExecutor(max_workers=5) as ex:
+        with ThreadPoolExecutor(max_workers=4) as ex:
             f_vf = ex.submit(sb_get, "ventas", f"select=fecha,total,abono,saldo,canal,cliente,factura_id&fecha=gte.{f_ini_caja}&fecha=lte.{f_fin_caja}&canal=in.(Fábrica,Carro)&order=fecha.desc")
             f_ab = ex.submit(sb_get, "creditos", f"select=fecha,cliente,canal,total,pagado&fecha=gte.{f_ini_caja}&fecha=lte.{f_fin_caja}&estado=eq.pagado&order=fecha.desc")
             f_mp = ex.submit(sb_get, "materia_prima", f"select=fecha,insumo,proveedor,precio_total,abono&fecha=gte.{f_ini_caja}&fecha=lte.{f_fin_caja}&order=fecha.desc")
-            f_cxc = ex.submit(sb_get, "ventas", "select=factura_id,cliente,canal,total,abono,saldo&saldo=gt.0&order=fecha.desc")
-            f_cxp = ex.submit(sb_get, "materia_prima", "select=id,insumo,proveedor,precio_total,abono,saldo&estado=eq.pendiente&order=fecha.desc")
-            f_cxc_m = ex.submit(sb_get, "creditos", "select=id,cliente,canal,total,pagado&estado=eq.pendiente")
             f_ing = ex.submit(sb_get, "caja_ingresos", f"select=*&fecha=gte.{f_ini_caja}&fecha=lte.{f_fin_caja}&order=fecha.desc")
         raw_ventas_caja = f_vf.result() or []
         raw_creditos_cobrados = f_ab.result() or []
         raw_mp_pagos = f_mp.result() or []
         raw_egresos = sb_get("caja_egresos", f"select=*&fecha=gte.{f_ini_caja}&fecha=lte.{f_fin_caja}&order=fecha.desc") or []
-        raw_cxc = f_cxc.result() or []
-        raw_cxp = f_cxp.result() or []
-        raw_cxc_m = f_cxc_m.result() or []
         raw_ingresos_manuales = f_ing.result() or []
 
         # Calcular ingresos — una sola entrada por factura (la primera fila de cada una)
@@ -2704,18 +2690,6 @@ elif st.session_state.vista == "caja":
 
         saldo_caja = total_ingresos - total_egresos
 
-        # Cuentas por cobrar a clientes (créditos de ventas, saldo pendiente) — una sola vez por factura
-        facturas_cxc = {}
-        for r in raw_cxc:
-            fid = r.get("factura_id", "")
-            if fid and fid not in facturas_cxc:
-                facturas_cxc[fid] = float(r.get("saldo", 0))
-        cuentas_por_cobrar_manual = sum(max(0.0, float(r["total"]) - float(r.get("pagado", 0) or 0)) for r in raw_cxc_m)
-        cuentas_por_cobrar = sum(facturas_cxc.values()) + cuentas_por_cobrar_manual
-
-        # Cuentas por pagar a proveedores (materia prima/insumos pendientes de pago)
-        cuentas_por_pagar = sum(float(r.get("saldo", 0)) for r in raw_cxp)
-
         # Tarjetas resumen
         color_saldo = "metric-green" if saldo_caja >= 0 else "metric-red"
         st.markdown(f"""
@@ -2726,63 +2700,7 @@ elif st.session_state.vista == "caja":
         </div>
         """, unsafe_allow_html=True)
 
-        st.markdown(f'<div class="section-label">{ICO_RECEIPT} Para contabilidad — créditos vigentes</div>', unsafe_allow_html=True)
-        st.markdown(f"""
-        <div class="metric-row">
-            <div class="metric-box metric-blue"><div class="val">{fmt(cuentas_por_cobrar)}</div><div class="lbl">Cuentas por cobrar (clientes)</div></div>
-            <div class="metric-box metric-red"><div class="val">{fmt(cuentas_por_pagar)}</div><div class="lbl">Cuentas por pagar (proveedores)</div></div>
-        </div>
-        """, unsafe_allow_html=True)
-
-        # Costo de producción del período y valor del inventario de producto terminado.
-        # Costo de producción = materia prima+saborizantes+empaque consumidos en el período
-        # (a precio promedio ponderado histórico, igual que en Materia Prima → Historial) +
-        # egresos de caja marcados como "costo de producción" (mano de obra de planta, etc.).
-        # Costo unitario = ese costo total / unidades producidas en el mismo período, aplicado
-        # al stock actual de producto terminado para valorizarlo.
-        with ThreadPoolExecutor(max_workers=4) as ex:
-            f_ent_prom = ex.submit(sb_get, "materia_prima", "select=insumo,precio_unitario,cantidad")
-            f_sal_periodo = ex.submit(sb_get, "salidas_mp", f"select=insumo,cantidad&fecha=gte.{f_ini_caja}&fecha=lte.{f_fin_caja}")
-            f_prod_periodo = ex.submit(sb_get, "produccion", f"select=cantidad&fecha=gte.{f_ini_caja}&fecha=lte.{f_fin_caja}")
-            f_stock_term = ex.submit(sb_get, "inventario", "select=stock")
-        raw_ent_prom_caja = f_ent_prom.result() or []
-        raw_sal_periodo_caja = f_sal_periodo.result() or []
-        raw_prod_periodo_caja = f_prod_periodo.result() or []
-        raw_stock_term_caja = f_stock_term.result() or []
-
-        prom_pond_caja = {}
-        for r in raw_ent_prom_caja:
-            k = r["insumo"]
-            pu = float(r.get("precio_unitario", 0))
-            cant = float(r.get("cantidad", 0))
-            if pu > 0 and cant > 0:
-                if k not in prom_pond_caja:
-                    prom_pond_caja[k] = {"total_costo": 0, "total_cant": 0}
-                prom_pond_caja[k]["total_costo"] += pu * cant
-                prom_pond_caja[k]["total_cant"]  += cant
-
-        costo_mp_periodo = 0
-        for r in raw_sal_periodo_caja:
-            d = prom_pond_caja.get(r["insumo"])
-            if d and d["total_cant"] > 0:
-                costo_mp_periodo += float(r["cantidad"]) * (d["total_costo"] / d["total_cant"])
-
-        costo_planta_caja = sum(float(r["valor"]) for r in raw_egresos if r.get("tipo") == "costo")
-        costo_produccion_periodo = costo_mp_periodo + costo_planta_caja
-        unidades_producidas_periodo = sum(float(r["cantidad"]) for r in raw_prod_periodo_caja)
-        costo_unitario_prod = (costo_produccion_periodo / unidades_producidas_periodo) if unidades_producidas_periodo > 0 else 0
-        stock_terminado_total = sum(float(r["stock"]) for r in raw_stock_term_caja)
-        valor_inventario_terminado = costo_unitario_prod * stock_terminado_total
-
-        st.markdown(f'<div class="section-label">{ICO_RECEIPT} Para contabilidad — costo de producción</div>', unsafe_allow_html=True)
-        st.markdown(f"""
-        <div class="metric-row">
-            <div class="metric-box metric-blue"><div class="val">{fmt(round(costo_produccion_periodo))}</div><div class="lbl">Costo de producción del período</div></div>
-            <div class="metric-box metric-yellow"><div class="val">{fmt(round(costo_unitario_prod))}</div><div class="lbl">Costo unitario promedio</div></div>
-            <div class="metric-box metric-green"><div class="val">{fmt(round(valor_inventario_terminado))}</div><div class="lbl">Producto terminado en bodega</div></div>
-        </div>
-        """, unsafe_allow_html=True)
-        st.caption(f"💡 Costo de producción = materia prima+saborizantes+empaque consumidos en el período (a precio promedio histórico) + egresos marcados como \"costo de producción\" ({fmt(round(costo_planta_caja))}). Costo unitario = ese total ÷ {unidades_producidas_periodo:.0f} unidades producidas en el período. Los egresos sin clasificar (de antes de este cambio) no cuentan aquí.")
+        # Cuentas por cobrar/pagar y costo de producción se ven en Contador (solo admin).
 
         # Detalle ingresos
         if ingresos_ventas > 0 or ingresos_manuales > 0:
@@ -3209,3 +3127,119 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
                 st.download_button("⬇️ Descargar inventario PDF", pdf_bytes, f"inventario_{fecha_hoy()}.pdf", "application/pdf", key="dl_pdf_i")
 
         st.markdown(f'<div class="warn-box">{ICO_BULB} Guarda estos archivos semanalmente como respaldo.</div>', unsafe_allow_html=True)
+
+# ══════════════════════════════════════════════════════════════════════════════
+# VISTA: CONTADOR (solo admin) — inventario invertido, costo de producción,
+# cuentas por cobrar/pagar. Antes vivían en Materia Prima→Historial y Caja→Resumen,
+# visibles para cualquiera; se consolidaron aquí porque son datos financieros.
+# ══════════════════════════════════════════════════════════════════════════════
+elif st.session_state.vista == "contador" and st.session_state.es_admin:
+    st.markdown(f'<div class="section-label">{ICO_RECEIPT} Contador</div>', unsafe_allow_html=True)
+
+    # --- Inventario total invertido (materia prima + saborizantes + empaque) ---
+    raw_ent_todo_c = sb_get("materia_prima", "select=insumo,cantidad,precio_unitario,precio_total") or []
+    raw_sal_todo_c = sb_get("salidas_mp", "select=insumo,cantidad") or []
+    stock_actual_todo_c = {}
+    for r in raw_ent_todo_c:
+        stock_actual_todo_c[r["insumo"]] = stock_actual_todo_c.get(r["insumo"], 0) + float(r["cantidad"])
+    for r in raw_sal_todo_c:
+        stock_actual_todo_c[r["insumo"]] = stock_actual_todo_c.get(r["insumo"], 0) - float(r["cantidad"])
+
+    prom_pond_todo_c = {}
+    for r in raw_ent_todo_c:
+        k = r["insumo"]
+        pu = float(r.get("precio_unitario", 0))
+        cant = float(r.get("cantidad", 0))
+        if pu > 0 and cant > 0:
+            if k not in prom_pond_todo_c:
+                prom_pond_todo_c[k] = {"total_costo": 0, "total_cant": 0}
+            prom_pond_todo_c[k]["total_costo"] += pu * cant
+            prom_pond_todo_c[k]["total_cant"]  += cant
+
+    total_invertido_c = 0
+    for k, cant_stock in stock_actual_todo_c.items():
+        d = prom_pond_todo_c.get(k)
+        if d and d["total_cant"] > 0 and cant_stock > 0:
+            total_invertido_c += cant_stock * (d["total_costo"] / d["total_cant"])
+
+    st.markdown(
+        f'<div class="calc-box">💰 Inventario total invertido ahora mismo '
+        f'(materia prima + saborizantes + empaque): <b>{fmt(round(total_invertido_c))}</b></div>',
+        unsafe_allow_html=True
+    )
+
+    # --- Cuentas por cobrar / pagar (vigentes, sin filtro de fecha) ---
+    with ThreadPoolExecutor(max_workers=3) as ex:
+        f_cxc_c = ex.submit(sb_get, "ventas", "select=factura_id,saldo&saldo=gt.0&order=fecha.desc")
+        f_cxp_c = ex.submit(sb_get, "materia_prima", "select=id,saldo&estado=eq.pendiente")
+        f_cxc_m_c = ex.submit(sb_get, "creditos", "select=id,total,pagado&estado=eq.pendiente")
+    raw_cxc_c = f_cxc_c.result() or []
+    raw_cxp_c = f_cxp_c.result() or []
+    raw_cxc_m_c = f_cxc_m_c.result() or []
+
+    facturas_cxc_c = {}
+    for r in raw_cxc_c:
+        fid = r.get("factura_id", "")
+        if fid and fid not in facturas_cxc_c:
+            facturas_cxc_c[fid] = float(r.get("saldo", 0))
+    cuentas_por_cobrar_c = sum(facturas_cxc_c.values()) + sum(max(0.0, float(r["total"]) - float(r.get("pagado", 0) or 0)) for r in raw_cxc_m_c)
+    cuentas_por_pagar_c = sum(float(r.get("saldo", 0)) for r in raw_cxp_c)
+
+    st.markdown(f'<div class="section-label">{ICO_RECEIPT} Cuentas vigentes</div>', unsafe_allow_html=True)
+    st.markdown(f"""
+    <div class="metric-row">
+        <div class="metric-box metric-blue"><div class="val">{fmt(cuentas_por_cobrar_c)}</div><div class="lbl">Cuentas por cobrar (clientes)</div></div>
+        <div class="metric-box metric-red"><div class="val">{fmt(cuentas_por_pagar_c)}</div><div class="lbl">Cuentas por pagar (proveedores)</div></div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # --- Costo de producción del período / costo unitario / producto terminado valorizado ---
+    st.markdown(f'<div class="section-label">{ICO_RECEIPT} Costo de producción</div>', unsafe_allow_html=True)
+    col_ct1, col_ct2 = st.columns(2)
+    f_ini_cont = col_ct1.date_input("Desde", value=datetime.now(COL_TZ).date().replace(day=1), key="f_ini_cont")
+    f_fin_cont = col_ct2.date_input("Hasta", value=datetime.now(COL_TZ).date(), key="f_fin_cont")
+
+    with ThreadPoolExecutor(max_workers=4) as ex:
+        f_ent_prom_c = ex.submit(sb_get, "materia_prima", "select=insumo,precio_unitario,cantidad")
+        f_sal_periodo_c = ex.submit(sb_get, "salidas_mp", f"select=insumo,cantidad&fecha=gte.{f_ini_cont}&fecha=lte.{f_fin_cont}")
+        f_prod_periodo_c = ex.submit(sb_get, "produccion", f"select=cantidad&fecha=gte.{f_ini_cont}&fecha=lte.{f_fin_cont}")
+        f_stock_term_c = ex.submit(sb_get, "inventario", "select=stock")
+        f_egresos_c = ex.submit(sb_get, "caja_egresos", f"select=valor,tipo&fecha=gte.{f_ini_cont}&fecha=lte.{f_fin_cont}")
+    raw_ent_prom_c = f_ent_prom_c.result() or []
+    raw_sal_periodo_c = f_sal_periodo_c.result() or []
+    raw_prod_periodo_c = f_prod_periodo_c.result() or []
+    raw_stock_term_c = f_stock_term_c.result() or []
+    raw_egresos_cont = f_egresos_c.result() or []
+
+    prom_pond_c = {}
+    for r in raw_ent_prom_c:
+        k = r["insumo"]
+        pu = float(r.get("precio_unitario", 0))
+        cant = float(r.get("cantidad", 0))
+        if pu > 0 and cant > 0:
+            if k not in prom_pond_c:
+                prom_pond_c[k] = {"total_costo": 0, "total_cant": 0}
+            prom_pond_c[k]["total_costo"] += pu * cant
+            prom_pond_c[k]["total_cant"]  += cant
+
+    costo_mp_periodo_c = 0
+    for r in raw_sal_periodo_c:
+        d = prom_pond_c.get(r["insumo"])
+        if d and d["total_cant"] > 0:
+            costo_mp_periodo_c += float(r["cantidad"]) * (d["total_costo"] / d["total_cant"])
+
+    costo_planta_c = sum(float(r["valor"]) for r in raw_egresos_cont if r.get("tipo") == "costo")
+    costo_produccion_periodo_c = costo_mp_periodo_c + costo_planta_c
+    unidades_producidas_periodo_c = sum(float(r["cantidad"]) for r in raw_prod_periodo_c)
+    costo_unitario_prod_c = (costo_produccion_periodo_c / unidades_producidas_periodo_c) if unidades_producidas_periodo_c > 0 else 0
+    stock_terminado_total_c = sum(float(r["stock"]) for r in raw_stock_term_c)
+    valor_inventario_terminado_c = costo_unitario_prod_c * stock_terminado_total_c
+
+    st.markdown(f"""
+    <div class="metric-row">
+        <div class="metric-box metric-blue"><div class="val">{fmt(round(costo_produccion_periodo_c))}</div><div class="lbl">Costo de producción del período</div></div>
+        <div class="metric-box metric-yellow"><div class="val">{fmt(round(costo_unitario_prod_c))}</div><div class="lbl">Costo unitario promedio</div></div>
+        <div class="metric-box metric-green"><div class="val">{fmt(round(valor_inventario_terminado_c))}</div><div class="lbl">Producto terminado en bodega</div></div>
+    </div>
+    """, unsafe_allow_html=True)
+    st.caption(f"💡 Costo de producción = materia prima+saborizantes+empaque consumidos en el período (a precio promedio histórico) + egresos marcados como \"costo de producción\" ({fmt(round(costo_planta_c))}). Costo unitario = ese total ÷ {unidades_producidas_periodo_c:.0f} unidades producidas en el período. Los egresos sin clasificar no cuentan aquí.")
