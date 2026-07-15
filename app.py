@@ -2734,6 +2734,56 @@ elif st.session_state.vista == "caja":
         </div>
         """, unsafe_allow_html=True)
 
+        # Costo de producción del período y valor del inventario de producto terminado.
+        # Costo de producción = materia prima+saborizantes+empaque consumidos en el período
+        # (a precio promedio ponderado histórico, igual que en Materia Prima → Historial) +
+        # egresos de caja marcados como "costo de producción" (mano de obra de planta, etc.).
+        # Costo unitario = ese costo total / unidades producidas en el mismo período, aplicado
+        # al stock actual de producto terminado para valorizarlo.
+        with ThreadPoolExecutor(max_workers=4) as ex:
+            f_ent_prom = ex.submit(sb_get, "materia_prima", "select=insumo,precio_unitario,cantidad")
+            f_sal_periodo = ex.submit(sb_get, "salidas_mp", f"select=insumo,cantidad&fecha=gte.{f_ini_caja}&fecha=lte.{f_fin_caja}")
+            f_prod_periodo = ex.submit(sb_get, "produccion", f"select=cantidad&fecha=gte.{f_ini_caja}&fecha=lte.{f_fin_caja}")
+            f_stock_term = ex.submit(sb_get, "inventario", "select=stock")
+        raw_ent_prom_caja = f_ent_prom.result() or []
+        raw_sal_periodo_caja = f_sal_periodo.result() or []
+        raw_prod_periodo_caja = f_prod_periodo.result() or []
+        raw_stock_term_caja = f_stock_term.result() or []
+
+        prom_pond_caja = {}
+        for r in raw_ent_prom_caja:
+            k = r["insumo"]
+            pu = float(r.get("precio_unitario", 0))
+            cant = float(r.get("cantidad", 0))
+            if pu > 0 and cant > 0:
+                if k not in prom_pond_caja:
+                    prom_pond_caja[k] = {"total_costo": 0, "total_cant": 0}
+                prom_pond_caja[k]["total_costo"] += pu * cant
+                prom_pond_caja[k]["total_cant"]  += cant
+
+        costo_mp_periodo = 0
+        for r in raw_sal_periodo_caja:
+            d = prom_pond_caja.get(r["insumo"])
+            if d and d["total_cant"] > 0:
+                costo_mp_periodo += float(r["cantidad"]) * (d["total_costo"] / d["total_cant"])
+
+        costo_planta_caja = sum(float(r["valor"]) for r in raw_egresos if r.get("tipo") == "costo")
+        costo_produccion_periodo = costo_mp_periodo + costo_planta_caja
+        unidades_producidas_periodo = sum(float(r["cantidad"]) for r in raw_prod_periodo_caja)
+        costo_unitario_prod = (costo_produccion_periodo / unidades_producidas_periodo) if unidades_producidas_periodo > 0 else 0
+        stock_terminado_total = sum(float(r["stock"]) for r in raw_stock_term_caja)
+        valor_inventario_terminado = costo_unitario_prod * stock_terminado_total
+
+        st.markdown(f'<div class="section-label">{ICO_RECEIPT} Para contabilidad — costo de producción</div>', unsafe_allow_html=True)
+        st.markdown(f"""
+        <div class="metric-row">
+            <div class="metric-box metric-blue"><div class="val">{fmt(round(costo_produccion_periodo))}</div><div class="lbl">Costo de producción del período</div></div>
+            <div class="metric-box metric-yellow"><div class="val">{fmt(round(costo_unitario_prod))}</div><div class="lbl">Costo unitario promedio</div></div>
+            <div class="metric-box metric-green"><div class="val">{fmt(round(valor_inventario_terminado))}</div><div class="lbl">Producto terminado en bodega</div></div>
+        </div>
+        """, unsafe_allow_html=True)
+        st.caption(f"💡 Costo de producción = materia prima+saborizantes+empaque consumidos en el período (a precio promedio histórico) + egresos marcados como \"costo de producción\" ({fmt(round(costo_planta_caja))}). Costo unitario = ese total ÷ {unidades_producidas_periodo:.0f} unidades producidas en el período. Los egresos sin clasificar (de antes de este cambio) no cuentan aquí.")
+
         # Detalle ingresos
         if ingresos_ventas > 0 or ingresos_manuales > 0:
             st.markdown('<div class="section-label">Detalle ingresos</div>', unsafe_allow_html=True)
@@ -2765,6 +2815,13 @@ elif st.session_state.vista == "caja":
             st.markdown('<div class="section-label">Registrar egreso / gasto</div>', unsafe_allow_html=True)
             concepto_eg = st.text_input("Concepto", placeholder="Ej: Pago arriendo, gas, luz...", key="concepto_eg")
             cat_eg = st.selectbox("Categoría", ["Servicios", "Arriendo", "Transporte", "Mantenimiento", "Salario", "Otro"], key="cat_eg")
+            tipo_eg_label = st.radio(
+                "¿Este gasto es de producción o administrativo/ventas?",
+                ["🏭 Costo de producción (planta)", "🏢 Gasto operativo (admin/ventas)"],
+                key="tipo_eg",
+                help="Para el costo de producción (mano de obra de planta, servicios/mantenimiento de la fábrica) vs. gastos que no entran al costo del producto (arriendo de oficina, transporte de venta, etc.)."
+            )
+            tipo_eg = "costo" if "producción" in tipo_eg_label else "gasto"
             valor_eg = st.number_input("Valor ($)", min_value=0, value=0, step=1000, key="valor_eg")
 
             if st.button("✅ Registrar egreso", key="btn_eg"):
@@ -2776,7 +2833,8 @@ elif st.session_state.vista == "caja":
                     h = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}",
                          "Content-Type": "application/json", "Prefer": "return=minimal"}
                     data_eg = {"fecha": fecha_hoy(), "hora": ahora(),
-                               "concepto": concepto_eg.strip(), "valor": float(valor_eg), "categoria": cat_eg}
+                               "concepto": concepto_eg.strip(), "valor": float(valor_eg), "categoria": cat_eg,
+                               "tipo": tipo_eg}
                     try:
                         r_eg = requests.post(f"{SUPABASE_URL}/rest/v1/caja_egresos", headers=h, json=data_eg, timeout=10)
                         if r_eg.ok:
