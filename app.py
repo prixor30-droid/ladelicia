@@ -1801,6 +1801,22 @@ elif st.session_state.vista == "carro":
             st.info(f"No hay cargues registrados el {fecha_consulta_cg_str}.")
 
     with sub2:
+        # Visible para todos (no solo admin) — Javier y Edison lo necesitan para
+        # saber cuánto entregar al final del día. Arriba de todo para que se vea
+        # sin tener que bajar.
+        raw_resumen_carro = sb_get("ventas", f"select=total,cantidad&fecha=eq.{fecha_hoy()}&canal=eq.Carro")
+        if raw_resumen_carro:
+            total_carro_dia  = sum(r["total"]    for r in raw_resumen_carro if r["total"] > 0)
+            bolsas_carro_dia = sum(r["cantidad"] for r in raw_resumen_carro if r["cantidad"] > 0)
+            st.markdown('<div class="section-label">Resumen del día — Javier & Edison</div>', unsafe_allow_html=True)
+            st.markdown(
+                f'<div class="factura-box">'
+                f'<div class="factura-row"><span>{ICO_CART} Bolsas vendidas hoy</span><span><b>{bolsas_carro_dia}</b></span></div>'
+                f'<div class="factura-total"><span>{ICO_DOLLAR} Total a entregar</span><span>{fmt(total_carro_dia)}</span></div>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
+
         render_venta_canal(CONFIG_CARRO, mostrar_creditos=False)
 
         # Papas disponibles del cargue — histórico completo
@@ -1815,21 +1831,6 @@ elif st.session_state.vista == "carro":
             st.markdown(f'<div class="factura-box">{filas_cg}</div>', unsafe_allow_html=True)
         else:
             st.caption("No hay cargue activo hoy.")
-
-        # Visible para todos (no solo admin) — Javier y Edison lo necesitan para
-        # saber cuánto entregar al final del día.
-        raw_resumen_carro = sb_get("ventas", f"select=total,cantidad&fecha=eq.{fecha_hoy()}&canal=eq.Carro")
-        if raw_resumen_carro:
-            total_carro_dia  = sum(r["total"]    for r in raw_resumen_carro if r["total"] > 0)
-            bolsas_carro_dia = sum(r["cantidad"] for r in raw_resumen_carro if r["cantidad"] > 0)
-            st.markdown('<div class="section-label">Resumen del día — Javier & Edison</div>', unsafe_allow_html=True)
-            st.markdown(
-                f'<div class="factura-box">'
-                f'<div class="factura-row"><span>{ICO_CART} Bolsas vendidas hoy</span><span><b>{bolsas_carro_dia}</b></span></div>'
-                f'<div class="factura-total"><span>{ICO_DOLLAR} Total a entregar</span><span>{fmt(total_carro_dia)}</span></div>'
-                f'</div>',
-                unsafe_allow_html=True
-            )
 
     with sub3:
         st.markdown(f'<div class="section-label">Devolución al inventario {ICO_REFRESH}</div>', unsafe_allow_html=True)
@@ -1916,10 +1917,9 @@ elif st.session_state.vista == "carro":
 # ══════════════════════════════════════════════════════════════════════════════
 elif st.session_state.vista == "fabrica":
 
-    render_venta_canal(CONFIG_FABRICA)
-
     # Visible para todos (no solo admin) — Sofía y Andrea lo necesitan para
-    # saber cuánto entregar al final del día.
+    # saber cuánto entregar al final del día. Arriba de todo para que se vea
+    # sin tener que bajar.
     raw_vf = sb_get("ventas", f"select=total,cantidad,vendedor&fecha=eq.{fecha_hoy()}&canal=in.(Fábrica,Cambio)")
     if raw_vf:
         total_fab_dia  = sum(r["total"]    for r in raw_vf if r["total"] > 0)
@@ -1941,6 +1941,8 @@ elif st.session_state.vista == "fabrica":
             f'</div>',
             unsafe_allow_html=True
         )
+
+    render_venta_canal(CONFIG_FABRICA)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # VISTA: RESUMEN (solo admin)
