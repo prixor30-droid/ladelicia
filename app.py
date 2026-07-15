@@ -2394,51 +2394,17 @@ elif st.session_state.vista == "materia_prima":
             ) or []
             if raw_hist_rollo:
                 st.markdown('<div class="section-label">Últimos pesajes</div>', unsafe_allow_html=True)
-                st.caption("Toca cualquier celda para editar, luego Guardar cambios.")
-                df_hist_rollo = pd.DataFrame(raw_hist_rollo)
-                df_edit_rollo = df_hist_rollo[["fecha", "hora", "peso_antes", "peso_despues"]].copy()
-                df_edit_rollo.columns = ["Fecha", "Hora", "Peso antes", "Peso después"]
-
-                edited_rollo = st.data_editor(
-                    df_edit_rollo,
-                    use_container_width=True,
-                    hide_index=True,
-                    column_config={
-                        "Fecha":        st.column_config.TextColumn("Fecha"),
-                        "Hora":         st.column_config.TextColumn("Hora"),
-                        "Peso antes":   st.column_config.NumberColumn("Peso antes", min_value=0.0, step=0.001, format="%.3f"),
-                        "Peso después": st.column_config.NumberColumn("Peso después", min_value=0.0, step=0.001, format="%.3f"),
-                    },
-                    key=f"rollo_hist_editor_{insumo_rollo}"
-                )
-
-                col_ghr, col_dhr = st.columns(2)
-                if col_ghr.button("💾 Guardar cambios", key="btn_save_hist_rollo"):
-                    for i, row in edited_rollo.iterrows():
-                        orig = df_hist_rollo.iloc[i]
-                        cambios = {}
-                        fecha_new = str(row["Fecha"])
-                        hora_new  = str(row["Hora"])
-                        pa_new    = float(row["Peso antes"])
-                        pd_new    = float(row["Peso después"])
-                        if fecha_new != str(orig["fecha"]):
-                            cambios["fecha"] = fecha_new
-                        if hora_new != str(orig["hora"]):
-                            cambios["hora"] = hora_new
-                        pa_orig = float(orig["peso_antes"])
-                        pd_orig = float(orig["peso_despues"])
-                        if pa_new != pa_orig or pd_new != pd_orig:
-                            cambios["peso_antes"] = pa_new
-                            cambios["peso_despues"] = pd_new
-                            cambios["cantidad"] = max(0.0, pa_new - pd_new)
-                        if cambios:
-                            sb_patch("salidas_mp", f"id=eq.{orig['id']}", cambios)
-                    time.sleep(0.3)
-                    st.rerun()
+                df_hist_rollo = pd.DataFrame([{
+                    "Fecha": r["fecha"], "Hora": r["hora"],
+                    "Peso antes": f'{float(r["peso_antes"]):.3f}',
+                    "Peso después": f'{float(r["peso_despues"]):.3f}',
+                    "Consumo": f'{float(r["cantidad"]):.3f}',
+                } for r in raw_hist_rollo])
+                tabla_view(df_hist_rollo)
 
                 ids_hist_rollo = {f"{r['fecha']} {r['hora']} — {float(r['peso_antes']):.3f}→{float(r['peso_despues']):.3f}kg": r for r in raw_hist_rollo}
                 sel_del_hist_rollo = st.selectbox("Eliminar registro", ["— Selecciona —"] + list(ids_hist_rollo.keys()), key="sel_del_hist_rollo")
-                if sel_del_hist_rollo != "— Selecciona —" and col_dhr.button("🗑️ Eliminar", key="btn_del_hist_rollo"):
+                if sel_del_hist_rollo != "— Selecciona —" and st.button("🗑️ Eliminar", key="btn_del_hist_rollo"):
                     reg_del_hist_rollo = ids_hist_rollo[sel_del_hist_rollo]
                     sb_delete("salidas_mp", f"id=eq.{reg_del_hist_rollo['id']}")
                     time.sleep(0.3)
