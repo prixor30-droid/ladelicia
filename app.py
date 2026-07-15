@@ -2271,7 +2271,6 @@ elif st.session_state.vista == "materia_prima":
             hay_rollo_activo = rollo_previo is not None and float(rollo_previo["peso_actual"]) >= UMBRAL_ROLLO_AGOTADO
 
             key_peso_inicial = f"rollo_peso_inicial_nuevo_{insumo_rollo}"
-            key_peso_cono     = f"rollo_peso_cono_{insumo_rollo}"
             key_peso_final    = f"rollo_peso_final_{insumo_rollo}"
 
             # Stock disponible en bodega (total comprado - total consumido), igual que en
@@ -2291,29 +2290,12 @@ elif st.session_state.vista == "materia_prima":
                 st.markdown(f'<div class="info-box">{ICO_PACKAGE} Rollo activo de <b>{insumo_rollo}</b> — peso inicial (último registrado): <b>{peso_inicial_rollo:.3f} kg</b></div>', unsafe_allow_html=True)
             else:
                 st.markdown(f'<div class="warn-box">{ICO_WARN} No hay rollo activo de <b>{insumo_rollo}</b>. Pesa el rollo nuevo que sacaste de bodega y anota su peso inicial.</div>', unsafe_allow_html=True)
-                # text_input (no number_input) y sin valor precargado: en una tablet Samsung
-                # específica, el number_input con un valor por defecto ya escrito (ej "1.000")
-                # no seleccionaba todo el texto al tocarlo, así que lo tecleado se insertaba
-                # junto al valor viejo en vez de reemplazarlo, dañando el cálculo. Con el campo
-                # vacío no hay nada con qué mezclarse.
-                texto_bruto_rollo = st.text_input(
-                    "Peso en báscula del rollo nuevo (incluye cono de cartón, kg)",
-                    value="", placeholder="Ej: 30.000", key=key_peso_inicial
+                peso_inicial_rollo = st.number_input(
+                    "Peso inicial del rollo nuevo (kg)",
+                    min_value=0.001, max_value=max(0.001, stock_disp_emp),
+                    value=min(1.0, max(0.001, stock_disp_emp)),
+                    step=0.001, format="%.3f", key=key_peso_inicial
                 )
-                tope_bruto_rollo = max(0.001, stock_disp_emp)
-                try:
-                    peso_bruto_rollo = max(0.001, min(tope_bruto_rollo, round(float(texto_bruto_rollo.strip().replace(",", ".")), 3)))
-                except ValueError:
-                    peso_bruto_rollo = 0.0
-                    if texto_bruto_rollo.strip():
-                        st.markdown(f'<div class="alert-low">{ICO_WARN} Ese peso no es un número válido.</div>', unsafe_allow_html=True)
-                peso_cono_rollo = st.number_input(
-                    "Peso del cono de cartón (dato de la etiqueta, kg)",
-                    min_value=0.0, max_value=peso_bruto_rollo,
-                    value=0.0, step=0.001, format="%.3f", key=key_peso_cono
-                )
-                peso_inicial_rollo = max(0.0, peso_bruto_rollo - peso_cono_rollo)
-                st.markdown(f'<div class="calc-box">⚖️ Peso real del empaque (sin cono): <b>{peso_inicial_rollo:.3f} kg</b></div>', unsafe_allow_html=True)
 
             peso_final_rollo = st.number_input(
                 "Peso final (después de producir, kg)",
@@ -2344,7 +2326,7 @@ elif st.session_state.vista == "materia_prima":
                         # próxima vez (aunque cambie el "value=" por defecto) — por eso al
                         # agotarse un rollo, el campo de peso inicial nuevo mostraba el peso
                         # del rollo anterior en vez de pedir uno limpio.
-                        for k in (key_peso_inicial, key_peso_cono, key_peso_final):
+                        for k in (key_peso_inicial, key_peso_final):
                             st.session_state.pop(k, None)
                         st.markdown(f'<div class="success-toast">{ICO_CHECK} Pesaje registrado — {consumo_rollo:.3f}kg de {insumo_rollo} descontados del stock de empaque.</div>', unsafe_allow_html=True)
                         time.sleep(0.3); st.rerun()
