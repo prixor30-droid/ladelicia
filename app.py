@@ -1909,14 +1909,25 @@ elif st.session_state.vista == "carro":
         # saber cuánto entregar al final del día. Arriba de todo para que se vea
         # sin tener que bajar.
         raw_resumen_carro = sb_get("ventas", f"select=total,cantidad,factura_id,abono,saldo&fecha=eq.{fecha_hoy()}&canal=eq.Carro")
-        if raw_resumen_carro:
-            bolsas_carro_dia = sum(r["cantidad"] for r in raw_resumen_carro if r["cantidad"] > 0)
+        # Cobros de hoy sobre créditos viejos (facturas de otros días que se
+        # cobraron hoy en la calle) — sin esto, "Total a entregar" no incluía esa
+        # plata aunque sí la hayan recibido en efectivo.
+        raw_pg_carro_dia = sb_get("pagos_credito", f"select=fecha,monto,tipo,factura_id&canal=eq.Carro") or []
+        cobrado_despues_carro_dia = {}
+        for r in raw_pg_carro_dia:
+            if r.get("tipo") == "venta" and r.get("factura_id"):
+                fid = r["factura_id"]
+                cobrado_despues_carro_dia[fid] = cobrado_despues_carro_dia.get(fid, 0) + float(r["monto"])
+        cobro_creditos_carro_hoy = sum(float(r["monto"]) for r in raw_pg_carro_dia if r["fecha"] == fecha_hoy())
+        if raw_resumen_carro or cobro_creditos_carro_hoy:
+            bolsas_carro_dia = sum(r["cantidad"] for r in raw_resumen_carro if r["cantidad"] > 0) if raw_resumen_carro else 0
             facturas_carro_dia = {}
-            for r in raw_resumen_carro:
+            for r in (raw_resumen_carro or []):
                 fid = r.get("factura_id", "")
                 if fid and fid not in facturas_carro_dia:
-                    facturas_carro_dia[fid] = {"abono": float(r.get("abono", 0) or 0), "saldo": float(r.get("saldo", 0) or 0)}
-            cobrado_carro_dia = sum(f["abono"] for f in facturas_carro_dia.values())
+                    abono_inicial = max(0.0, float(r.get("abono", 0) or 0) - cobrado_despues_carro_dia.get(fid, 0))
+                    facturas_carro_dia[fid] = {"abono": abono_inicial, "saldo": float(r.get("saldo", 0) or 0)}
+            cobrado_carro_dia = sum(f["abono"] for f in facturas_carro_dia.values()) + cobro_creditos_carro_hoy
             credito_carro_dia = sum(f["saldo"] for f in facturas_carro_dia.values())
             st.markdown('<div class="section-label">Resumen del día — Javier & Edison</div>', unsafe_allow_html=True)
             st.markdown(
@@ -2036,19 +2047,29 @@ elif st.session_state.vista == "fabrica":
         # saber cuánto entregar al final del día. Arriba de todo para que se vea
         # sin tener que bajar.
         raw_vf = sb_get("ventas", f"select=total,cantidad,vendedor,factura_id,abono,saldo&fecha=eq.{fecha_hoy()}&canal=in.(Fábrica,Cambio)")
-        if raw_vf:
-            bolsas_fab_dia = sum(r["cantidad"] for r in raw_vf if r["cantidad"] > 0)
+        # Cobros de hoy sobre créditos viejos (facturas de otros días cobradas hoy)
+        # — sin esto, "Total a entregar" no incluía esa plata aunque sí se recibió.
+        raw_pg_fab_dia = sb_get("pagos_credito", f"select=fecha,monto,tipo,factura_id&canal=eq.Fábrica") or []
+        cobrado_despues_fab_dia = {}
+        for r in raw_pg_fab_dia:
+            if r.get("tipo") == "venta" and r.get("factura_id"):
+                fid = r["factura_id"]
+                cobrado_despues_fab_dia[fid] = cobrado_despues_fab_dia.get(fid, 0) + float(r["monto"])
+        cobro_creditos_fab_hoy = sum(float(r["monto"]) for r in raw_pg_fab_dia if r["fecha"] == fecha_hoy())
+        if raw_vf or cobro_creditos_fab_hoy:
+            bolsas_fab_dia = sum(r["cantidad"] for r in raw_vf if r["cantidad"] > 0) if raw_vf else 0
             por_vendedor = {}
-            for r in raw_vf:
+            for r in (raw_vf or []):
                 if r["total"] > 0:
                     v = r["vendedor"]
                     por_vendedor[v] = por_vendedor.get(v, 0) + r["total"]
             facturas_fab_dia = {}
-            for r in raw_vf:
+            for r in (raw_vf or []):
                 fid = r.get("factura_id", "")
                 if fid and fid not in facturas_fab_dia:
-                    facturas_fab_dia[fid] = {"abono": float(r.get("abono", 0) or 0), "saldo": float(r.get("saldo", 0) or 0)}
-            cobrado_fab_dia = sum(f["abono"] for f in facturas_fab_dia.values())
+                    abono_inicial = max(0.0, float(r.get("abono", 0) or 0) - cobrado_despues_fab_dia.get(fid, 0))
+                    facturas_fab_dia[fid] = {"abono": abono_inicial, "saldo": float(r.get("saldo", 0) or 0)}
+            cobrado_fab_dia = sum(f["abono"] for f in facturas_fab_dia.values()) + cobro_creditos_fab_hoy
             credito_fab_dia = sum(f["saldo"] for f in facturas_fab_dia.values())
             st.markdown('<div class="section-label">Resumen del día — Fábrica</div>', unsafe_allow_html=True)
             filas_v = "".join(
@@ -3392,24 +3413,41 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
     with sub_r1:
         st.markdown('<div class="section-label">Resumen del día</div>', unsafe_allow_html=True)
         raw_vt = sb_get("ventas", f"select=*&fecha=eq.{fecha_hoy()}&order=hora.asc")
-        if not raw_vt:
+
+        # Cobros de crédito de hoy (vía "Cobrar" en créditos pendientes) — incluye
+        # tanto ventas de hoy como facturas viejas que se cobraron hoy en la calle.
+        # Sin esto, si Edison/Javier cobran una factura de días anteriores, esa
+        # plata no aparecía por ningún lado en "Resumen del día".
+        raw_pg_hoy = sb_get("pagos_credito", "select=fecha,monto,tipo,factura_id,canal") or []
+        cobrado_despues_hoy = {}
+        for r in raw_pg_hoy:
+            if r.get("tipo") == "venta" and r.get("factura_id"):
+                fid = r["factura_id"]
+                cobrado_despues_hoy[fid] = cobrado_despues_hoy.get(fid, 0) + float(r["monto"])
+        cobro_creditos_hoy_por_canal = {}
+        for r in raw_pg_hoy:
+            if r["fecha"] == fecha_hoy():
+                cobro_creditos_hoy_por_canal[r["canal"]] = cobro_creditos_hoy_por_canal.get(r["canal"], 0.0) + float(r["monto"])
+
+        if not raw_vt and not cobro_creditos_hoy_por_canal:
             st.info("Aún no hay ventas hoy.")
         else:
-            df_vt = pd.DataFrame(raw_vt)
-
             # Dinero realmente cobrado y pendiente en créditos — una sola vez por
             # factura (abono/saldo quedan repetidos en cada línea de una misma factura).
+            # El abono se corrige restando lo que ya se contó aparte en cobro_creditos_hoy
+            # (para no duplicar una factura de hoy que también se cobró hoy mismo después).
             facturas_hoy = {}
-            for r in raw_vt:
+            for r in (raw_vt or []):
                 fid = r.get("factura_id", "")
                 if fid and fid not in facturas_hoy:
+                    abono_inicial = max(0.0, float(r.get("abono", 0)) - cobrado_despues_hoy.get(fid, 0))
                     facturas_hoy[fid] = {
                         "canal": r.get("canal", ""),
-                        "abono": float(r.get("abono", 0)),
+                        "abono": abono_inicial,
                         "saldo": float(r.get("saldo", 0)),
                     }
-            cobrado_fab   = sum(f["abono"] for f in facturas_hoy.values() if f["canal"] == "Fábrica")
-            cobrado_carro = sum(f["abono"] for f in facturas_hoy.values() if f["canal"] == "Carro")
+            cobrado_fab   = sum(f["abono"] for f in facturas_hoy.values() if f["canal"] == "Fábrica") + cobro_creditos_hoy_por_canal.get("Fábrica", 0.0)
+            cobrado_carro = sum(f["abono"] for f in facturas_hoy.values() if f["canal"] == "Carro")   + cobro_creditos_hoy_por_canal.get("Carro", 0.0)
             pendiente_hoy = sum(f["saldo"] for f in facturas_hoy.values()) + _pendiente_creditos_antiguos(fecha_hoy(), fecha_hoy())
 
             st.markdown(f"""
@@ -3419,8 +3457,10 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
                 <div class="metric-box metric-green"><div class="val">{fmt(cobrado_fab+cobrado_carro)}</div><div class="lbl">Total cobrado</div></div>
                 <div class="metric-box metric-red"><div class="val">{fmt(pendiente_hoy)}</div><div class="lbl">Pendiente en créditos</div></div>
             </div>""", unsafe_allow_html=True)
-            st.caption("💰 Estas tarjetas muestran solo el dinero cobrado. Los créditos sin pagar aparecen aparte, en \"Pendiente en créditos\".")
+            st.caption("💰 \"Total cobrado\" incluye ventas de hoy y créditos viejos cobrados hoy. Los créditos sin pagar aparecen aparte, en \"Pendiente en créditos\".")
 
+        if raw_vt:
+            df_vt = pd.DataFrame(raw_vt)
             st.markdown('<div class="section-label">Por sabor</div>', unsafe_allow_html=True)
             por_sabor = df_vt.groupby("sabor").agg(bolsas=("cantidad","sum"), total=("total","sum")).reset_index()
             por_sabor = por_sabor.sort_values("total", ascending=False)
@@ -3451,12 +3491,25 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
         f_fin = col_b.date_input("Hasta", value=datetime.now(COL_TZ).date(), key="f_fin")
         raw_rango = sb_get("ventas", f"select=*&fecha=gte.{f_ini}&fecha=lte.{f_fin}&order=fecha.asc")
 
-        if not raw_rango:
+        # Cobros de crédito dentro del rango (vía "Cobrar" en créditos pendientes),
+        # incluyendo facturas originadas fuera del rango pero cobradas dentro de él.
+        raw_pg_rango = sb_get("pagos_credito", "select=fecha,monto,tipo,factura_id,canal") or []
+        cobrado_despues_rango = {}
+        for r in raw_pg_rango:
+            if r.get("tipo") == "venta" and r.get("factura_id"):
+                fid = r["factura_id"]
+                cobrado_despues_rango[fid] = cobrado_despues_rango.get(fid, 0) + float(r["monto"])
+        cobro_creditos_rango_por_canal = {}
+        for r in raw_pg_rango:
+            if f_ini <= date.fromisoformat(r["fecha"]) <= f_fin:
+                cobro_creditos_rango_por_canal[r["canal"]] = cobro_creditos_rango_por_canal.get(r["canal"], 0.0) + float(r["monto"])
+
+        if not raw_rango and not cobro_creditos_rango_por_canal:
             st.info("No hay ventas en ese rango.")
         else:
-            df_r = pd.DataFrame(raw_rango)
-            bolsas_r = int(df_r["cantidad"].sum())
-            dias_r   = df_r["fecha"].nunique()
+            df_r = pd.DataFrame(raw_rango) if raw_rango else pd.DataFrame()
+            bolsas_r = int(df_r["cantidad"].sum()) if not df_r.empty else 0
+            dias_r   = df_r["fecha"].nunique() if not df_r.empty else 0
 
             # Dinero realmente cobrado y pendiente en créditos — una sola vez por
             # factura (abono/saldo quedan repetidos en cada línea de una misma factura).
@@ -3464,13 +3517,14 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
             for r in raw_rango:
                 fid = r.get("factura_id", "")
                 if fid and fid not in facturas_rango:
+                    abono_inicial = max(0.0, float(r.get("abono", 0)) - cobrado_despues_rango.get(fid, 0))
                     facturas_rango[fid] = {
                         "canal": r.get("canal", ""),
-                        "abono": float(r.get("abono", 0)),
+                        "abono": abono_inicial,
                         "saldo": float(r.get("saldo", 0)),
                     }
-            cobrado_fab_r = sum(f["abono"] for f in facturas_rango.values() if f["canal"] == "Fábrica")
-            cobrado_carro_r = sum(f["abono"] for f in facturas_rango.values() if f["canal"] == "Carro")
+            cobrado_fab_r = sum(f["abono"] for f in facturas_rango.values() if f["canal"] == "Fábrica") + cobro_creditos_rango_por_canal.get("Fábrica", 0.0)
+            cobrado_carro_r = sum(f["abono"] for f in facturas_rango.values() if f["canal"] == "Carro") + cobro_creditos_rango_por_canal.get("Carro", 0.0)
             pendiente_fab_r = sum(f["saldo"] for f in facturas_rango.values() if f["canal"] == "Fábrica") + _pendiente_creditos_antiguos(f_ini, f_fin, "Fábrica")
             pendiente_carro_r = sum(f["saldo"] for f in facturas_rango.values() if f["canal"] == "Carro") + _pendiente_creditos_antiguos(f_ini, f_fin, "Carro")
             pendiente_r = pendiente_fab_r + pendiente_carro_r
@@ -3489,34 +3543,35 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
             </div>""", unsafe_allow_html=True)
             st.caption("💰 \"Cobrado\" es el dinero que efectivamente entró. Los créditos sin pagar se muestran aparte.")
 
-            st.markdown('<div class="section-label">Por día</div>', unsafe_allow_html=True)
-            por_dia = df_r.groupby("fecha").agg(bolsas=("cantidad","sum"), total=("total","sum")).reset_index()
-            por_dia["total"] = por_dia["total"].apply(fmt)
-            por_dia.columns  = ["Fecha","Bolsas","Total $"]
-            tabla_view(por_dia)
+            if not df_r.empty:
+                st.markdown('<div class="section-label">Por día</div>', unsafe_allow_html=True)
+                por_dia = df_r.groupby("fecha").agg(bolsas=("cantidad","sum"), total=("total","sum")).reset_index()
+                por_dia["total"] = por_dia["total"].apply(fmt)
+                por_dia.columns  = ["Fecha","Bolsas","Total $"]
+                tabla_view(por_dia)
 
-            st.markdown('<div class="section-label">Por canal</div>', unsafe_allow_html=True)
-            por_canal_base = df_r.groupby("canal").agg(bolsas=("cantidad","sum"), total=("total","sum")).reset_index()
-            cobrado_por_canal = {"Fábrica": cobrado_fab_r, "Carro": cobrado_carro_r}
-            pendiente_por_canal = {"Fábrica": pendiente_fab_r, "Carro": pendiente_carro_r}
-            por_canal_base["Cobrado (dinero real)"] = por_canal_base["canal"].map(cobrado_por_canal).fillna(0).apply(fmt)
-            por_canal_base["Pendiente (crédito)"]   = por_canal_base["canal"].map(pendiente_por_canal).fillna(0).apply(fmt)
-            por_canal_base["total"] = por_canal_base["total"].apply(fmt)
-            por_canal_base.columns  = ["Canal","Bolsas","Total $","Cobrado (dinero real)","Pendiente (crédito)"]
-            tabla_view(por_canal_base)
+                st.markdown('<div class="section-label">Por canal</div>', unsafe_allow_html=True)
+                por_canal_base = df_r.groupby("canal").agg(bolsas=("cantidad","sum"), total=("total","sum")).reset_index()
+                cobrado_por_canal = {"Fábrica": cobrado_fab_r, "Carro": cobrado_carro_r}
+                pendiente_por_canal = {"Fábrica": pendiente_fab_r, "Carro": pendiente_carro_r}
+                por_canal_base["Cobrado (dinero real)"] = por_canal_base["canal"].map(cobrado_por_canal).fillna(0).apply(fmt)
+                por_canal_base["Pendiente (crédito)"]   = por_canal_base["canal"].map(pendiente_por_canal).fillna(0).apply(fmt)
+                por_canal_base["total"] = por_canal_base["total"].apply(fmt)
+                por_canal_base.columns  = ["Canal","Bolsas","Total $","Cobrado (dinero real)","Pendiente (crédito)"]
+                tabla_view(por_canal_base)
 
-            # Facturas individuales del rango, en formato tabla
-            df_fab_r = df_r[df_r["canal"]=="Fábrica"]
-            if not df_fab_r.empty:
-                st.markdown('<div class="section-label">Facturas fábrica del rango</div>', unsafe_allow_html=True)
-                st.caption("Toca una fila para ver el recibo completo.")
-                mostrar_facturas_seleccionables(df_fab_r, "rango")
+                # Facturas individuales del rango, en formato tabla
+                df_fab_r = df_r[df_r["canal"]=="Fábrica"]
+                if not df_fab_r.empty:
+                    st.markdown('<div class="section-label">Facturas fábrica del rango</div>', unsafe_allow_html=True)
+                    st.caption("Toca una fila para ver el recibo completo.")
+                    mostrar_facturas_seleccionables(df_fab_r, "rango")
 
-            df_carro_r = df_r[df_r["canal"]=="Carro"]
-            if not df_carro_r.empty:
-                st.markdown('<div class="section-label">Facturas carro del rango</div>', unsafe_allow_html=True)
-                st.caption("Toca una fila para ver el recibo completo.")
-                mostrar_facturas_seleccionables(df_carro_r, "rango_carro")
+                df_carro_r = df_r[df_r["canal"]=="Carro"]
+                if not df_carro_r.empty:
+                    st.markdown('<div class="section-label">Facturas carro del rango</div>', unsafe_allow_html=True)
+                    st.caption("Toca una fila para ver el recibo completo.")
+                    mostrar_facturas_seleccionables(df_carro_r, "rango_carro")
 
     with sub_r3:
         st.markdown('<div class="section-label">Reporte del mes actual</div>', unsafe_allow_html=True)
@@ -3529,12 +3584,25 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
         raw_mes = sb_get("ventas", f"select=*&fecha=gte.{primer_dia}&fecha=lte.{ultimo_dia}")
         raw_prod_mes = sb_get("produccion", f"select=cantidad&fecha=gte.{primer_dia}&fecha=lte.{ultimo_dia}")
 
-        if not raw_mes:
+        # Cobros de crédito del mes (vía "Cobrar" en créditos pendientes), incluyendo
+        # facturas originadas en meses anteriores pero cobradas dentro de este mes.
+        raw_pg_mes = sb_get("pagos_credito", "select=fecha,monto,tipo,factura_id") or []
+        cobrado_despues_mes = {}
+        for r in raw_pg_mes:
+            if r.get("tipo") == "venta" and r.get("factura_id"):
+                fid = r["factura_id"]
+                cobrado_despues_mes[fid] = cobrado_despues_mes.get(fid, 0) + float(r["monto"])
+        cobro_creditos_mes = sum(
+            float(r["monto"]) for r in raw_pg_mes
+            if primer_dia <= date.fromisoformat(r["fecha"]) <= ultimo_dia
+        )
+
+        if not raw_mes and cobro_creditos_mes == 0:
             st.info("Aún no hay ventas este mes.")
         else:
-            df_mes = pd.DataFrame(raw_mes)
-            bolsas_mes  = int(df_mes["cantidad"].sum())
-            dias_mes    = df_mes["fecha"].nunique()
+            df_mes = pd.DataFrame(raw_mes) if raw_mes else pd.DataFrame()
+            bolsas_mes  = int(df_mes["cantidad"].sum()) if not df_mes.empty else 0
+            dias_mes    = df_mes["fecha"].nunique() if not df_mes.empty else 0
             prod_mes    = sum(r["cantidad"] for r in raw_prod_mes) if raw_prod_mes else 0
 
             # Dinero realmente cobrado y pendiente en créditos — una sola vez por
@@ -3543,11 +3611,12 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
             for r in raw_mes:
                 fid = r.get("factura_id", "")
                 if fid and fid not in facturas_mes:
+                    abono_inicial = max(0.0, float(r.get("abono", 0)) - cobrado_despues_mes.get(fid, 0))
                     facturas_mes[fid] = {
-                        "abono": float(r.get("abono", 0)),
+                        "abono": abono_inicial,
                         "saldo": float(r.get("saldo", 0)),
                     }
-            cobrado_mes   = sum(f["abono"] for f in facturas_mes.values())
+            cobrado_mes   = sum(f["abono"] for f in facturas_mes.values()) + cobro_creditos_mes
             pendiente_mes = sum(f["saldo"] for f in facturas_mes.values()) + _pendiente_creditos_antiguos(primer_dia, ultimo_dia)
             promedio_dia  = cobrado_mes / dias_mes if dias_mes > 0 else 0
 
@@ -3558,23 +3627,24 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
                 <div class="metric-box metric-yellow"><div class="val">{fmt(promedio_dia)}</div><div class="lbl">Promedio diario</div></div>
                 <div class="metric-box metric-red"><div class="val">{fmt(pendiente_mes)}</div><div class="lbl">Pendiente en créditos</div></div>
             </div>""", unsafe_allow_html=True)
-            st.caption("💰 \"Cobrado\" es el dinero que efectivamente entró. Los créditos sin pagar se muestran aparte.")
+            st.caption("💰 \"Cobrado\" incluye ventas del mes y créditos viejos cobrados este mes. Los créditos sin pagar se muestran aparte.")
 
             st.markdown(f'<div class="info-box">{ICO_PACKAGE} Producción total del mes: <b>{prod_mes} bolsas</b></div>', unsafe_allow_html=True)
 
-            st.markdown('<div class="section-label">Sabor más vendido</div>', unsafe_allow_html=True)
-            top_sabores = df_mes.groupby("sabor")["cantidad"].sum().reset_index().sort_values("cantidad", ascending=False)
-            if not top_sabores.empty:
-                top1 = top_sabores.iloc[0]
-                st.markdown(f'<div class="info-box">{ICO_TROPHY} <b>{top1["sabor"]}</b> con {int(top1["cantidad"])} bolsas vendidas</div>', unsafe_allow_html=True)
+            if not df_mes.empty:
+                st.markdown('<div class="section-label">Sabor más vendido</div>', unsafe_allow_html=True)
+                top_sabores = df_mes.groupby("sabor")["cantidad"].sum().reset_index().sort_values("cantidad", ascending=False)
+                if not top_sabores.empty:
+                    top1 = top_sabores.iloc[0]
+                    st.markdown(f'<div class="info-box">{ICO_TROPHY} <b>{top1["sabor"]}</b> con {int(top1["cantidad"])} bolsas vendidas</div>', unsafe_allow_html=True)
 
-            st.markdown('<div class="section-label">Evolución de ventas en el mes</div>', unsafe_allow_html=True)
-            por_dia_mes = df_mes.groupby("fecha")["total"].sum().reset_index()
-            grafica_linea_ventas(por_dia_mes["fecha"].tolist(), por_dia_mes["total"].tolist())
+                st.markdown('<div class="section-label">Evolución de ventas en el mes</div>', unsafe_allow_html=True)
+                por_dia_mes = df_mes.groupby("fecha")["total"].sum().reset_index()
+                grafica_linea_ventas(por_dia_mes["fecha"].tolist(), por_dia_mes["total"].tolist())
 
-            st.markdown('<div class="section-label">Tendencia por sabor</div>', unsafe_allow_html=True)
-            top_sabores.columns = ["Sabor","Bolsas"]
-            tabla_view(top_sabores)
+                st.markdown('<div class="section-label">Tendencia por sabor</div>', unsafe_allow_html=True)
+                top_sabores.columns = ["Sabor","Bolsas"]
+                tabla_view(top_sabores)
 
     with sub_r5:
         st.markdown('<div class="section-label">Créditos pagados</div>', unsafe_allow_html=True)
