@@ -391,7 +391,17 @@ def mostrar_creditos_pendientes(canal):
             f'</div>',
             unsafe_allow_html=True
         )
-        col_m, col_b = contenedor_creditos.columns([3, 1])
+        if datos["tipo"] == "venta":
+            col_v, col_m, col_b = contenedor_creditos.columns([1, 2, 1])
+            if col_v.button("🧾", key=f"ver_fact_{key}", help="Ver factura completa"):
+                todos_fact = sb_get("ventas", f"select=*&factura_id=eq.{requests.utils.quote(datos['ref'])}")
+                st.session_state.recibo_a_mostrar = datos["ref"]
+                st.session_state.recibo_canal_df = todos_fact if todos_fact else []
+                st.session_state.vista_anterior = st.session_state.vista
+                st.session_state.vista = "recibo"
+                st.rerun()
+        else:
+            col_m, col_b = contenedor_creditos.columns([3, 1])
         nuevo_abono = col_m.number_input(
             "Abono ($)", min_value=0, max_value=int(saldo),
             value=int(saldo), step=1000, key=f"abono_pend_{key}"
