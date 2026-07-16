@@ -389,9 +389,18 @@ def mostrar_creditos_pendientes(canal):
         if col_b.button("✅ Cobrar", key=f"btn_cobrar_{key}") and nuevo_abono > 0:
             if datos["tipo"] == "venta":
                 filtro_cobro = f"factura_id=eq.{datos['ref']}&canal=eq.{requests.utils.quote(canal)}"
-                _ajustar_saldo_ventas_cas(filtro_cobro, delta_saldo=-nuevo_abono, delta_abono=nuevo_abono)
+                ok_cobro = _ajustar_saldo_ventas_cas(filtro_cobro, delta_saldo=-nuevo_abono, delta_abono=nuevo_abono)
+                id_factura, id_credito = datos["ref"], None
             else:
-                _registrar_pago_credito_cas(datos["ref"], nuevo_abono)
+                ok_cobro = _registrar_pago_credito_cas(datos["ref"], nuevo_abono)
+                id_factura, id_credito = None, datos["ref"]
+            if ok_cobro:
+                sb_post("pagos_credito", {
+                    "fecha": fecha_hoy(), "hora": ahora(), "tipo": datos["tipo"],
+                    "factura_id": id_factura, "credito_id": id_credito,
+                    "cliente": datos["cliente"], "canal": canal, "vendedor": datos["vendedor"],
+                    "monto": float(nuevo_abono),
+                })
             time.sleep(0.3)
             st.rerun()
 
@@ -3096,7 +3105,7 @@ elif st.session_state.vista == "caja":
             st.info("No hay movimientos en ese período.")
 
 elif st.session_state.vista == "resumen" and st.session_state.es_admin:
-    sub_r1, sub_r2, sub_r3, sub_r4 = st.tabs(["Hoy", "Por fechas", "📅 Mes", "💾 Exportar"])
+    sub_r1, sub_r2, sub_r3, sub_r5, sub_r4 = st.tabs(["Hoy", "Por fechas", "📅 Mes", "💳 Créditos pagados", "💾 Exportar"])
 
     with sub_r1:
         st.markdown('<div class="section-label">Resumen del día</div>', unsafe_allow_html=True)
@@ -3284,6 +3293,46 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
             st.markdown('<div class="section-label">Tendencia por sabor</div>', unsafe_allow_html=True)
             top_sabores.columns = ["Sabor","Bolsas"]
             tabla_view(top_sabores)
+
+    with sub_r5:
+        st.markdown('<div class="section-label">Créditos pagados</div>', unsafe_allow_html=True)
+        st.caption("Cobros de créditos, con la fecha real en que se pagaron (no la fecha de la venta original).")
+        col_p1, col_p2 = st.columns(2)
+        f_ini_pg = col_p1.date_input("Desde", value=date(datetime.now(COL_TZ).year, datetime.now(COL_TZ).month, 1), key="f_ini_pg")
+        f_fin_pg = col_p2.date_input("Hasta", value=datetime.now(COL_TZ).date(), key="f_fin_pg")
+
+        raw_pagos = sb_get("pagos_credito", f"select=*&fecha=gte.{f_ini_pg}&fecha=lte.{f_fin_pg}&order=fecha.desc,hora.desc")
+
+        if not raw_pagos:
+            st.info("No hay créditos pagados en ese rango. (Si acabas de habilitar esta función, revisa que la tabla 'pagos_credito' ya exista en Supabase.)")
+        else:
+            df_pg = pd.DataFrame(raw_pagos)
+            total_pg = df_pg["monto"].sum()
+            total_pg_fab = df_pg[df_pg["canal"]=="Fábrica"]["monto"].sum()
+            total_pg_carro = df_pg[df_pg["canal"]=="Carro"]["monto"].sum()
+
+            st.markdown(f"""
+            <div class="metric-row">
+                <div class="metric-box metric-blue"><div class="val">{fmt(total_pg_fab)}</div><div class="lbl">Fábrica</div></div>
+                <div class="metric-box metric-yellow"><div class="val">{fmt(total_pg_carro)}</div><div class="lbl">Carro</div></div>
+                <div class="metric-box metric-green"><div class="val">{fmt(total_pg)}</div><div class="lbl">Total cobrado</div></div>
+            </div>""", unsafe_allow_html=True)
+
+            busqueda_pg = st.text_input("🔍 Buscar por cliente", key="buscar_pago_credito", placeholder="Ej: Don Carlos")
+            if busqueda_pg.strip():
+                df_pg = df_pg[df_pg["cliente"].apply(lambda c: _coincide_nombre(busqueda_pg, c or ""))]
+
+            if df_pg.empty:
+                st.caption("No hay créditos pagados para ese cliente en ese rango.")
+            else:
+                tabla_pg = df_pg.copy()
+                tabla_pg["Referencia"] = tabla_pg.apply(
+                    lambda r: f"FV-{r['factura_id']}" if r["tipo"]=="venta" else "Crédito antiguo", axis=1
+                )
+                tabla_pg["monto"] = tabla_pg["monto"].apply(fmt)
+                tabla_pg = tabla_pg[["fecha","hora","cliente","canal","vendedor","Referencia","monto"]]
+                tabla_pg.columns = ["Fecha","Hora","Cliente","Canal","Vendedor","Factura","Monto cobrado"]
+                tabla_view(tabla_pg)
 
     with sub_r4:
         st.markdown('<div class="section-label">Exportar datos</div>', unsafe_allow_html=True)
