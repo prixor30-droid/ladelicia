@@ -3180,7 +3180,9 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
                     }
             cobrado_fab_r = sum(f["abono"] for f in facturas_rango.values() if f["canal"] == "Fábrica")
             cobrado_carro_r = sum(f["abono"] for f in facturas_rango.values() if f["canal"] == "Carro")
-            pendiente_r = sum(f["saldo"] for f in facturas_rango.values())
+            pendiente_fab_r = sum(f["saldo"] for f in facturas_rango.values() if f["canal"] == "Fábrica")
+            pendiente_carro_r = sum(f["saldo"] for f in facturas_rango.values() if f["canal"] == "Carro")
+            pendiente_r = pendiente_fab_r + pendiente_carro_r
 
             st.markdown(f"""
             <div class="metric-row">
@@ -3203,10 +3205,14 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
             tabla_view(por_dia)
 
             st.markdown('<div class="section-label">Por canal</div>', unsafe_allow_html=True)
-            por_canal = df_r.groupby("canal").agg(bolsas=("cantidad","sum"), total=("total","sum")).reset_index()
-            por_canal["total"] = por_canal["total"].apply(fmt)
-            por_canal.columns  = ["Canal","Bolsas","Total $"]
-            tabla_view(por_canal)
+            por_canal_base = df_r.groupby("canal").agg(bolsas=("cantidad","sum"), total=("total","sum")).reset_index()
+            cobrado_por_canal = {"Fábrica": cobrado_fab_r, "Carro": cobrado_carro_r}
+            pendiente_por_canal = {"Fábrica": pendiente_fab_r, "Carro": pendiente_carro_r}
+            por_canal_base["Cobrado (dinero real)"] = por_canal_base["canal"].map(cobrado_por_canal).fillna(0).apply(fmt)
+            por_canal_base["Pendiente (crédito)"]   = por_canal_base["canal"].map(pendiente_por_canal).fillna(0).apply(fmt)
+            por_canal_base["total"] = por_canal_base["total"].apply(fmt)
+            por_canal_base.columns  = ["Canal","Bolsas","Total $","Cobrado (dinero real)","Pendiente (crédito)"]
+            tabla_view(por_canal_base)
 
             # Facturas individuales del rango, en formato tabla
             df_fab_r = df_r[df_r["canal"]=="Fábrica"]
