@@ -313,6 +313,15 @@ def _registrar_credito_manual(fecha, cliente, canal, vendedor, total, abono):
         "vendedor": vendedor, "total": total, "pagado": abono, "estado": estado
     })
 
+def _pendiente_creditos_antiguos(f_ini, f_fin, canal=None):
+    """Saldo pendiente de créditos antiguos manuales (tabla 'creditos') originados
+    entre f_ini y f_fin, opcionalmente filtrado por canal."""
+    filtro = f"select=total,pagado&fecha=gte.{f_ini}&fecha=lte.{f_fin}&estado=eq.pendiente"
+    if canal:
+        filtro += f"&canal=eq.{requests.utils.quote(canal)}"
+    raw = sb_get("creditos", filtro) or []
+    return sum(max(0.0, float(r["total"]) - float(r.get("pagado", 0) or 0)) for r in raw)
+
 def mostrar_creditos_pendientes(canal):
     """Muestra facturas con saldo pendiente y permite registrar abonos."""
     with st.expander("➕ Cargar crédito antiguo"):
@@ -3180,7 +3189,7 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
                     }
             cobrado_fab   = sum(f["abono"] for f in facturas_hoy.values() if f["canal"] == "Fábrica")
             cobrado_carro = sum(f["abono"] for f in facturas_hoy.values() if f["canal"] == "Carro")
-            pendiente_hoy = sum(f["saldo"] for f in facturas_hoy.values())
+            pendiente_hoy = sum(f["saldo"] for f in facturas_hoy.values()) + _pendiente_creditos_antiguos(fecha_hoy(), fecha_hoy())
 
             st.markdown(f"""
             <div class="metric-row">
@@ -3241,8 +3250,8 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
                     }
             cobrado_fab_r = sum(f["abono"] for f in facturas_rango.values() if f["canal"] == "Fábrica")
             cobrado_carro_r = sum(f["abono"] for f in facturas_rango.values() if f["canal"] == "Carro")
-            pendiente_fab_r = sum(f["saldo"] for f in facturas_rango.values() if f["canal"] == "Fábrica")
-            pendiente_carro_r = sum(f["saldo"] for f in facturas_rango.values() if f["canal"] == "Carro")
+            pendiente_fab_r = sum(f["saldo"] for f in facturas_rango.values() if f["canal"] == "Fábrica") + _pendiente_creditos_antiguos(f_ini, f_fin, "Fábrica")
+            pendiente_carro_r = sum(f["saldo"] for f in facturas_rango.values() if f["canal"] == "Carro") + _pendiente_creditos_antiguos(f_ini, f_fin, "Carro")
             pendiente_r = pendiente_fab_r + pendiente_carro_r
 
             st.markdown(f"""
@@ -3318,7 +3327,7 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
                         "saldo": float(r.get("saldo", 0)),
                     }
             cobrado_mes   = sum(f["abono"] for f in facturas_mes.values())
-            pendiente_mes = sum(f["saldo"] for f in facturas_mes.values())
+            pendiente_mes = sum(f["saldo"] for f in facturas_mes.values()) + _pendiente_creditos_antiguos(primer_dia, ultimo_dia)
             promedio_dia  = cobrado_mes / dias_mes if dias_mes > 0 else 0
 
             st.markdown(f"""
