@@ -2911,27 +2911,47 @@ elif st.session_state.vista == "caja":
         f_ini_caja = col_c1.date_input("Desde", value=primer_dia_caja, key="f_ini_caja")
         f_fin_caja = col_c2.date_input("Hasta", value=hoy_caja, key="f_fin_caja")
 
-        # INGRESOS — ventas pagadas (total - saldo = abonado)
+        # INGRESOS — ventas pagadas (total - saldo = abonado) y cobros de créditos
         with ThreadPoolExecutor(max_workers=4) as ex:
             f_vf = ex.submit(sb_get, "ventas", f"select=fecha,total,abono,saldo,canal,cliente,factura_id&fecha=gte.{f_ini_caja}&fecha=lte.{f_fin_caja}&canal=in.(Fábrica,Carro)&order=fecha.desc")
-            f_ab = ex.submit(sb_get, "creditos", f"select=fecha,cliente,canal,total,pagado&fecha=gte.{f_ini_caja}&fecha=lte.{f_fin_caja}&estado=eq.pagado&order=fecha.desc")
+            f_pg = ex.submit(sb_get, "pagos_credito", "select=fecha,monto,tipo,factura_id,canal")
             f_mp = ex.submit(sb_get, "materia_prima", f"select=fecha,insumo,proveedor,precio_total,abono&fecha=gte.{f_ini_caja}&fecha=lte.{f_fin_caja}&order=fecha.desc")
             f_ing = ex.submit(sb_get, "caja_ingresos", f"select=*&fecha=gte.{f_ini_caja}&fecha=lte.{f_fin_caja}&order=fecha.desc")
         raw_ventas_caja = f_vf.result() or []
-        raw_creditos_cobrados = f_ab.result() or []
+        raw_pagos_credito_todo = f_pg.result() or []
         raw_mp_pagos = f_mp.result() or []
         raw_egresos = sb_get("caja_egresos", f"select=*&fecha=gte.{f_ini_caja}&fecha=lte.{f_fin_caja}&order=fecha.desc") or []
         raw_ingresos_manuales = f_ing.result() or []
 
-        # Calcular ingresos — una sola entrada por factura (la primera fila de cada una)
+        # Cuánto de cada factura se cobró DESPUÉS de la venta (vía "Cobrar" en créditos
+        # pendientes, registrado en pagos_credito) — se resta del abono actual para no
+        # contar ese dinero dos veces: una en la fecha de la venta y otra en la fecha
+        # real del cobro.
+        cobrado_despues_por_factura = {}
+        for r in raw_pagos_credito_todo:
+            if r.get("tipo") == "venta" and r.get("factura_id"):
+                fid = r["factura_id"]
+                cobrado_despues_por_factura[fid] = cobrado_despues_por_factura.get(fid, 0) + float(r["monto"])
+
+        # Calcular ingresos por venta — una sola entrada por factura (la primera fila de
+        # cada una), usando solo el abono que existía al momento de la venta.
         facturas_vistas = {}
         for r in raw_ventas_caja:
             fid = r.get("factura_id", "")
             if fid and fid not in facturas_vistas:
-                facturas_vistas[fid] = float(r.get("abono", 0))
+                abono_total_fid = float(r.get("abono", 0))
+                facturas_vistas[fid] = max(0.0, abono_total_fid - cobrado_despues_por_factura.get(fid, 0))
         ingresos_ventas = sum(facturas_vistas.values())
+
+        # Ingresos por cobro de créditos (ventas y créditos antiguos manuales), en la
+        # fecha real en que se cobraron — no en la fecha de la venta/deuda original.
+        ingresos_cobro_creditos = sum(
+            float(r["monto"]) for r in raw_pagos_credito_todo
+            if f_ini_caja <= date.fromisoformat(r["fecha"]) <= f_fin_caja
+        )
+
         ingresos_manuales = sum(float(r["valor"]) for r in raw_ingresos_manuales)
-        total_ingresos = ingresos_ventas + ingresos_manuales
+        total_ingresos = ingresos_ventas + ingresos_cobro_creditos + ingresos_manuales
 
         # Egresos: pagos de materia prima + gastos varios
         egresos_mp = sum(float(r["abono"]) for r in raw_mp_pagos)
@@ -2953,11 +2973,12 @@ elif st.session_state.vista == "caja":
         # Cuentas por cobrar/pagar y costo de producción se ven en Contador (solo admin).
 
         # Detalle ingresos
-        if ingresos_ventas > 0 or ingresos_manuales > 0:
+        if ingresos_ventas > 0 or ingresos_cobro_creditos > 0 or ingresos_manuales > 0:
             st.markdown('<div class="section-label">Detalle ingresos</div>', unsafe_allow_html=True)
             st.markdown(
                 f'<div class="factura-box">'
                 f'<div class="factura-row"><span>{ICO_DOLLAR} Ventas</span><span><b>{fmt(ingresos_ventas)}</b></span></div>'
+                f'<div class="factura-row"><span>{ICO_CARD} Cobro de créditos</span><span><b>{fmt(ingresos_cobro_creditos)}</b></span></div>'
                 f'<div class="factura-row"><span>{ICO_NOTE} Dinero existente / aportes</span><span><b>{fmt(ingresos_manuales)}</b></span></div>'
                 f'<div class="factura-total"><span>Total ingresos</span><span>{fmt(total_ingresos)}</span></div>'
                 f'</div>',
@@ -3054,18 +3075,43 @@ elif st.session_state.vista == "caja":
 
         movimientos = []
 
-        # Ingresos por ventas
+        # Pagos de crédito de todo el histórico — se necesita completo (no solo el rango
+        # filtrado) para poder restar de cada factura lo que se cobró después de la venta.
+        raw_pg_h = sb_get("pagos_credito", "select=*") or []
+        cobrado_despues_h = {}
+        for r in raw_pg_h:
+            if r.get("tipo") == "venta" and r.get("factura_id"):
+                fid = r["factura_id"]
+                cobrado_despues_h[fid] = cobrado_despues_h.get(fid, 0) + float(r["monto"])
+
+        # Ingresos por ventas — solo el abono que existía al momento de la venta (lo
+        # cobrado después vía créditos se cuenta aparte, más abajo, en su fecha real).
         raw_v_h = sb_get("ventas", f"select=fecha,hora,canal,cliente,factura_id,abono,saldo&fecha=gte.{f_ini_h}&fecha=lte.{f_fin_h}&canal=in.(Fábrica,Carro)&order=fecha.desc,hora.desc") or []
         facturas_h = set()
         for r in raw_v_h:
             fid = r.get("factura_id", "")
-            if fid and fid not in facturas_h and float(r.get("abono", 0)) > 0:
+            if fid and fid not in facturas_h:
+                abono_inicial = max(0.0, float(r.get("abono", 0)) - cobrado_despues_h.get(fid, 0))
                 facturas_h.add(fid)
+                if abono_inicial > 0:
+                    movimientos.append({
+                        "Fecha": r["fecha"], "Hora": r["hora"],
+                        "Concepto": f'Venta {r["canal"]} — {r["cliente"]}',
+                        "Categoría": "Ingreso ventas",
+                        "Ingreso": fmt(abono_inicial), "Egreso": "—"
+                    })
+
+        # Ingresos por cobro de créditos (ventas y créditos antiguos), en la fecha real
+        # del cobro.
+        for r in raw_pg_h:
+            fecha_pg = date.fromisoformat(r["fecha"])
+            if f_ini_h <= fecha_pg <= f_fin_h:
+                ref = f'FV-{r["factura_id"]}' if r.get("tipo") == "venta" else "Crédito antiguo"
                 movimientos.append({
-                    "Fecha": r["fecha"], "Hora": r["hora"],
-                    "Concepto": f'Venta {r["canal"]} — {r["cliente"]}',
-                    "Categoría": "Ingreso ventas",
-                    "Ingreso": fmt(r["abono"]), "Egreso": "—"
+                    "Fecha": r["fecha"], "Hora": r.get("hora", ""),
+                    "Concepto": f'Cobro crédito — {r.get("cliente","")} ({ref})',
+                    "Categoría": "Cobro créditos",
+                    "Ingreso": fmt(r["monto"]), "Egreso": "—"
                 })
 
         # Ingresos manuales (dinero existente / aportes)
