@@ -2801,23 +2801,50 @@ elif st.session_state.vista == "materia_prima":
             lista_prov = [r for r in lista if r["proveedor"] == prov_sel_cred]
             total_prov = sum(float(r["saldo"]) for r in lista_prov)
             st.markdown(f'<div class="warn-box">{ICO_CARD} Total pendiente a {prov_sel_cred}: <b>{fmt(total_prov)}</b></div>', unsafe_allow_html=True)
+
+            # Agrupa por fecha: todo lo que un mismo proveedor entregó el mismo día se
+            # muestra como una sola factura (tal como la entrega físicamente), aunque
+            # sean insumos de distinta categoría (ej. saborizante + salsa).
+            facturas_prov = {}
             for r in lista_prov:
-                saldo_r = float(r["saldo"])
-                cant_disp_r = f'{float(r["cantidad"]):.3f}' if r["unidad"] == "kg" else r["cantidad"]
+                facturas_prov.setdefault(r["fecha"], []).append(r)
+
+            for fecha_f in sorted(facturas_prov.keys(), reverse=True):
+                lineas = facturas_prov[fecha_f]
+                total_f = sum(float(r["precio_total"]) for r in lineas)
+                abono_f = sum(float(r["abono"]) for r in lineas)
+                saldo_f = sum(float(r["saldo"]) for r in lineas)
+
+                filas_html = ""
+                for r in lineas:
+                    cant_disp_r = f'{float(r["cantidad"]):.3f}' if r["unidad"] == "kg" else r["cantidad"]
+                    filas_html += (
+                        f'<div class="factura-row"><span>{_icono_cred(r["insumo"])} {r["insumo"]}'
+                        f' ({cant_disp_r} {r["unidad"]})</span><span>{fmt(r["precio_total"])}</span></div>'
+                    )
+
                 st.markdown(
-                    f'<div class="factura-box"><div class="factura-header">{_icono_cred(r["insumo"])} {r["insumo"]} · {r["proveedor"]}</div>'
-                    f'<div class="factura-row"><span>Fecha</span><span>{r["fecha"]}</span></div>'
-                    f'<div class="factura-row"><span>Cantidad</span><span>{cant_disp_r} {r["unidad"]}</span></div>'
-                    f'<div class="factura-row"><span>Total</span><span>{fmt(r["precio_total"])}</span></div>'
-                    f'<div class="factura-row"><span>Abonado</span><span>{fmt(r["abono"])}</span></div>'
-                    f'<div class="factura-total"><span>Saldo</span><span>{fmt(saldo_r)}</span></div></div>',
+                    f'<div class="factura-box"><div class="factura-header">🧾 Factura {fecha_f} · {prov_sel_cred}</div>'
+                    f'{filas_html}'
+                    f'<div class="factura-row"><span>Total</span><span>{fmt(total_f)}</span></div>'
+                    f'<div class="factura-row"><span>Abonado</span><span>{fmt(abono_f)}</span></div>'
+                    f'<div class="factura-total"><span>Saldo</span><span>{fmt(saldo_f)}</span></div></div>',
                     unsafe_allow_html=True
                 )
                 col_a, col_b = st.columns([3, 1])
-                nv = col_a.number_input("Abono ($)", min_value=0, max_value=int(saldo_r), value=int(saldo_r), step=1000, key=f"abono_pend_mp_{r['id']}")
-                if col_b.button("✅ Pagar", key=f"btn_pagar_mp_{r['id']}"):
-                    ns = max(0, saldo_r - nv)
-                    sb_patch("materia_prima", f"id=eq.{r['id']}", {"abono": float(r["abono"])+nv, "saldo": ns, "estado": "pagado" if ns==0 else "pendiente"})
+                nv = col_a.number_input("Abono ($)", min_value=0, max_value=int(saldo_f), value=int(saldo_f), step=1000, key=f"abono_pend_mp_{state_key}_{prov_sel_cred}_{fecha_f}")
+                if col_b.button("✅ Pagar", key=f"btn_pagar_mp_{state_key}_{prov_sel_cred}_{fecha_f}"):
+                    restante = nv
+                    for r in lineas:
+                        if restante <= 0:
+                            break
+                        saldo_r = float(r["saldo"])
+                        if saldo_r <= 0:
+                            continue
+                        pago_r = min(restante, saldo_r)
+                        nuevo_saldo = saldo_r - pago_r
+                        sb_patch("materia_prima", f"id=eq.{r['id']}", {"abono": float(r["abono"]) + pago_r, "saldo": nuevo_saldo, "estado": "pagado" if nuevo_saldo == 0 else "pendiente"})
+                        restante -= pago_r
                     time.sleep(0.3); st.rerun()
 
         st.markdown('<div class="section-label">Créditos — Todos los proveedores</div>', unsafe_allow_html=True)
