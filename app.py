@@ -378,20 +378,12 @@ def mostrar_creditos_pendientes(canal):
             "Abono ($)", min_value=0, max_value=int(saldo),
             value=int(saldo), step=1000, key=f"abono_pend_{key}"
         )
-        if col_b.button("✅ Cobrar", key=f"btn_cobrar_{key}"):
-            nuevo_saldo = max(0, saldo - nuevo_abono)
-            nuevo_total_abono = datos["abono"] + nuevo_abono
+        if col_b.button("✅ Cobrar", key=f"btn_cobrar_{key}") and nuevo_abono > 0:
             if datos["tipo"] == "venta":
-                sb_patch("ventas", f"factura_id=eq.{datos['ref']}", {
-                    "abono": nuevo_total_abono,
-                    "saldo": nuevo_saldo
-                })
+                filtro_cobro = f"factura_id=eq.{datos['ref']}&canal=eq.{requests.utils.quote(canal)}"
+                _ajustar_saldo_ventas_cas(filtro_cobro, delta_saldo=-nuevo_abono, delta_abono=nuevo_abono)
             else:
-                estado_nuevo = "pagado" if nuevo_saldo <= 0 else "pendiente"
-                sb_patch("creditos", f"id=eq.{datos['ref']}", {
-                    "pagado": nuevo_total_abono,
-                    "estado": estado_nuevo
-                })
+                _registrar_pago_credito_cas(datos["ref"], nuevo_abono)
             time.sleep(0.3)
             st.rerun()
 
@@ -641,10 +633,7 @@ def render_venta_canal(cfg, mostrar_creditos=True):
                 if mutar_stock:
                     restar_stock(sabor_in, cant_in)
                 if diferencia != 0:
-                    raw_saldo = sb_get("ventas", f"select=saldo&factura_id=eq.{fac['id']}&canal=eq.{canal}&limit=1")
-                    saldo_actual = float(raw_saldo[0]["saldo"]) if raw_saldo else 0
-                    nuevo_saldo = max(0, saldo_actual + diferencia)
-                    sb_patch("ventas", f"factura_id=eq.{fac['id']}&canal=eq.{canal}", {"saldo": nuevo_saldo})
+                    _ajustar_saldo_ventas_cas(f"factura_id=eq.{fac['id']}&canal=eq.{canal}", delta_saldo=diferencia)
                 time.sleep(0.3)
                 _recargar_factura(key_factura, fac)
                 st.rerun()
@@ -671,10 +660,7 @@ def render_venta_canal(cfg, mostrar_creditos=True):
                     })
                     if mutar_stock:
                         restar_stock(sabor_add, cant_add)
-                    raw_saldo2 = sb_get("ventas", f"select=saldo&factura_id=eq.{fac['id']}&canal=eq.{canal}&limit=1")
-                    saldo_actual2 = float(raw_saldo2[0]["saldo"]) if raw_saldo2 else 0
-                    nuevo_saldo2 = saldo_actual2 + precio_add
-                    sb_patch("ventas", f"factura_id=eq.{fac['id']}&canal=eq.{canal}", {"saldo": nuevo_saldo2})
+                    _ajustar_saldo_ventas_cas(f"factura_id=eq.{fac['id']}&canal=eq.{canal}", delta_saldo=precio_add)
                     time.sleep(0.3)
                     _recargar_factura(key_factura, fac)
                     st.rerun()
@@ -930,6 +916,64 @@ def set_stock(sabor, cantidad):
     sb_patch("inventario", f"sabor=eq.{q}", {"stock": cantidad})
     get_inventario_completo.clear()
     get_metricas_globales.clear()
+
+def _ajustar_saldo_ventas_cas(filtro, delta_saldo, delta_abono=0, intentos=5):
+    """Ajusta saldo/abono de las filas de 'ventas' que cumplan filtro (normalmente
+    factura_id + canal), con concurrencia optimista: el PATCH solo aplica si nadie
+    más cambió el saldo entre la lectura y la escritura (mismo patrón que
+    _ajustar_stock_cas — evita perder un cobro o una edición de factura si dos
+    personas tocan la misma factura casi al mismo tiempo)."""
+    if delta_saldo == 0 and delta_abono == 0:
+        return True
+    for _ in range(intentos):
+        r = sb_get("ventas", f"select=saldo,abono&{filtro}&limit=1")
+        saldo_actual = float(r[0]["saldo"]) if r else 0
+        abono_actual = float(r[0]["abono"]) if r else 0
+        saldo_nuevo = max(0, saldo_actual + delta_saldo)
+        abono_nuevo = abono_actual + delta_abono
+        try:
+            resp = requests.patch(
+                f"{SUPABASE_URL}/rest/v1/ventas?{filtro}&saldo=eq.{saldo_actual}",
+                headers=HEADERS, json={"saldo": saldo_nuevo, "abono": abono_nuevo}, timeout=10
+            )
+            if resp.ok and resp.json():
+                return True
+        except Exception:
+            pass
+    st.error("⚠️ No se pudo actualizar el saldo (otro cambio ocurrió al mismo tiempo). Vuelve a intentarlo.")
+    return False
+
+def _registrar_pago_credito_cas(id_credito, monto_abono, intentos=5):
+    """Registra un abono sobre un crédito manual antiguo (tabla 'creditos'), con la
+    misma concurrencia optimista que _ajustar_saldo_ventas_cas pero comparando sobre
+    el campo 'pagado' (esta tabla no tiene columna 'saldo')."""
+    for _ in range(intentos):
+        r = sb_get("creditos", f"select=total,pagado&id=eq.{id_credito}&limit=1")
+        if not r:
+            return False
+        total_actual = float(r[0]["total"])
+        pagado_actual = float(r[0].get("pagado", 0) or 0)
+        pagado_nuevo = pagado_actual + monto_abono
+        estado_nuevo = "pagado" if pagado_nuevo >= total_actual else "pendiente"
+        try:
+            resp = requests.patch(
+                f"{SUPABASE_URL}/rest/v1/creditos?id=eq.{id_credito}&pagado=eq.{pagado_actual}",
+                headers=HEADERS, json={"pagado": pagado_nuevo, "estado": estado_nuevo}, timeout=10
+            )
+            if resp.ok and resp.json():
+                return True
+        except Exception:
+            pass
+    st.error("⚠️ No se pudo registrar el abono (otro cambio ocurrió al mismo tiempo). Vuelve a intentarlo.")
+    return False
+
+def _registrar_auditoria_factura(factura_id, accion, detalle, usuario):
+    """Deja constancia de quién editó o eliminó una factura ya existente."""
+    sb_post("factura_auditoria", {
+        "fecha": fecha_hoy(), "hora": ahora(),
+        "factura_id": factura_id, "accion": accion,
+        "detalle": detalle, "usuario": usuario or "Sin especificar"
+    })
 
 @st.cache_data(ttl=60)
 def sabores_por_frecuencia(canal=None):
@@ -2041,6 +2085,19 @@ elif st.session_state.vista == "recibo":
         st.markdown("---")
         st.markdown(f'<div class="section-label">{ICO_WARN} Zona de administrador</div>', unsafe_allow_html=True)
 
+        usuario_edicion = st.selectbox("¿Quién hace este cambio?", EMPLEADOS, key="usuario_edicion_fac")
+
+        # Historial de cambios/eliminaciones sobre esta factura
+        raw_auditoria = sb_get("factura_auditoria", f"select=hora,accion,detalle,usuario&factura_id=eq.{fid_recibo}&order=id.desc")
+        if raw_auditoria:
+            with st.expander(f"🕒 Historial de esta factura ({len(raw_auditoria)})"):
+                for a in raw_auditoria:
+                    st.markdown(
+                        f'<div class="factura-row"><span>{a["hora"]} · <b>{a["accion"]}</b> — {a.get("detalle","")}</span>'
+                        f'<span>{a.get("usuario","")}</span></div>',
+                        unsafe_allow_html=True
+                    )
+
         # Editar factura — funciona con facturas de cualquier fecha (no depende de
         # la sesión activa como el cambio/agregar del flujo de venta en vivo).
         cfg_edit = CONFIG_FABRICA if canal_recibo == "Fábrica" else CONFIG_CARRO
@@ -2053,11 +2110,7 @@ elif st.session_state.vista == "recibo":
             st.session_state.recibo_canal_df = sb_get("ventas", f"select=*&factura_id=eq.{fid_recibo}") or []
 
         def _ajustar_saldo(delta):
-            if delta == 0:
-                return
-            raw_saldo = sb_get("ventas", f"select=saldo&factura_id=eq.{fid_recibo}&canal=eq.{canal_recibo}&limit=1")
-            saldo_actual = float(raw_saldo[0]["saldo"]) if raw_saldo else 0
-            sb_patch("ventas", f"factura_id=eq.{fid_recibo}&canal=eq.{canal_recibo}", {"saldo": max(0, saldo_actual + delta)})
+            _ajustar_saldo_ventas_cas(f"factura_id=eq.{fid_recibo}&canal=eq.{canal_recibo}", delta_saldo=delta)
 
         with st.expander("✏️ Editar factura"):
             if not items_recibo:
@@ -2109,6 +2162,11 @@ elif st.session_state.vista == "recibo":
                         if cfg_edit["mutar_stock"]:
                             restar_stock(sabor_in, cant_in)
                         _ajustar_saldo(diferencia)
+                        _registrar_auditoria_factura(
+                            fid_recibo, "Cambio de producto",
+                            f"Devuelve {cant_out} {sabor_out} · Lleva {cant_in} {sabor_in}",
+                            usuario_edicion
+                        )
                         _recargar_recibo()
                         time.sleep(0.3)
                         st.rerun()
@@ -2136,6 +2194,11 @@ elif st.session_state.vista == "recibo":
                             if cfg_edit["mutar_stock"]:
                                 restar_stock(sabor_add, cant_add)
                             _ajustar_saldo(precio_add)
+                            _registrar_auditoria_factura(
+                                fid_recibo, "Agregar producto",
+                                f"+{cant_add} {sabor_add} ({fmt(precio_add)})",
+                                usuario_edicion
+                            )
                             _recargar_recibo()
                             time.sleep(0.3)
                             st.rerun()
@@ -2158,6 +2221,11 @@ elif st.session_state.vista == "recibo":
                         if cfg_edit["mutar_stock"]:
                             agregar_stock(sabor_quitar, cant_quitar)
                         _ajustar_saldo(-valor_quitar)
+                        _registrar_auditoria_factura(
+                            fid_recibo, "Quitar producto",
+                            f"-{cant_quitar} {sabor_quitar} ({fmt(valor_quitar)})",
+                            usuario_edicion
+                        )
                         _recargar_recibo()
                         time.sleep(0.3)
                         st.rerun()
@@ -2181,6 +2249,11 @@ elif st.session_state.vista == "recibo":
                                 agregar_stock(sabor, cant)
                     # Eliminar todos los registros de la factura
                     sb_delete("ventas", f"factura_id=eq.{fid_recibo}")
+                _registrar_auditoria_factura(
+                    fid_recibo, "Eliminar factura",
+                    f"{cliente_recibo} · {fmt(sum(totales_recibo.values()))}",
+                    usuario_edicion
+                )
                 st.session_state.confirmar_eliminar_fac = None
                 st.session_state.recibo_canal_df = []
                 st.session_state.vista = st.session_state.get("vista_anterior", "resumen")
