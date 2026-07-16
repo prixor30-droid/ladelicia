@@ -169,6 +169,7 @@ PRECIOS_RAPIDOS = {
 }
 SABORES_LISTA = list(PRODUCTOS.keys())
 EMPLEADOS = ["Andrea", "Sofía", "Javier", "Edison", "Otro"]
+RESERVA_META = {"Papa": 50_000_000, "Empaque": 50_000_000}
 VENDEDORES_FABRICA = ["Sofía", "Andrea"]
 STOCK_MINIMO = 10  # alerta cuando un sabor tenga menos de esta cantidad
 
@@ -2971,7 +2972,7 @@ elif st.session_state.vista == "materia_prima":
 
 elif st.session_state.vista == "caja":
     st.markdown(f'<div class="section-label">{ICO_DOLLAR} Caja</div>', unsafe_allow_html=True)
-    tab_caja1, tab_caja2, tab_caja3, tab_caja4 = st.tabs(["📊 Resumen", "➕ Ingreso / Egreso", "📋 Historial", "🧮 Arqueo de caja"])
+    tab_caja1, tab_caja2, tab_caja3, tab_caja4, tab_caja5 = st.tabs(["📊 Resumen", "➕ Ingreso / Egreso", "📋 Historial", "🧮 Arqueo de caja", "🎯 Reservas"])
 
     # Fechas del período
     hoy_caja = datetime.now(COL_TZ).date()
@@ -3032,15 +3033,27 @@ elif st.session_state.vista == "caja":
 
         saldo_caja = total_ingresos - total_egresos
 
+        # Plata ya apartada en las reservas (Papa/Empaque) — no cuenta como libre
+        # para proveedores/nómina aunque siga físicamente en la caja mayor.
+        raw_reservas_resumen = sb_get("reservas_caja", "select=movimiento,monto") or []
+        acumulado_reservas = sum(
+            float(r["monto"]) if r["movimiento"] == "aporte" else -float(r["monto"])
+            for r in raw_reservas_resumen
+        )
+        disponible_libre = saldo_caja - acumulado_reservas
+
         # Tarjetas resumen
         color_saldo = "metric-green" if saldo_caja >= 0 else "metric-red"
+        color_disp = "metric-green" if disponible_libre >= 0 else "metric-red"
         st.markdown(f"""
         <div class="metric-row">
             <div class="metric-box metric-blue"><div class="val">{fmt(total_ingresos)}</div><div class="lbl">Ingresos</div></div>
             <div class="metric-box metric-yellow"><div class="val">{fmt(total_egresos)}</div><div class="lbl">Egresos</div></div>
             <div class="metric-box {color_saldo}"><div class="val">{fmt(saldo_caja)}</div><div class="lbl">Saldo caja</div></div>
+            <div class="metric-box {color_disp}"><div class="val">{fmt(disponible_libre)}</div><div class="lbl">Libre para proveedores/nómina</div></div>
         </div>
         """, unsafe_allow_html=True)
+        st.caption(f"💡 De los {fmt(saldo_caja)} en caja, {fmt(acumulado_reservas)} ya están apartados en reservas (ver pestaña 🎯 Reservas) — el resto es lo que realmente puedes usar libremente.")
 
         # Cuentas por cobrar/pagar y costo de producción se ven en Contador (solo admin).
 
@@ -3322,6 +3335,56 @@ elif st.session_state.vista == "caja":
             tabla_view(df_hist_arq)
         else:
             st.caption("Aún no hay arqueos guardados.")
+
+    with tab_caja5:
+        st.markdown('<div class="section-label">Reservas dentro de caja mayor</div>', unsafe_allow_html=True)
+        st.caption("Papa y Empaque son compras grandes y poco frecuentes — aparta la plata acá antes de gastar la caja mayor en otra cosa, para no quedarte corto cuando toque comprar.")
+
+        raw_reservas = sb_get("reservas_caja", "select=*&order=fecha.desc,hora.desc") or []
+        acumulado_por_tipo = {"Papa": 0.0, "Empaque": 0.0}
+        for r in raw_reservas:
+            signo = 1 if r["movimiento"] == "aporte" else -1
+            acumulado_por_tipo[r["tipo"]] = acumulado_por_tipo.get(r["tipo"], 0.0) + signo * float(r["monto"])
+
+        for tipo_res in ["Papa", "Empaque"]:
+            meta_res = RESERVA_META[tipo_res]
+            acumulado_res = max(0.0, acumulado_por_tipo.get(tipo_res, 0.0))
+            avance = min(1.0, acumulado_res / meta_res) if meta_res > 0 else 0.0
+            st.markdown(f'**{tipo_res}** — {fmt(acumulado_res)} de {fmt(meta_res)}')
+            st.progress(avance)
+
+        st.markdown('<div class="section-label">Registrar movimiento</div>', unsafe_allow_html=True)
+        tipo_mov_res = st.radio("Reserva", ["Papa", "Empaque"], horizontal=True, key="tipo_res_sel")
+        mov_res = st.radio(
+            "Movimiento", ["➕ Aporte (apartar plata)", "➖ Uso (se compró)"],
+            horizontal=True, key="mov_res_sel"
+        )
+        monto_res = st.number_input("Monto ($)", min_value=0, value=0, step=1000, key="monto_res")
+        nota_res = st.text_input("Nota (opcional)", key="nota_res", placeholder="Ej: Abono semanal reserva Papa")
+
+        if st.button("💾 Guardar movimiento", key="btn_guardar_reserva"):
+            if monto_res == 0:
+                st.markdown(f'<div class="alert-low">{ICO_WARN} Ingresa el monto.</div>', unsafe_allow_html=True)
+            else:
+                ok_res = sb_post("reservas_caja", {
+                    "fecha": fecha_hoy(), "hora": ahora(), "tipo": tipo_mov_res,
+                    "movimiento": "aporte" if "Aporte" in mov_res else "uso",
+                    "monto": float(monto_res), "nota": nota_res.strip() or None
+                })
+                if ok_res:
+                    st.markdown(f'<div class="success-toast">{ICO_CHECK} Movimiento guardado.</div>', unsafe_allow_html=True)
+                    time.sleep(0.3); st.rerun()
+
+        st.markdown('<div class="section-label">Historial de reservas</div>', unsafe_allow_html=True)
+        if raw_reservas:
+            df_res = pd.DataFrame([{
+                "Fecha": r["fecha"], "Reserva": r["tipo"],
+                "Movimiento": "Aporte" if r["movimiento"] == "aporte" else "Uso",
+                "Monto": fmt(r["monto"]), "Nota": r.get("nota") or "—",
+            } for r in raw_reservas])
+            tabla_view(df_res)
+        else:
+            st.caption("Aún no hay movimientos de reserva.")
 
 elif st.session_state.vista == "resumen" and st.session_state.es_admin:
     sub_r1, sub_r2, sub_r3, sub_r5, sub_r4 = st.tabs(["Hoy", "Por fechas", "📅 Mes", "💳 Créditos pagados", "💾 Exportar"])
