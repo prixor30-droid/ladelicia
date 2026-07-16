@@ -8,7 +8,7 @@ import time
 import uuid
 import difflib
 from pathlib import Path
-from datetime import date, datetime, timezone, timedelta
+from datetime import date, datetime, timezone, timedelta, time as dtime
 from concurrent.futures import ThreadPoolExecutor
 
 COL_TZ = timezone(timedelta(hours=-5))
@@ -232,6 +232,13 @@ def tabla_facturas_html(df_canal):
     </div>
     """
 
+def _parse_hora(hora_str):
+    """Convierte '2:35 PM' a un time comparable; si no se puede leer, va al final."""
+    try:
+        return datetime.strptime(hora_str, "%I:%M %p").time()
+    except (ValueError, TypeError):
+        return dtime.min
+
 def mostrar_facturas_seleccionables(df_canal, key_prefix):
     """Tabla con facturas; al seleccionar una fila se abre el recibo en una vista nueva."""
     filas = []
@@ -249,14 +256,15 @@ def mostrar_facturas_seleccionables(df_canal, key_prefix):
             "Total": fmt(grupo[grupo["total"] > 0]["total"].sum()),
             "Estado": estado,
             "_fid": fid,
+            "_hora": grupo["hora"].iloc[0] if "hora" in grupo.columns else "",
         })
     if not filas:
         return
-    filas.sort(key=lambda r: (r["Fecha"], r["_fid"]), reverse=True)
+    filas.sort(key=lambda r: (r["Fecha"], _parse_hora(r["_hora"])), reverse=True)
     df_tabla = pd.DataFrame(filas)
 
     evento = st.dataframe(
-        df_tabla.drop(columns=["_fid"]),
+        df_tabla.drop(columns=["_fid", "_hora"]),
         use_container_width=True,
         hide_index=True,
         on_select="rerun",
