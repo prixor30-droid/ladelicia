@@ -3174,18 +3174,25 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
                 fid = r.get("factura_id", "")
                 if fid and fid not in facturas_rango:
                     facturas_rango[fid] = {
+                        "canal": r.get("canal", ""),
                         "abono": float(r.get("abono", 0)),
                         "saldo": float(r.get("saldo", 0)),
                     }
-            cobrado_r   = sum(f["abono"] for f in facturas_rango.values())
+            cobrado_fab_r = sum(f["abono"] for f in facturas_rango.values() if f["canal"] == "Fábrica")
+            cobrado_carro_r = sum(f["abono"] for f in facturas_rango.values() if f["canal"] == "Carro")
             pendiente_r = sum(f["saldo"] for f in facturas_rango.values())
 
             st.markdown(f"""
             <div class="metric-row">
-                <div class="metric-box metric-green"><div class="val">{fmt(cobrado_r)}</div><div class="lbl">Cobrado</div></div>
+                <div class="metric-box metric-blue"><div class="val">{fmt(cobrado_fab_r)}</div><div class="lbl">Fábrica</div></div>
+                <div class="metric-box metric-yellow"><div class="val">{fmt(cobrado_carro_r)}</div><div class="lbl">Carro</div></div>
+                <div class="metric-box metric-green"><div class="val">{fmt(cobrado_fab_r+cobrado_carro_r)}</div><div class="lbl">Total cobrado</div></div>
+                <div class="metric-box metric-red"><div class="val">{fmt(pendiente_r)}</div><div class="lbl">Pendiente en créditos</div></div>
+            </div>""", unsafe_allow_html=True)
+            st.markdown(f"""
+            <div class="metric-row">
                 <div class="metric-box metric-blue"><div class="val">{bolsas_r}</div><div class="lbl">Bolsas</div></div>
                 <div class="metric-box metric-yellow"><div class="val">{dias_r}</div><div class="lbl">Días</div></div>
-                <div class="metric-box metric-red"><div class="val">{fmt(pendiente_r)}</div><div class="lbl">Pendiente en créditos</div></div>
             </div>""", unsafe_allow_html=True)
             st.caption("💰 \"Cobrado\" es el dinero que efectivamente entró. Los créditos sin pagar se muestran aparte.")
 
