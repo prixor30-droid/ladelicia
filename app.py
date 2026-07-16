@@ -2772,31 +2772,31 @@ elif st.session_state.vista == "materia_prima":
             if not lista:
                 st.info("No hay créditos pendientes."); return
 
-            insumo_sel_cred = st.session_state.get(state_key)
+            prov_sel_cred = st.session_state.get(state_key)
 
-            if not insumo_sel_cred:
-                por_insumo = {}
+            if not prov_sel_cred:
+                por_proveedor = {}
                 for r in lista:
-                    k = r["insumo"]
-                    if k not in por_insumo:
-                        por_insumo[k] = {"saldo": 0.0, "n": 0}
-                    por_insumo[k]["saldo"] += float(r["saldo"])
-                    por_insumo[k]["n"] += 1
+                    k = r["proveedor"]
+                    if k not in por_proveedor:
+                        por_proveedor[k] = {"saldo": 0.0, "n": 0}
+                    por_proveedor[k]["saldo"] += float(r["saldo"])
+                    por_proveedor[k]["n"] += 1
                 total = sum(float(r["saldo"]) for r in lista)
                 st.markdown(f'<div class="warn-box">{ICO_CARD} Total pendiente: <b>{fmt(total)}</b></div>', unsafe_allow_html=True)
-                for k in sorted(por_insumo.keys()):
-                    v = por_insumo[k]
-                    if st.button(f"{emoji} {k} — {fmt(v['saldo'])} ({v['n']})", key=f"btn_cred_ins_{state_key}_{k}", use_container_width=True):
+                for k in sorted(por_proveedor.keys()):
+                    v = por_proveedor[k]
+                    if st.button(f"{emoji} {k} — {fmt(v['saldo'])} ({v['n']})", key=f"btn_cred_prov_{state_key}_{k}", use_container_width=True):
                         st.session_state[state_key] = k; st.rerun()
                 return
 
             if st.button("← Volver", key=f"btn_cred_volver_{state_key}"):
                 st.session_state[state_key] = None; st.rerun()
 
-            lista_ins = [r for r in lista if r["insumo"] == insumo_sel_cred]
-            total_ins = sum(float(r["saldo"]) for r in lista_ins)
-            st.markdown(f'<div class="warn-box">{ICO_CARD} Total pendiente de {insumo_sel_cred}: <b>{fmt(total_ins)}</b></div>', unsafe_allow_html=True)
-            for r in lista_ins:
+            lista_prov = [r for r in lista if r["proveedor"] == prov_sel_cred]
+            total_prov = sum(float(r["saldo"]) for r in lista_prov)
+            st.markdown(f'<div class="warn-box">{ICO_CARD} Total pendiente a {prov_sel_cred}: <b>{fmt(total_prov)}</b></div>', unsafe_allow_html=True)
+            for r in lista_prov:
                 saldo_r = float(r["saldo"])
                 cant_disp_r = f'{float(r["cantidad"]):.3f}' if r["unidad"] == "kg" else r["cantidad"]
                 st.markdown(
