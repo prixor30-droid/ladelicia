@@ -2765,10 +2765,15 @@ elif st.session_state.vista == "materia_prima":
 
     with tab_mp3:
         raw_pend = sb_get("materia_prima", "select=*&estado=eq.pendiente&order=fecha.desc") or []
-        pend_mp  = [r for r in raw_pend if r["insumo"] not in SABORIZANTES_NAMES and r["insumo"] not in EMPAQUES_NAMES]
-        pend_sab = [r for r in raw_pend if r["insumo"] in SABORIZANTES_NAMES]
 
-        def mostrar_creditos_mp(lista, icono, state_key, emoji):
+        def _icono_cred(insumo):
+            if insumo in SABORIZANTES_NAMES:
+                return ICO_FLASK
+            if insumo in EMPAQUES_NAMES:
+                return ICO_PACKAGE
+            return ICO_LAYERS
+
+        def mostrar_creditos_mp(lista, state_key):
             if not lista:
                 st.info("No hay créditos pendientes."); return
 
@@ -2786,7 +2791,7 @@ elif st.session_state.vista == "materia_prima":
                 st.markdown(f'<div class="warn-box">{ICO_CARD} Total pendiente: <b>{fmt(total)}</b></div>', unsafe_allow_html=True)
                 for k in sorted(por_proveedor.keys()):
                     v = por_proveedor[k]
-                    if st.button(f"{emoji} {k} — {fmt(v['saldo'])} ({v['n']})", key=f"btn_cred_prov_{state_key}_{k}", use_container_width=True):
+                    if st.button(f"👤 {k} — {fmt(v['saldo'])} ({v['n']})", key=f"btn_cred_prov_{state_key}_{k}", use_container_width=True):
                         st.session_state[state_key] = k; st.rerun()
                 return
 
@@ -2800,7 +2805,7 @@ elif st.session_state.vista == "materia_prima":
                 saldo_r = float(r["saldo"])
                 cant_disp_r = f'{float(r["cantidad"]):.3f}' if r["unidad"] == "kg" else r["cantidad"]
                 st.markdown(
-                    f'<div class="factura-box"><div class="factura-header">{icono} {r["insumo"]} · {r["proveedor"]}</div>'
+                    f'<div class="factura-box"><div class="factura-header">{_icono_cred(r["insumo"])} {r["insumo"]} · {r["proveedor"]}</div>'
                     f'<div class="factura-row"><span>Fecha</span><span>{r["fecha"]}</span></div>'
                     f'<div class="factura-row"><span>Cantidad</span><span>{cant_disp_r} {r["unidad"]}</span></div>'
                     f'<div class="factura-row"><span>Total</span><span>{fmt(r["precio_total"])}</span></div>'
@@ -2815,13 +2820,8 @@ elif st.session_state.vista == "materia_prima":
                     sb_patch("materia_prima", f"id=eq.{r['id']}", {"abono": float(r["abono"])+nv, "saldo": ns, "estado": "pagado" if ns==0 else "pendiente"})
                     time.sleep(0.3); st.rerun()
 
-        sc1, sc2 = st.tabs(["🌽 Materia Prima", "🧪 Saborizantes"])
-        with sc1:
-            st.markdown('<div class="section-label">Créditos — Materia Prima</div>', unsafe_allow_html=True)
-            mostrar_creditos_mp(pend_mp, ICO_LAYERS, "credito_sel_mp", "🌽")
-        with sc2:
-            st.markdown('<div class="section-label">Créditos — Saborizantes</div>', unsafe_allow_html=True)
-            mostrar_creditos_mp(pend_sab, ICO_FLASK, "credito_sel_sab", "🧪")
+        st.markdown('<div class="section-label">Créditos — Todos los proveedores</div>', unsafe_allow_html=True)
+        mostrar_creditos_mp(raw_pend, "credito_sel_mp")
 
     with tab_mp4:
         st.markdown('<div class="section-label">Resumen del período</div>', unsafe_allow_html=True)
