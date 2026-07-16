@@ -2971,7 +2971,7 @@ elif st.session_state.vista == "materia_prima":
 
 elif st.session_state.vista == "caja":
     st.markdown(f'<div class="section-label">{ICO_DOLLAR} Caja</div>', unsafe_allow_html=True)
-    tab_caja1, tab_caja2, tab_caja3 = st.tabs(["📊 Resumen", "➕ Ingreso / Egreso", "📋 Historial"])
+    tab_caja1, tab_caja2, tab_caja3, tab_caja4 = st.tabs(["📊 Resumen", "➕ Ingreso / Egreso", "📋 Historial", "🧮 Arqueo de caja"])
 
     # Fechas del período
     hoy_caja = datetime.now(COL_TZ).date()
@@ -3221,6 +3221,107 @@ elif st.session_state.vista == "caja":
             tabla_view(pd.DataFrame(movimientos))
         else:
             st.info("No hay movimientos en ese período.")
+
+    with tab_caja4:
+        st.markdown('<div class="section-label">Arqueo de caja</div>', unsafe_allow_html=True)
+        st.caption("Compara el efectivo que el sistema esperaba tener contra lo que contaste físicamente, para detectar si falta o sobra plata.")
+
+        fecha_arq = st.date_input("Fecha del arqueo", value=hoy_caja, max_value=hoy_caja, key="fecha_arqueo")
+        fecha_arq_str = str(fecha_arq)
+
+        with ThreadPoolExecutor(max_workers=4) as ex:
+            f_v_a  = ex.submit(sb_get, "ventas", f"select=abono,saldo,factura_id&fecha=eq.{fecha_arq_str}&canal=in.(Fábrica,Carro)")
+            f_pg_a = ex.submit(sb_get, "pagos_credito", "select=fecha,monto,tipo,factura_id")
+            f_mp_a = ex.submit(sb_get, "materia_prima", f"select=abono&fecha=eq.{fecha_arq_str}")
+            f_ing_a = ex.submit(sb_get, "caja_ingresos", f"select=valor&fecha=eq.{fecha_arq_str}")
+        raw_v_a  = f_v_a.result() or []
+        raw_pg_a = f_pg_a.result() or []
+        raw_mp_a = f_mp_a.result() or []
+        raw_ing_a = f_ing_a.result() or []
+        raw_eg_a = sb_get("caja_egresos", f"select=valor&fecha=eq.{fecha_arq_str}") or []
+
+        # Igual que en Resumen: se resta lo que se cobró después de la venta (vía
+        # "Cobrar" en créditos pendientes) para no contarlo dos veces.
+        cobrado_despues_a = {}
+        for r in raw_pg_a:
+            if r.get("tipo") == "venta" and r.get("factura_id"):
+                fid = r["factura_id"]
+                cobrado_despues_a[fid] = cobrado_despues_a.get(fid, 0) + float(r["monto"])
+
+        facturas_a = {}
+        for r in raw_v_a:
+            fid = r.get("factura_id", "")
+            if fid and fid not in facturas_a:
+                facturas_a[fid] = max(0.0, float(r.get("abono", 0)) - cobrado_despues_a.get(fid, 0))
+        ingresos_ventas_a = sum(facturas_a.values())
+
+        ingresos_cobro_creditos_a = sum(float(r["monto"]) for r in raw_pg_a if r["fecha"] == fecha_arq_str)
+        ingresos_manuales_a = sum(float(r["valor"]) for r in raw_ing_a)
+        total_ingresos_a = ingresos_ventas_a + ingresos_cobro_creditos_a + ingresos_manuales_a
+
+        egresos_mp_a = sum(float(r["abono"]) for r in raw_mp_a)
+        egresos_gastos_a = sum(float(r["valor"]) for r in raw_eg_a)
+        total_egresos_a = egresos_mp_a + egresos_gastos_a
+
+        # El efectivo con el que se abrió caja ese día se sugiere con lo contado en
+        # el último arqueo anterior — así no hay que acordarse del número a mano.
+        raw_arq_prev = sb_get("arqueos_caja", f"select=fecha,efectivo_contado&fecha=lt.{fecha_arq_str}&order=fecha.desc&limit=1") or []
+        efectivo_inicial_sugerido = float(raw_arq_prev[0]["efectivo_contado"]) if raw_arq_prev else 0.0
+
+        efectivo_inicial_a = st.number_input(
+            "Efectivo con el que abriste caja ese día ($)",
+            min_value=0, value=int(efectivo_inicial_sugerido), step=1000, key="efectivo_inicial_arqueo",
+            help="Se sugiere con lo contado en el último arqueo anterior. Ajústalo si es distinto."
+        )
+
+        efectivo_esperado_a = efectivo_inicial_a + total_ingresos_a - total_egresos_a
+        st.markdown(
+            f'<div class="factura-box">'
+            f'<div class="factura-row"><span>Efectivo inicial</span><span>{fmt(efectivo_inicial_a)}</span></div>'
+            f'<div class="factura-row"><span>{ICO_DOLLAR} Ingresos del día</span><span>{fmt(total_ingresos_a)}</span></div>'
+            f'<div class="factura-row"><span>{ICO_NOTE} Egresos del día</span><span>{fmt(total_egresos_a)}</span></div>'
+            f'<div class="factura-total"><span>Efectivo esperado</span><span>{fmt(efectivo_esperado_a)}</span></div>'
+            f'</div>',
+            unsafe_allow_html=True
+        )
+
+        efectivo_contado_a = st.number_input(
+            "Efectivo contado físicamente ($)",
+            min_value=0, value=max(0, int(efectivo_esperado_a)), step=1000, key="efectivo_contado_arqueo"
+        )
+        diferencia_a = efectivo_contado_a - efectivo_esperado_a
+
+        if diferencia_a == 0:
+            st.markdown(f'<div class="info-box">{ICO_CHECK} Cuadra exacto. Diferencia: <b>$0</b></div>', unsafe_allow_html=True)
+        elif diferencia_a < 0:
+            st.markdown(f'<div class="alert-low">{ICO_WARN} Falta <b>{fmt(abs(diferencia_a))}</b></div>', unsafe_allow_html=True)
+        else:
+            st.markdown(f'<div class="warn-box">{ICO_WARN} Sobra <b>{fmt(diferencia_a)}</b></div>', unsafe_allow_html=True)
+
+        empleado_arq = st.selectbox("¿Quién hace este arqueo?", EMPLEADOS, key="empleado_arqueo")
+
+        if st.button("💾 Guardar arqueo", key="btn_guardar_arqueo"):
+            ok_arq = sb_post("arqueos_caja", {
+                "fecha": fecha_arq_str, "hora": ahora(), "empleado": empleado_arq,
+                "efectivo_inicial": float(efectivo_inicial_a), "ingresos_dia": float(total_ingresos_a),
+                "egresos_dia": float(total_egresos_a), "efectivo_esperado": float(efectivo_esperado_a),
+                "efectivo_contado": float(efectivo_contado_a), "diferencia": float(diferencia_a)
+            })
+            if ok_arq:
+                st.markdown(f'<div class="success-toast">{ICO_CHECK} Arqueo guardado.</div>', unsafe_allow_html=True)
+                time.sleep(0.3); st.rerun()
+
+        st.markdown('<div class="section-label">Últimos arqueos</div>', unsafe_allow_html=True)
+        raw_hist_arq = sb_get("arqueos_caja", "select=fecha,empleado,efectivo_esperado,efectivo_contado,diferencia&order=fecha.desc&limit=30") or []
+        if raw_hist_arq:
+            df_hist_arq = pd.DataFrame([{
+                "Fecha": r["fecha"], "Quién": r.get("empleado") or "—",
+                "Esperado": fmt(r["efectivo_esperado"]), "Contado": fmt(r["efectivo_contado"]),
+                "Diferencia": fmt(r["diferencia"]),
+            } for r in raw_hist_arq])
+            tabla_view(df_hist_arq)
+        else:
+            st.caption("Aún no hay arqueos guardados.")
 
 elif st.session_state.vista == "resumen" and st.session_state.es_admin:
     sub_r1, sub_r2, sub_r3, sub_r5, sub_r4 = st.tabs(["Hoy", "Por fechas", "📅 Mes", "💳 Créditos pagados", "💾 Exportar"])
