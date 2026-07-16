@@ -2008,40 +2008,46 @@ elif st.session_state.vista == "carro":
 # ══════════════════════════════════════════════════════════════════════════════
 elif st.session_state.vista == "fabrica":
 
-    # Visible para todos (no solo admin) — Sofía y Andrea lo necesitan para
-    # saber cuánto entregar al final del día. Arriba de todo para que se vea
-    # sin tener que bajar.
-    raw_vf = sb_get("ventas", f"select=total,cantidad,vendedor,factura_id,abono,saldo&fecha=eq.{fecha_hoy()}&canal=in.(Fábrica,Cambio)")
-    if raw_vf:
-        bolsas_fab_dia = sum(r["cantidad"] for r in raw_vf if r["cantidad"] > 0)
-        por_vendedor = {}
-        for r in raw_vf:
-            if r["total"] > 0:
-                v = r["vendedor"]
-                por_vendedor[v] = por_vendedor.get(v, 0) + r["total"]
-        facturas_fab_dia = {}
-        for r in raw_vf:
-            fid = r.get("factura_id", "")
-            if fid and fid not in facturas_fab_dia:
-                facturas_fab_dia[fid] = {"abono": float(r.get("abono", 0) or 0), "saldo": float(r.get("saldo", 0) or 0)}
-        cobrado_fab_dia = sum(f["abono"] for f in facturas_fab_dia.values())
-        credito_fab_dia = sum(f["saldo"] for f in facturas_fab_dia.values())
-        st.markdown('<div class="section-label">Resumen del día — Fábrica</div>', unsafe_allow_html=True)
-        filas_v = "".join(
-            f'<div class="factura-row"><span>{ICO_USER} {v}</span><span><b>{fmt(t)}</b></span></div>'
-            for v, t in por_vendedor.items()
-        )
-        st.markdown(
-            f'<div class="factura-box">{filas_v}'
-            f'<div class="factura-row"><span>{ICO_CART} Bolsas vendidas hoy</span><span><b>{bolsas_fab_dia}</b></span></div>'
-            f'<div class="factura-row"><span>{ICO_DOLLAR} Cobrado</span><span><b>{fmt(cobrado_fab_dia)}</b></span></div>'
-            f'<div class="factura-row"><span>{ICO_CLIPBOARD} Dejado en crédito</span><span><b>{fmt(credito_fab_dia)}</b></span></div>'
-            f'<div class="factura-total"><span>{ICO_DOLLAR} Total a entregar</span><span>{fmt(cobrado_fab_dia)}</span></div>'
-            f'</div>',
-            unsafe_allow_html=True
-        )
+    sub_f1, sub_f2 = st.tabs(["💵 Registrar venta", "💳 Créditos"])
 
-    render_venta_canal(CONFIG_FABRICA)
+    with sub_f1:
+        # Visible para todos (no solo admin) — Sofía y Andrea lo necesitan para
+        # saber cuánto entregar al final del día. Arriba de todo para que se vea
+        # sin tener que bajar.
+        raw_vf = sb_get("ventas", f"select=total,cantidad,vendedor,factura_id,abono,saldo&fecha=eq.{fecha_hoy()}&canal=in.(Fábrica,Cambio)")
+        if raw_vf:
+            bolsas_fab_dia = sum(r["cantidad"] for r in raw_vf if r["cantidad"] > 0)
+            por_vendedor = {}
+            for r in raw_vf:
+                if r["total"] > 0:
+                    v = r["vendedor"]
+                    por_vendedor[v] = por_vendedor.get(v, 0) + r["total"]
+            facturas_fab_dia = {}
+            for r in raw_vf:
+                fid = r.get("factura_id", "")
+                if fid and fid not in facturas_fab_dia:
+                    facturas_fab_dia[fid] = {"abono": float(r.get("abono", 0) or 0), "saldo": float(r.get("saldo", 0) or 0)}
+            cobrado_fab_dia = sum(f["abono"] for f in facturas_fab_dia.values())
+            credito_fab_dia = sum(f["saldo"] for f in facturas_fab_dia.values())
+            st.markdown('<div class="section-label">Resumen del día — Fábrica</div>', unsafe_allow_html=True)
+            filas_v = "".join(
+                f'<div class="factura-row"><span>{ICO_USER} {v}</span><span><b>{fmt(t)}</b></span></div>'
+                for v, t in por_vendedor.items()
+            )
+            st.markdown(
+                f'<div class="factura-box">{filas_v}'
+                f'<div class="factura-row"><span>{ICO_CART} Bolsas vendidas hoy</span><span><b>{bolsas_fab_dia}</b></span></div>'
+                f'<div class="factura-row"><span>{ICO_DOLLAR} Cobrado</span><span><b>{fmt(cobrado_fab_dia)}</b></span></div>'
+                f'<div class="factura-row"><span>{ICO_CLIPBOARD} Dejado en crédito</span><span><b>{fmt(credito_fab_dia)}</b></span></div>'
+                f'<div class="factura-total"><span>{ICO_DOLLAR} Total a entregar</span><span>{fmt(cobrado_fab_dia)}</span></div>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
+
+        render_venta_canal(CONFIG_FABRICA, mostrar_creditos=False)
+
+    with sub_f2:
+        mostrar_creditos_pendientes("Fábrica")
 
 # ══════════════════════════════════════════════════════════════════════════════
 # VISTA: RESUMEN (solo admin)
