@@ -1052,7 +1052,7 @@ label,.stSelectbox label,.stNumberInput label,.stDateInput label,.stTextInput la
 .stButton>button{width:100%;background:#1565C0 !important;color:white !important;-webkit-text-fill-color:white !important;border:none !important;border-radius:12px !important;padding:14px !important;font-size:1rem !important;font-weight:700 !important;cursor:pointer;margin-top:4px;box-shadow:0 4px 16px rgba(21,101,192,0.25);white-space:pre-line !important;line-height:1.4 !important;transition:transform 0.12s ease,box-shadow 0.12s ease,opacity 0.12s ease !important;}
 .stButton>button:hover{opacity:0.88;box-shadow:0 6px 20px rgba(21,101,192,0.35);transform:translateY(-1px);}
 .stButton>button:active{transform:scale(0.97) translateY(0);box-shadow:0 2px 8px rgba(21,101,192,0.25);opacity:1;}
-.st-key-btn_resumen button{
+.st-key-btn_resumen button,.st-key-btn_contador button{
   background:linear-gradient(135deg,#FFFFFF,#EEF4FF) !important;
   color:#0D1B2A !important;
   -webkit-text-fill-color:#0D1B2A !important;
@@ -1068,12 +1068,12 @@ label,.stSelectbox label,.stNumberInput label,.stDateInput label,.stTextInput la
   text-align:left !important;
   transition:transform 0.12s ease,box-shadow 0.12s ease !important;
 }
-.st-key-btn_resumen button:hover{
+.st-key-btn_resumen button:hover,.st-key-btn_contador button:hover{
   box-shadow:0 5px 16px rgba(21,101,192,0.25) !important;
   opacity:1 !important;
   transform:translateY(-2px) !important;
 }
-.st-key-btn_resumen button:active{
+.st-key-btn_resumen button:active,.st-key-btn_contador button:active{
   transform:scale(0.98) !important;
   box-shadow:0 2px 8px rgba(21,101,192,0.15) !important;
 }
@@ -1190,6 +1190,7 @@ _iconos_svg = {
     "materia_prima": '<polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>',
     "caja":          '<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>',
     "resumen":       '<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>',
+    "contador":      '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>',
 }
 
 _css_botones_menu = ""
@@ -1247,6 +1248,24 @@ _css_botones_menu += f"""
   width:28px;
   height:28px;
   background:url("data:image/svg+xml;base64,{_resumen_icon_b64}") no-repeat center/contain;
+}}
+"""
+
+_contador_icon_b64 = get_svg_b64(_iconos_svg["contador"], "#0D1B2A")
+_css_botones_menu += f"""
+.st-key-btn_contador button{{
+  padding-left:60px !important;
+  position:relative !important;
+}}
+.st-key-btn_contador button::before{{
+  content:'';
+  position:absolute;
+  left:18px;
+  top:50%;
+  transform:translateY(-50%);
+  width:28px;
+  height:28px;
+  background:url("data:image/svg+xml;base64,{_contador_icon_b64}") no-repeat center/contain;
 }}
 """
 
