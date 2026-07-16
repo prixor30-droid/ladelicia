@@ -239,8 +239,8 @@ def mostrar_facturas_seleccionables(df_canal, key_prefix):
         if not fid:
             continue
         grupo = df_canal[df_canal["factura_id"]==fid]
-        es_credito = bool(grupo["es_credito"].any()) if "es_credito" in grupo.columns else False
-        estado = "📋 Crédito" if es_credito else "✓ Aprobado"
+        saldo_fac = float(grupo["saldo"].max()) if "saldo" in grupo.columns and not grupo.empty else 0
+        estado = "📋 Crédito" if saldo_fac > 0 else "✓ Aprobado"
         filas.append({
             "Fecha": grupo["fecha"].iloc[0],
             "N° Comprobante": f"FV-{fid}",
@@ -673,7 +673,7 @@ def render_venta_canal(cfg, mostrar_creditos=True):
     st.markdown('<div class="section-label">Ventas de hoy</div>', unsafe_allow_html=True)
     st.caption("Toca una fila para ver el recibo completo.")
     raw_fact = sb_get("ventas",
-        f"select=fecha,hora,cliente,vendedor,sabor,cantidad,total,factura_id,es_credito&fecha=eq.{fecha_hoy()}&canal=eq.{canal}&order=hora.desc")
+        f"select=fecha,hora,cliente,vendedor,sabor,cantidad,total,factura_id,saldo&fecha=eq.{fecha_hoy()}&canal=eq.{canal}&order=hora.desc")
     if raw_fact:
         df_fact = pd.DataFrame(raw_fact)
         mostrar_facturas_seleccionables(df_fact, cfg["tabla_key"])
