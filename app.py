@@ -380,9 +380,10 @@ def mostrar_creditos_pendientes(canal):
         facturas = {k: d for k, d in facturas.items() if _coincide_nombre(busqueda, d["cliente"])}
         if not facturas:
             st.caption("No hay créditos pendientes para ese cliente.")
+    contenedor_creditos = st.container(height=820) if len(facturas) > 5 else st.container()
     for key, datos in facturas.items():
         saldo = datos["saldo"]
-        st.markdown(
+        contenedor_creditos.markdown(
             f'<div class="warn-box">'
             f'<b>{datos["cliente"]}</b> · {datos["etiqueta"]}<br>'
             f'Total: {fmt(datos["total"])} · Abonado: {fmt(datos["abono"])} · '
@@ -390,7 +391,7 @@ def mostrar_creditos_pendientes(canal):
             f'</div>',
             unsafe_allow_html=True
         )
-        col_m, col_b = st.columns([3, 1])
+        col_m, col_b = contenedor_creditos.columns([3, 1])
         nuevo_abono = col_m.number_input(
             "Abono ($)", min_value=0, max_value=int(saldo),
             value=int(saldo), step=1000, key=f"abono_pend_{key}"
