@@ -2367,7 +2367,7 @@ elif st.session_state.vista == "materia_prima":
 
     UMBRAL_ROLLO_AGOTADO = 1.0  # kg — por debajo de esto se considera que el rollo se acabó
 
-    def registrar_entrada_mp(nombre_sel, unidad_sel, cant_mp, prov_mp, precio_mp, abono_mp, saldo_mp, precio_unit_mp=0, fecha_mp=None, es_stock_existente=False):
+    def registrar_entrada_mp(nombre_sel, unidad_sel, cant_mp, prov_mp, precio_mp, abono_mp, saldo_mp, precio_unit_mp=0, fecha_mp=None, es_stock_existente=False, numero_factura_mp=""):
         if not es_stock_existente:
             if not prov_mp.strip():
                 st.markdown(f'<div class="alert-low">{ICO_WARN} Escribe el nombre del proveedor.</div>', unsafe_allow_html=True)
@@ -2381,7 +2381,8 @@ elif st.session_state.vista == "materia_prima":
             "unidad": unidad_sel, "proveedor": prov_mp.strip() or "Stock existente",
             "precio_total": float(precio_mp), "abono": float(abono_mp),
             "saldo": float(saldo_mp), "estado": "pagado" if saldo_mp == 0 else "pendiente",
-            "precio_unitario": float(precio_unit_mp)
+            "precio_unitario": float(precio_unit_mp),
+            "numero_factura": numero_factura_mp.strip() or None
         }
         h = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}",
              "Content-Type": "application/json", "Prefer": "return=minimal"}
@@ -2450,6 +2451,14 @@ elif st.session_state.vista == "materia_prima":
                 placeholder="Ej: Stock existente" if ya_tengo_mp else "Ej: Distribuidora La 14",
                 key="prov_mp"
             )
+            numero_factura_mp = ""
+            if not ya_tengo_mp:
+                numero_factura_mp = st.text_input(
+                    "N° de factura (opcional)",
+                    placeholder="Ej: 4521",
+                    help="Si dos entregas del mismo proveedor caen el mismo día, este número las separa en Créditos.",
+                    key="numero_factura_mp"
+                )
             precio_unit_mp = st.number_input(
                 f"Precio unitario ($ por {unidad_sel})" + (" — opcional" if ya_tengo_mp else ""),
                 min_value=0, value=0, step=1000, key="precio_unit_mp"
@@ -2477,7 +2486,7 @@ elif st.session_state.vista == "materia_prima":
                 abono_mp = precio_mp; saldo_mp = 0
             col1, col2 = st.columns(2)
             if col1.button("✅ Registrar", key="btn_mp"):
-                if registrar_entrada_mp(nombre_sel, unidad_sel, cant_mp, prov_mp, precio_mp, abono_mp, saldo_mp, precio_unit_mp, fecha_mp, es_stock_existente=ya_tengo_mp):
+                if registrar_entrada_mp(nombre_sel, unidad_sel, cant_mp, prov_mp, precio_mp, abono_mp, saldo_mp, precio_unit_mp, fecha_mp, es_stock_existente=ya_tengo_mp, numero_factura_mp=numero_factura_mp):
                     st.session_state.ok_mp = True
                     st.session_state.insumo_sel = None
                     st.session_state.categoria_mp = None
@@ -2802,18 +2811,28 @@ elif st.session_state.vista == "materia_prima":
             total_prov = sum(float(r["saldo"]) for r in lista_prov)
             st.markdown(f'<div class="warn-box">{ICO_CARD} Total pendiente a {prov_sel_cred}: <b>{fmt(total_prov)}</b></div>', unsafe_allow_html=True)
 
-            # Agrupa por fecha: todo lo que un mismo proveedor entregó el mismo día se
-            # muestra como una sola factura (tal como la entrega físicamente), aunque
-            # sean insumos de distinta categoría (ej. saborizante + salsa).
+            # Agrupa por número de factura cuando se anotó uno; si no, cae de vuelta a
+            # agrupar por fecha (comportamiento anterior, para registros viejos sin número).
+            # Así dos entregas del mismo proveedor el mismo día no se mezclan si tienen
+            # número de factura distinto.
             facturas_prov = {}
             for r in lista_prov:
-                facturas_prov.setdefault(r["fecha"], []).append(r)
+                num_f = (r.get("numero_factura") or "").strip()
+                clave = f"N-{num_f}" if num_f else f"F-{r['fecha']}"
+                facturas_prov.setdefault(clave, []).append(r)
 
-            for fecha_f in sorted(facturas_prov.keys(), reverse=True):
-                lineas = facturas_prov[fecha_f]
+            def _orden_factura(clave):
+                lineas = facturas_prov[clave]
+                return max(r["fecha"] for r in lineas)
+
+            for clave in sorted(facturas_prov.keys(), key=_orden_factura, reverse=True):
+                lineas = facturas_prov[clave]
                 total_f = sum(float(r["precio_total"]) for r in lineas)
                 abono_f = sum(float(r["abono"]) for r in lineas)
                 saldo_f = sum(float(r["saldo"]) for r in lineas)
+                num_f = (lineas[0].get("numero_factura") or "").strip()
+                fecha_f = lineas[0]["fecha"] if len(set(r["fecha"] for r in lineas)) == 1 else f'{min(r["fecha"] for r in lineas)} a {max(r["fecha"] for r in lineas)}'
+                titulo_f = f"Factura N° {num_f} · {fecha_f}" if num_f else f"Factura {fecha_f}"
 
                 filas_html = ""
                 for r in lineas:
@@ -2824,7 +2843,7 @@ elif st.session_state.vista == "materia_prima":
                     )
 
                 st.markdown(
-                    f'<div class="factura-box"><div class="factura-header">🧾 Factura {fecha_f} · {prov_sel_cred}</div>'
+                    f'<div class="factura-box"><div class="factura-header">🧾 {titulo_f} · {prov_sel_cred}</div>'
                     f'{filas_html}'
                     f'<div class="factura-row"><span>Total</span><span>{fmt(total_f)}</span></div>'
                     f'<div class="factura-row"><span>Abonado</span><span>{fmt(abono_f)}</span></div>'
@@ -2832,8 +2851,8 @@ elif st.session_state.vista == "materia_prima":
                     unsafe_allow_html=True
                 )
                 col_a, col_b = st.columns([3, 1])
-                nv = col_a.number_input("Abono ($)", min_value=0, max_value=int(saldo_f), value=int(saldo_f), step=1000, key=f"abono_pend_mp_{state_key}_{prov_sel_cred}_{fecha_f}")
-                if col_b.button("✅ Pagar", key=f"btn_pagar_mp_{state_key}_{prov_sel_cred}_{fecha_f}"):
+                nv = col_a.number_input("Abono ($)", min_value=0, max_value=int(saldo_f), value=int(saldo_f), step=1000, key=f"abono_pend_mp_{state_key}_{prov_sel_cred}_{clave}")
+                if col_b.button("✅ Pagar", key=f"btn_pagar_mp_{state_key}_{prov_sel_cred}_{clave}"):
                     restante = nv
                     for r in lineas:
                         if restante <= 0:
