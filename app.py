@@ -1218,15 +1218,17 @@ label,.stSelectbox label,.stNumberInput label,.stDateInput label,.stTextInput la
 .metric-box .lbl{font-size:0.65rem;color:#1565C0;margin-top:3px;}
 .metric-blue .val{color:#1565C0;}.metric-green .val{color:#1B9E5A;}.metric-red .val{color:#D32F2F;}.metric-yellow .val{color:#E68900;}
 @keyframes fadeInUp{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:translateY(0);}}
+@keyframes btnPress{0%{transform:scale(1);}40%{transform:scale(0.93);}100%{transform:scale(0.97);}}
+@keyframes cardPress{0%{transform:scale(1) translateY(0);}40%{transform:scale(0.95) translateY(1px);}100%{transform:scale(0.98) translateY(0);}}
 .alert-low,.info-box,.warn-box,.success-toast,.factura-box,.recibo-ticket,.metric-box{animation:fadeInUp 0.25s ease both;}
 .alert-low{background:#FFEBEE;border-left:3px solid #D32F2F;border-radius:0 10px 10px 0;padding:10px 14px;margin-bottom:9px;font-size:0.83rem;color:#B71C1C;}
 .info-box{background:#FFFFFF;border-left:3px solid #1B9E5A;border-radius:10px;padding:12px 14px;margin:8px 0 14px;font-size:0.82rem;color:#1B5E20;box-shadow:0 1px 6px rgba(0,0,0,0.05);}
 .warn-box{background:#FFFFFF;border-left:3px solid #E68900;border-radius:10px;padding:12px 14px;margin:8px 0 14px;font-size:0.82rem;color:#8D6E00;box-shadow:0 1px 6px rgba(0,0,0,0.05);}
 .success-toast{background:#E8F5E9;border:1px solid #A5D6A7;border-radius:12px;padding:14px 16px;text-align:center;font-weight:600;color:#1B5E20;font-size:0.95rem;margin-top:10px;}
 .section-label{font-size:0.69rem;font-weight:700;text-transform:uppercase;letter-spacing:0.7px;color:#B0185F;margin:16px 0 6px;}
-.stButton>button{width:100%;background:#1565C0 !important;color:white !important;-webkit-text-fill-color:white !important;border:none !important;border-radius:12px !important;padding:14px !important;font-size:1rem !important;font-weight:700 !important;cursor:pointer;margin-top:4px;box-shadow:0 4px 16px rgba(21,101,192,0.25);white-space:pre-line !important;line-height:1.4 !important;transition:transform 0.12s ease,box-shadow 0.12s ease,opacity 0.12s ease !important;}
+.stButton>button{width:100%;background:#1565C0 !important;color:white !important;-webkit-text-fill-color:white !important;border:none !important;border-radius:12px !important;padding:14px !important;font-size:1rem !important;font-weight:700 !important;cursor:pointer;margin-top:4px;box-shadow:0 4px 16px rgba(21,101,192,0.25);white-space:pre-line !important;line-height:1.4 !important;transition:transform 0.12s ease,box-shadow 0.12s ease,opacity 0.12s ease !important;-webkit-tap-highlight-color:transparent;touch-action:manipulation;}
 .stButton>button:hover{opacity:0.88;box-shadow:0 6px 20px rgba(21,101,192,0.35);transform:translateY(-1px);}
-.stButton>button:active{transform:scale(0.97) translateY(0);box-shadow:0 2px 8px rgba(21,101,192,0.25);opacity:1;}
+.stButton>button:active{transform:scale(0.97) translateY(0);box-shadow:0 2px 8px rgba(21,101,192,0.25);opacity:1;animation:btnPress 0.18s ease-out;}
 .st-key-btn_resumen button,.st-key-btn_contador button{
   background:linear-gradient(135deg,#FFFFFF,#EEF4FF) !important;
   color:#0D1B2A !important;
@@ -1242,6 +1244,8 @@ label,.stSelectbox label,.stNumberInput label,.stDateInput label,.stTextInput la
   line-height:1.5 !important;
   text-align:left !important;
   transition:transform 0.12s ease,box-shadow 0.12s ease !important;
+  -webkit-tap-highlight-color:transparent;
+  touch-action:manipulation;
 }
 .st-key-btn_resumen button:hover,.st-key-btn_contador button:hover{
   box-shadow:0 5px 16px rgba(21,101,192,0.25) !important;
@@ -1251,6 +1255,7 @@ label,.stSelectbox label,.stNumberInput label,.stDateInput label,.stTextInput la
 .st-key-btn_resumen button:active,.st-key-btn_contador button:active{
   transform:scale(0.98) !important;
   box-shadow:0 2px 8px rgba(21,101,192,0.15) !important;
+  animation:cardPress 0.18s ease-out !important;
 }
 
 [data-testid="stMetricLabel"] p{color:#1565C0 !important;}
