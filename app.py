@@ -3074,8 +3074,8 @@ elif st.session_state.vista == "materia_prima":
                 except Exception as e:
                     st.error(f"Error: {e}")
 
-        st.markdown('<div class="section-label">🕒 Últimas salidas registradas</div>', unsafe_allow_html=True)
-        raw_hist_sal = sb_get("salidas_mp", "select=*&order=fecha.desc,hora.desc&limit=20") or []
+        st.markdown(f'<div class="section-label">🕒 Últimas salidas — {cat_sal}</div>', unsafe_allow_html=True)
+        raw_hist_sal = sb_get("salidas_mp", f"select=*&categoria=eq.{cat_key}&order=fecha.desc,hora.desc&limit=20") or []
         if raw_hist_sal:
             df_hist_sal = pd.DataFrame([{
                 "Fecha": r["fecha"], "Hora": r.get("hora", ""),
