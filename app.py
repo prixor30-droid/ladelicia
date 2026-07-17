@@ -1221,6 +1221,37 @@ label,.stSelectbox label,.stNumberInput label,.stDateInput label,.stTextInput la
 @keyframes btnPress{0%{transform:scale(1);}40%{transform:scale(0.93);}100%{transform:scale(0.97);}}
 @keyframes cardPress{0%{transform:scale(1) translateY(0);}40%{transform:scale(0.95) translateY(1px);}100%{transform:scale(0.98) translateY(0);}}
 @keyframes logoBounce{0%,100%{transform:translateY(0) scale(1,1);}10%{transform:translateY(0) scale(1.08,0.92);}35%{transform:translateY(-36px) scale(0.96,1.06);}55%{transform:translateY(0) scale(1.1,0.9);}65%{transform:translateY(-12px) scale(1,1);}80%{transform:translateY(0) scale(1.04,0.96);}90%{transform:translateY(0) scale(1,1);}}
+@keyframes ctaPulse{0%,100%{box-shadow:0 4px 16px rgba(21,101,192,0.3);transform:scale(1);}50%{box-shadow:0 4px 26px rgba(21,101,192,0.65);transform:scale(1.02);}}
+.st-key-venta_btn_confirmar button:not(:disabled),
+.st-key-btn_prod button:not(:disabled),
+.st-key-btn_adj button:not(:disabled),
+.st-key-btn_dev button:not(:disabled),
+.st-key-btn_reg button:not(:disabled),
+.st-key-btn_reg_fab button:not(:disabled),
+.st-key-btn_rollo_registrar button:not(:disabled),
+.st-key-btn_sal button:not(:disabled),
+.st-key-btn_eg button:not(:disabled),
+.st-key-btn_in button:not(:disabled),
+.st-key-btn_guardar_arqueo button:not(:disabled),
+.st-key-btn_guardar_reserva button:not(:disabled),
+[class*="st-key-btn_cred_guardar_"] button:not(:disabled){
+  animation:ctaPulse 1.6s ease-in-out infinite !important;
+}
+.st-key-venta_btn_confirmar button:hover,.st-key-venta_btn_confirmar button:active,
+.st-key-btn_prod button:hover,.st-key-btn_prod button:active,
+.st-key-btn_adj button:hover,.st-key-btn_adj button:active,
+.st-key-btn_dev button:hover,.st-key-btn_dev button:active,
+.st-key-btn_reg button:hover,.st-key-btn_reg button:active,
+.st-key-btn_reg_fab button:hover,.st-key-btn_reg_fab button:active,
+.st-key-btn_rollo_registrar button:hover,.st-key-btn_rollo_registrar button:active,
+.st-key-btn_sal button:hover,.st-key-btn_sal button:active,
+.st-key-btn_eg button:hover,.st-key-btn_eg button:active,
+.st-key-btn_in button:hover,.st-key-btn_in button:active,
+.st-key-btn_guardar_arqueo button:hover,.st-key-btn_guardar_arqueo button:active,
+.st-key-btn_guardar_reserva button:hover,.st-key-btn_guardar_reserva button:active,
+[class*="st-key-btn_cred_guardar_"] button:hover,[class*="st-key-btn_cred_guardar_"] button:active{
+  animation:none !important;
+}
 .alert-low,.info-box,.warn-box,.success-toast,.factura-box,.recibo-ticket,.metric-box{animation:fadeInUp 0.25s ease both;}
 .alert-low{background:#FFEBEE;border-left:3px solid #D32F2F;border-radius:0 10px 10px 0;padding:10px 14px;margin-bottom:9px;font-size:0.83rem;color:#B71C1C;}
 .info-box{background:#FFFFFF;border-left:3px solid #1B9E5A;border-radius:10px;padding:12px 14px;margin:8px 0 14px;font-size:0.82rem;color:#1B5E20;box-shadow:0 1px 6px rgba(0,0,0,0.05);}
