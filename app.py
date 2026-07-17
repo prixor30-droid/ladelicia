@@ -828,7 +828,7 @@ def render_recibo(registros):
         '<div class="recibo-wrap"><div class="recibo-ticket">',
         f'<div class="recibo-logo">{logo_recibo_html}</div>',
         '<div class="recibo-titulo">Productos La Delicia</div>',
-        '<div class="recibo-sub">Factura electrónica de venta</div>',
+        '<div class="recibo-sub">Factura de venta</div>',
         f'<div class="recibo-sub">No. FV-{fid}</div>',
         '<div class="recibo-linea-punteada"></div>',
         f'<div class="recibo-dato"><b>Fecha:</b> {fecha_r} · {hora_r}</div>',
