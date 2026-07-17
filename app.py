@@ -1295,6 +1295,8 @@ _imagenes_menu = {
     "fabrica":       "Ventas_sofia_andrea.jpg",
     "materia_prima": "Materia_prima.jpg",
     "caja":          "Caja.jpg",
+    "resumen":       "Resumen.jpg",
+    "contador":      "Contador.jpg",
 }
 
 # Iconos vectoriales (reemplazan los emojis, que no siempre se ven igual en todos los dispositivos)
@@ -1348,8 +1350,9 @@ for _vista, _archivo in _imagenes_menu.items():
 }}
 """
 
-_resumen_icon_b64 = get_svg_b64(_iconos_svg["resumen"], "#0D1B2A")
-_css_botones_menu += f"""
+if not get_img_b64(_imagenes_menu["resumen"]):
+    _resumen_icon_b64 = get_svg_b64(_iconos_svg["resumen"], "#0D1B2A")
+    _css_botones_menu += f"""
 .st-key-btn_resumen button{{
   padding-left:60px !important;
   position:relative !important;
@@ -1366,8 +1369,9 @@ _css_botones_menu += f"""
 }}
 """
 
-_contador_icon_b64 = get_svg_b64(_iconos_svg["contador"], "#0D1B2A")
-_css_botones_menu += f"""
+if not get_img_b64(_imagenes_menu["contador"]):
+    _contador_icon_b64 = get_svg_b64(_iconos_svg["contador"], "#0D1B2A")
+    _css_botones_menu += f"""
 .st-key-btn_contador button{{
   padding-left:60px !important;
   position:relative !important;
