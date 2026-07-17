@@ -168,6 +168,16 @@ PRECIOS_RAPIDOS = {
     "Megaton": [("$5.000", 5000), ("$5.500", 5500)],
 }
 SABORES_LISTA = list(PRODUCTOS.keys())
+
+# Cuántas bolsas individuales representa "1" registrado en Producción/Ventas para
+# cada sabor — la mayoría se vende y se registra por docena, pero unos pocos son
+# por unidad o por decena. Sin esto, sumar "cantidad" tal cual mezcla conteos que
+# no son comparables (1 docena de BBQ != 1 unidad de Mega).
+UNIDADES_POR_BOLSA = {
+    "Mega": 1, "Megaton": 1, "Fósforo 140g": 1, "Fósforo 500g": 1,
+    "Fósforo 70g (x10)": 10,
+}
+UNIDADES_POR_BOLSA_DEFAULT = 12  # docena — el resto de los sabores
 EMPLEADOS = ["Andrea", "Sofía", "Javier", "Edison", "Otro"]
 RESERVA_META = {"Papa": 50_000_000, "Empaque": 50_000_000}
 VENDEDORES_FABRICA = ["Sofía", "Andrea"]
@@ -4052,7 +4062,7 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
     with ThreadPoolExecutor(max_workers=4) as ex:
         f_ent_prom_c = ex.submit(sb_get, "materia_prima", "select=insumo,precio_unitario,cantidad")
         f_sal_periodo_c = ex.submit(sb_get, "salidas_mp", f"select=insumo,cantidad&fecha=gte.{f_ini_cont}&fecha=lte.{f_fin_cont}")
-        f_prod_periodo_c = ex.submit(sb_get, "produccion", f"select=cantidad&fecha=gte.{f_ini_cont}&fecha=lte.{f_fin_cont}")
+        f_prod_periodo_c = ex.submit(sb_get, "produccion", f"select=sabor,cantidad&fecha=gte.{f_ini_cont}&fecha=lte.{f_fin_cont}")
         f_stock_term_c = ex.submit(sb_get, "inventario", "select=stock")
         f_egresos_c = ex.submit(sb_get, "caja_egresos", f"select=valor,tipo&fecha=gte.{f_ini_cont}&fecha=lte.{f_fin_cont}")
     raw_ent_prom_c = f_ent_prom_c.result() or []
@@ -4080,7 +4090,10 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
 
     costo_planta_c = sum(float(r["valor"]) for r in raw_egresos_cont if r.get("tipo") == "costo")
     costo_produccion_periodo_c = costo_mp_periodo_c + costo_planta_c
-    unidades_producidas_periodo_c = sum(float(r["cantidad"]) for r in raw_prod_periodo_c)
+    unidades_producidas_periodo_c = sum(
+        float(r["cantidad"]) * UNIDADES_POR_BOLSA.get(r.get("sabor"), UNIDADES_POR_BOLSA_DEFAULT)
+        for r in raw_prod_periodo_c
+    )
     costo_unitario_prod_c = (costo_produccion_periodo_c / unidades_producidas_periodo_c) if unidades_producidas_periodo_c > 0 else 0
     stock_terminado_total_c = sum(float(r["stock"]) for r in raw_stock_term_c)
     valor_inventario_terminado_c = costo_unitario_prod_c * stock_terminado_total_c
@@ -4092,7 +4105,7 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
         <div class="metric-box metric-green"><div class="val">{fmt(round(valor_inventario_terminado_c))}</div><div class="lbl">Producto terminado en bodega</div></div>
     </div>
     """, unsafe_allow_html=True)
-    st.caption(f"💡 Costo de producción = materia prima+saborizantes+empaque consumidos en el período (a precio promedio histórico) + egresos marcados como \"costo de producción\" ({fmt(round(costo_planta_c))}). Costo unitario = ese total ÷ {unidades_producidas_periodo_c:.0f} unidades producidas en el período. Los egresos sin clasificar no cuentan aquí.")
+    st.caption(f"💡 Costo de producción = materia prima+saborizantes+empaque consumidos en el período (a precio promedio histórico) + egresos marcados como \"costo de producción\" ({fmt(round(costo_planta_c))}). Costo unitario = ese total ÷ {unidades_producidas_periodo_c:.0f} bolsas individuales producidas en el período (las docenas y decenas ya están convertidas a bolsas para que el promedio sea comparable entre sabores). Para comparar contra el precio de venta de un sabor por docena, multiplica este costo unitario ×12 (o ×10 si es Fósforo 70g). Los egresos sin clasificar no cuentan aquí.")
 
     # --- Historial de pagos por empleado ---
     st.markdown(f'<div class="section-label">{ICO_RECEIPT} Historial por empleado</div>', unsafe_allow_html=True)
