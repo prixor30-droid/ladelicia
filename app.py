@@ -1466,7 +1466,7 @@ _fondo_b64 = get_img_b64("fondo.jpg")
 if _fondo_b64:
     _css_botones_menu += f"""
 .stApp{{
-  background:linear-gradient(rgba(240,244,255,0.6),rgba(240,244,255,0.6)),url("data:image/jpeg;base64,{_fondo_b64}") center/cover no-repeat !important;
+  background:linear-gradient(rgba(240,244,255,0.8),rgba(240,244,255,0.8)),url("data:image/jpeg;base64,{_fondo_b64}") center/cover no-repeat !important;
 }}
 """
 
