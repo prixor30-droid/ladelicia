@@ -3074,6 +3074,21 @@ elif st.session_state.vista == "materia_prima":
                 except Exception as e:
                     st.error(f"Error: {e}")
 
+        st.markdown('<div class="section-label">🕒 Últimas salidas registradas</div>', unsafe_allow_html=True)
+        raw_hist_sal = sb_get("salidas_mp", "select=*&order=fecha.desc,hora.desc&limit=20") or []
+        if raw_hist_sal:
+            df_hist_sal = pd.DataFrame([{
+                "Fecha": r["fecha"], "Hora": r.get("hora", ""),
+                "Insumo": r["insumo"],
+                "Cantidad": f'{float(r["cantidad"]):.3f}' if r.get("unidad") == "kg" else r["cantidad"],
+                "Unidad": r.get("unidad", ""),
+                "Motivo": r.get("motivo") or "—",
+            } for r in raw_hist_sal])
+            with st.container(height=380):
+                tabla_view(df_hist_sal)
+        else:
+            st.caption("Aún no hay salidas registradas.")
+
     with tab_mp3:
         raw_pend = sb_get("materia_prima", "select=*&estado=eq.pendiente&order=fecha.desc") or []
 
