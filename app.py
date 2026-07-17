@@ -3540,7 +3540,8 @@ elif st.session_state.vista == "caja" and st.session_state.es_admin:
 
         if movimientos:
             movimientos.sort(key=lambda x: (x["Fecha"], x["Hora"]), reverse=True)
-            tabla_view(pd.DataFrame(movimientos))
+            with st.container(height=420):
+                tabla_view(pd.DataFrame(movimientos))
         else:
             st.info("No hay movimientos en ese período.")
 
