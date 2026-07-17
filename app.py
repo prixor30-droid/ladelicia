@@ -141,7 +141,7 @@ PRODUCTOS = {
     "BBQ": 9000, "Limón": 9000, "Carita Feliz": 9000, "Pollo": 9000,
     "Parrillada": 9000, "Chorizo Limón": 9000, "Mayonesa": 9000,
     "Queso": 9000, "Picante": 9000, "Almuerzo Pollo": 9000,
-    "Almuerzo Limón": 9000, "Almuerzo Picante": 9000,
+    "Almuerzo Limón": 9000, "Almuerzo Picante": 9000, "Surtidas": 9000,
     "Mega": 1700, "Megaton": 5000,
     "Fósforo 70g (x10)": 14500, "Fósforo 140g": 3500,
     "Fósforo 250g": 7000, "Fósforo 500g": 14000,
@@ -161,6 +161,7 @@ PRECIOS_RAPIDOS = {
     "Almuerzo Pollo":   [("Mayorista", 8500), ("Frecuente", 9000), ("Ocasional", 9500), ("Pequeño", 10000)],
     "Almuerzo Limón":   [("Mayorista", 8500), ("Frecuente", 9000), ("Ocasional", 9500), ("Pequeño", 10000)],
     "Almuerzo Picante": [("Mayorista", 8500), ("Frecuente", 9000), ("Ocasional", 9500), ("Pequeño", 10000)],
+    "Surtidas":         [("Mayorista", 8500), ("Frecuente", 9000), ("Ocasional", 9500), ("Pequeño", 10000)],
     "Fósforo 70g (x10)": [("Mayorista", 14500), ("Minorista", 15000)],
     "Fósforo 140g":      [("Mayorista", 3500),  ("Minorista", 4000)],
     "Fósforo 500g":      [("Mayorista", 14500), ("Minorista", 15000)],
@@ -1311,6 +1312,9 @@ label,.stSelectbox label,.stNumberInput label,.stDateInput label,.stTextInput la
 [data-testid="stMetricLabel"] p{color:#1565C0 !important;}
 [data-testid="stMetricValue"]{color:#0D1B2A !important;}
 .stDataFrame{border-radius:12px;overflow:hidden;font-size:0.83rem;border:1px solid #BBDEFB;}
+[data-testid="stTable"]{overflow-x:auto !important;-webkit-overflow-scrolling:touch;}
+[data-testid="stTable"] table{width:auto !important;min-width:100%;}
+[data-testid="stTable"] th,[data-testid="stTable"] td{white-space:nowrap;}
 .stCaption,small{color:#1565C0 !important;}
 .stAlert{background:#F0F7FF !important;color:#0D1B2A !important;border-color:#BBDEFB !important;}
 .factura-box{background:#FFFFFF;border-radius:16px;padding:16px;margin-bottom:14px;box-shadow:0 2px 10px rgba(21,101,192,0.10);}
@@ -1839,9 +1843,9 @@ if st.session_state.vista == "menu":
         ("carro",         "Edison & Javier", "Cargues y ventas del carro"),
         ("fabrica",       "Fábrica",          "Ventas de Sofía y Andrea"),
         ("materia_prima", "Materia Prima",    "Insumos y proveedores"),
-        ("caja",          "Caja",              "Ingresos y egresos"),
     ]
     if st.session_state.es_admin:
+        opciones.append(("caja", "Caja", "Ingresos y egresos"))
         opciones.append(("resumen", "Resumen", "Ventas, facturas y exportar"))
         opciones.append(("contador", "Contador", "Costos, inventario y utilidad"))
 
@@ -3167,6 +3171,36 @@ elif st.session_state.vista == "materia_prima":
         st.markdown('<div class="section-label">Créditos — Todos los proveedores</div>', unsafe_allow_html=True)
         mostrar_creditos_mp(raw_pend, "credito_sel_mp")
 
+        st.markdown('<div class="section-label">🕒 Historial de créditos pagados</div>', unsafe_allow_html=True)
+        col_hcp1, col_hcp2 = st.columns(2)
+        f_ini_hcp = col_hcp1.date_input("Desde", value=datetime.now(COL_TZ).date().replace(day=1), key="f_ini_hist_cred_mp")
+        f_fin_hcp = col_hcp2.date_input("Hasta", value=datetime.now(COL_TZ).date(), key="f_fin_hist_cred_mp")
+
+        raw_pagados_mp = sb_get("materia_prima", f"select=*&estado=eq.pagado&fecha=gte.{f_ini_hcp}&fecha=lte.{f_fin_hcp}&order=fecha.desc") or []
+        if not raw_pagados_mp:
+            st.caption("No hay créditos pagados en ese rango.")
+        else:
+            total_pagado_hcp = sum(float(r["precio_total"]) for r in raw_pagados_mp)
+            st.markdown(f'<div class="info-box">{ICO_DOLLAR} Total pagado en el rango: <b>{fmt(total_pagado_hcp)}</b></div>', unsafe_allow_html=True)
+
+            busqueda_hcp = st.text_input("🔍 Buscar por proveedor", key="buscar_hist_cred_mp", placeholder="Ej: Don Carlos")
+            filas_hcp = raw_pagados_mp
+            if busqueda_hcp.strip():
+                filas_hcp = [r for r in filas_hcp if _coincide_nombre(busqueda_hcp, r.get("proveedor") or "")]
+
+            if not filas_hcp:
+                st.caption("No hay créditos pagados para ese proveedor en ese rango.")
+            else:
+                df_hist_cred_mp = pd.DataFrame([{
+                    "Fecha": r["fecha"],
+                    "Proveedor": r["proveedor"],
+                    "N° Factura": (r.get("numero_factura") or "—"),
+                    "Insumo": r["insumo"],
+                    "Cantidad": f'{float(r["cantidad"]):.3f}' if r["unidad"] == "kg" else r["cantidad"],
+                    "Total": fmt(r["precio_total"]),
+                } for r in filas_hcp])
+                tabla_view(df_hist_cred_mp)
+
     with tab_mp4:
         st.markdown('<div class="section-label">Resumen del período</div>', unsafe_allow_html=True)
         col_f1, col_f2 = st.columns(2)
@@ -3267,7 +3301,7 @@ elif st.session_state.vista == "materia_prima":
         else:
             st.info("No hay registros en ese período.")
 
-elif st.session_state.vista == "caja":
+elif st.session_state.vista == "caja" and st.session_state.es_admin:
     st.markdown(f'<div class="section-label">{ICO_DOLLAR} Caja</div>', unsafe_allow_html=True)
     tab_caja1, tab_caja2, tab_caja3, tab_caja4, tab_caja5 = st.tabs(["📊 Resumen", "➕ Ingreso / Egreso", "📋 Historial", "🧮 Arqueo de caja", "🎯 Reservas"])
 
