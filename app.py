@@ -1219,7 +1219,7 @@ label,.stSelectbox label,.stNumberInput label,.stDateInput label,.stTextInput la
 .metric-blue .val{color:#1565C0;}.metric-green .val{color:#1B9E5A;}.metric-red .val{color:#D32F2F;}.metric-yellow .val{color:#E68900;}
 @keyframes fadeInUp{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:translateY(0);}}
 @keyframes btnPress{0%{transform:scale(1);}40%{transform:scale(0.93);}100%{transform:scale(0.97);}}
-@keyframes cardPress{0%{transform:scale(1) translateY(0);}40%{transform:scale(0.95) translateY(1px);}100%{transform:scale(0.98) translateY(0);}}
+@keyframes cardPress{0%{transform:scale(1) translateY(0);}30%{transform:scale(0.93) translateY(2px);}65%{transform:scale(1.01) translateY(-1px);}100%{transform:scale(0.98) translateY(0);}}
 @keyframes logoBounce{0%,100%{transform:translateY(0) scale(1,1);}10%{transform:translateY(0) scale(1.08,0.92);}35%{transform:translateY(-36px) scale(0.96,1.06);}55%{transform:translateY(0) scale(1.1,0.9);}65%{transform:translateY(-12px) scale(1,1);}80%{transform:translateY(0) scale(1.04,0.96);}90%{transform:translateY(0) scale(1,1);}}
 @keyframes ctaPulse{0%,100%{box-shadow:0 4px 16px rgba(21,101,192,0.3);transform:scale(1);}50%{box-shadow:0 4px 26px rgba(21,101,192,0.65);transform:scale(1.02);}}
 .st-key-venta_btn_confirmar button:not(:disabled),
@@ -1258,9 +1258,9 @@ label,.stSelectbox label,.stNumberInput label,.stDateInput label,.stTextInput la
 .warn-box{background:#FFFFFF;border-left:3px solid #E68900;border-radius:10px;padding:12px 14px;margin:8px 0 14px;font-size:0.82rem;color:#8D6E00;box-shadow:0 1px 6px rgba(0,0,0,0.05);}
 .success-toast{background:#E8F5E9;border:1px solid #A5D6A7;border-radius:12px;padding:14px 16px;text-align:center;font-weight:600;color:#1B5E20;font-size:0.95rem;margin-top:10px;}
 .section-label{font-size:0.69rem;font-weight:700;text-transform:uppercase;letter-spacing:0.7px;color:#B0185F;margin:16px 0 6px;}
-.stButton>button{width:100%;background:#1565C0 !important;color:white !important;-webkit-text-fill-color:white !important;border:none !important;border-radius:12px !important;padding:14px !important;font-size:1rem !important;font-weight:700 !important;cursor:pointer;margin-top:4px;box-shadow:0 4px 16px rgba(21,101,192,0.25);white-space:pre-line !important;line-height:1.4 !important;transition:transform 0.12s ease,box-shadow 0.12s ease,opacity 0.12s ease !important;-webkit-tap-highlight-color:transparent;touch-action:manipulation;}
+.stButton>button{width:100%;background:#1565C0 !important;color:white !important;-webkit-text-fill-color:white !important;border:none !important;border-radius:12px !important;padding:14px !important;font-size:1rem !important;font-weight:700 !important;cursor:pointer;margin-top:4px;box-shadow:0 4px 16px rgba(21,101,192,0.25);white-space:pre-line !important;line-height:1.4 !important;transition:transform 0.3s ease,box-shadow 0.3s ease,opacity 0.3s ease !important;-webkit-tap-highlight-color:transparent;touch-action:manipulation;}
 .stButton>button:hover{opacity:0.88;box-shadow:0 6px 20px rgba(21,101,192,0.35);transform:translateY(-1px);}
-.stButton>button:active{transform:scale(0.97) translateY(0);box-shadow:0 2px 8px rgba(21,101,192,0.25);opacity:1;animation:btnPress 0.18s ease-out;}
+.stButton>button:active{transform:scale(0.97) translateY(0);box-shadow:0 2px 8px rgba(21,101,192,0.25);opacity:1;animation:btnPress 0.45s ease-out;}
 .st-key-btn_resumen button,.st-key-btn_contador button{
   background:linear-gradient(135deg,#FFFFFF,#EEF4FF) !important;
   color:#0D1B2A !important;
@@ -1275,7 +1275,7 @@ label,.stSelectbox label,.stNumberInput label,.stDateInput label,.stTextInput la
   white-space:pre-line !important;
   line-height:1.5 !important;
   text-align:left !important;
-  transition:transform 0.12s ease,box-shadow 0.12s ease !important;
+  transition:transform 0.3s ease,box-shadow 0.3s ease !important;
   -webkit-tap-highlight-color:transparent;
   touch-action:manipulation;
 }
@@ -1287,7 +1287,7 @@ label,.stSelectbox label,.stNumberInput label,.stDateInput label,.stTextInput la
 .st-key-btn_resumen button:active,.st-key-btn_contador button:active{
   transform:scale(0.98) !important;
   box-shadow:0 2px 8px rgba(21,101,192,0.15) !important;
-  animation:cardPress 0.18s ease-out !important;
+  animation:cardPress 0.45s ease-out !important;
 }
 
 [data-testid="stMetricLabel"] p{color:#1565C0 !important;}
