@@ -1384,6 +1384,14 @@ _css_botones_menu += f"""
 }}
 """
 
+_fondo_b64 = get_img_b64("fondo.png")
+if _fondo_b64:
+    _css_botones_menu += f"""
+.stApp{{
+  background:linear-gradient(rgba(240,244,255,0.88),rgba(240,244,255,0.88)),url("data:image/png;base64,{_fondo_b64}") center/cover no-repeat !important;
+}}
+"""
+
 if _css_botones_menu:
     st.markdown(f"<style>{_css_botones_menu}</style>", unsafe_allow_html=True)
 
