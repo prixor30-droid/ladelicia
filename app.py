@@ -323,6 +323,66 @@ def _pendiente_creditos_antiguos(f_ini, f_fin, canal=None):
     raw = sb_get("creditos", filtro) or []
     return sum(max(0.0, float(r["total"]) - float(r.get("pagado", 0) or 0)) for r in raw)
 
+def calcular_cobros_periodo(f_ini, f_fin):
+    """Dinero realmente cobrado entre f_ini y f_fin — ventas nuevas del período
+    MÁS créditos viejos (de cualquier fecha) que se cobraron dentro del período.
+    Fetea todos los canales; cada llamador filtra/suma por canal si lo necesita.
+
+    Antes este cálculo (con el ajuste de "no contar dos veces lo cobrado después
+    de la venta") estaba copiado y pegado en ~8 lugares distintos — Caja→Resumen,
+    Caja→Arqueo, Resumen→Hoy/Por fechas/Mes, y los "Resumen del día" de Carro y
+    Fábrica. Al agregar el cobro de créditos viejos se corrigió solo una copia
+    primero, y las demás quedaron desactualizadas hasta que se reportó el bug —
+    por eso ahora viven en un solo lugar.
+
+    Devuelve:
+      raw_ventas: filas crudas de 'ventas' en el rango (una por producto vendido)
+      facturas: {factura_id: {"canal", "abono" (ya sin lo cobrado después), "saldo"}},
+                 una entrada por factura, no por línea de producto
+      cobro_creditos_por_canal: {canal: $ cobrado en créditos viejos dentro del rango}
+      cobro_creditos_total: suma de lo anterior
+    """
+    f_ini_d = f_ini if isinstance(f_ini, date) else date.fromisoformat(str(f_ini))
+    f_fin_d = f_fin if isinstance(f_fin, date) else date.fromisoformat(str(f_fin))
+
+    raw_ventas = sb_get("ventas", f"select=*&fecha=gte.{f_ini}&fecha=lte.{f_fin}") or []
+    raw_pg = sb_get("pagos_credito", "select=fecha,monto,tipo,factura_id,canal") or []
+
+    # Cuánto de cada factura se cobró DESPUÉS de la venta (vía "Cobrar" en créditos
+    # pendientes) — se resta del abono actual para no contar ese dinero dos veces:
+    # una en la fecha de la venta y otra en la fecha real del cobro. Se necesita el
+    # histórico completo de pagos_credito (sin filtrar por fecha) porque el pago
+    # pudo haber ocurrido antes o después del rango que se está consultando.
+    cobrado_despues = {}
+    for r in raw_pg:
+        if r.get("tipo") == "venta" and r.get("factura_id"):
+            fid = r["factura_id"]
+            cobrado_despues[fid] = cobrado_despues.get(fid, 0) + float(r["monto"])
+
+    facturas = {}
+    for r in raw_ventas:
+        fid = r.get("factura_id", "")
+        if fid and fid not in facturas:
+            abono_inicial = max(0.0, float(r.get("abono", 0) or 0) - cobrado_despues.get(fid, 0))
+            facturas[fid] = {
+                "canal": r.get("canal", ""),
+                "abono": abono_inicial,
+                "saldo": float(r.get("saldo", 0) or 0),
+            }
+
+    cobro_creditos_por_canal = {}
+    for r in raw_pg:
+        if f_ini_d <= date.fromisoformat(r["fecha"]) <= f_fin_d:
+            c = r.get("canal", "")
+            cobro_creditos_por_canal[c] = cobro_creditos_por_canal.get(c, 0.0) + float(r["monto"])
+
+    return {
+        "raw_ventas": raw_ventas,
+        "facturas": facturas,
+        "cobro_creditos_por_canal": cobro_creditos_por_canal,
+        "cobro_creditos_total": sum(cobro_creditos_por_canal.values()),
+    }
+
 def mostrar_creditos_pendientes(canal):
     """Muestra facturas con saldo pendiente y permite registrar abonos."""
     with st.expander("➕ Cargar crédito antiguo"):
@@ -2111,27 +2171,14 @@ elif st.session_state.vista == "carro":
     with sub5:
         # Visible para todos (no solo admin) — Javier y Edison lo necesitan para
         # saber cuánto entregar al final del día.
-        raw_resumen_carro = sb_get("ventas", f"select=total,cantidad,factura_id,abono,saldo&fecha=eq.{fecha_hoy()}&canal=eq.Carro")
-        # Cobros de hoy sobre créditos viejos (facturas de otros días que se
-        # cobraron hoy en la calle) — sin esto, "Total a entregar" no incluía esa
-        # plata aunque sí la hayan recibido en efectivo.
-        raw_pg_carro_dia = sb_get("pagos_credito", f"select=fecha,monto,tipo,factura_id&canal=eq.Carro") or []
-        cobrado_despues_carro_dia = {}
-        for r in raw_pg_carro_dia:
-            if r.get("tipo") == "venta" and r.get("factura_id"):
-                fid = r["factura_id"]
-                cobrado_despues_carro_dia[fid] = cobrado_despues_carro_dia.get(fid, 0) + float(r["monto"])
-        cobro_creditos_carro_hoy = sum(float(r["monto"]) for r in raw_pg_carro_dia if r["fecha"] == fecha_hoy())
+        cobros_carro_dia = calcular_cobros_periodo(fecha_hoy(), fecha_hoy())
+        raw_resumen_carro = [r for r in cobros_carro_dia["raw_ventas"] if r.get("canal") == "Carro"]
+        cobro_creditos_carro_hoy = cobros_carro_dia["cobro_creditos_por_canal"].get("Carro", 0.0)
         if not raw_resumen_carro and not cobro_creditos_carro_hoy:
             st.info("Aún no hay ventas hoy.")
         else:
-            bolsas_carro_dia = sum(r["cantidad"] for r in raw_resumen_carro if r["cantidad"] > 0) if raw_resumen_carro else 0
-            facturas_carro_dia = {}
-            for r in (raw_resumen_carro or []):
-                fid = r.get("factura_id", "")
-                if fid and fid not in facturas_carro_dia:
-                    abono_inicial = max(0.0, float(r.get("abono", 0) or 0) - cobrado_despues_carro_dia.get(fid, 0))
-                    facturas_carro_dia[fid] = {"abono": abono_inicial, "saldo": float(r.get("saldo", 0) or 0)}
+            bolsas_carro_dia = sum(r["cantidad"] for r in raw_resumen_carro if r["cantidad"] > 0)
+            facturas_carro_dia = {fid: f for fid, f in cobros_carro_dia["facturas"].items() if f["canal"] == "Carro"}
             cobrado_ventas_carro_dia = sum(f["abono"] for f in facturas_carro_dia.values())
             cobrado_carro_dia = cobrado_ventas_carro_dia + cobro_creditos_carro_hoy
             credito_carro_dia = sum(f["saldo"] for f in facturas_carro_dia.values())
@@ -2227,31 +2274,19 @@ elif st.session_state.vista == "fabrica":
     with sub_f4:
         # Visible para todos (no solo admin) — Sofía y Andrea lo necesitan para
         # saber cuánto entregar al final del día.
-        raw_vf = sb_get("ventas", f"select=total,cantidad,vendedor,factura_id,abono,saldo&fecha=eq.{fecha_hoy()}&canal=in.(Fábrica,Cambio)")
-        # Cobros de hoy sobre créditos viejos (facturas de otros días cobradas hoy)
-        # — sin esto, "Total a entregar" no incluía esa plata aunque sí se recibió.
-        raw_pg_fab_dia = sb_get("pagos_credito", f"select=fecha,monto,tipo,factura_id&canal=eq.Fábrica") or []
-        cobrado_despues_fab_dia = {}
-        for r in raw_pg_fab_dia:
-            if r.get("tipo") == "venta" and r.get("factura_id"):
-                fid = r["factura_id"]
-                cobrado_despues_fab_dia[fid] = cobrado_despues_fab_dia.get(fid, 0) + float(r["monto"])
-        cobro_creditos_fab_hoy = sum(float(r["monto"]) for r in raw_pg_fab_dia if r["fecha"] == fecha_hoy())
+        cobros_fab_dia = calcular_cobros_periodo(fecha_hoy(), fecha_hoy())
+        raw_vf = [r for r in cobros_fab_dia["raw_ventas"] if r.get("canal") in ("Fábrica", "Cambio")]
+        cobro_creditos_fab_hoy = cobros_fab_dia["cobro_creditos_por_canal"].get("Fábrica", 0.0)
         if not raw_vf and not cobro_creditos_fab_hoy:
             st.info("Aún no hay ventas hoy.")
         else:
-            bolsas_fab_dia = sum(r["cantidad"] for r in raw_vf if r["cantidad"] > 0) if raw_vf else 0
+            bolsas_fab_dia = sum(r["cantidad"] for r in raw_vf if r["cantidad"] > 0)
             por_vendedor = {}
-            for r in (raw_vf or []):
+            for r in raw_vf:
                 if r["total"] > 0:
                     v = r["vendedor"]
                     por_vendedor[v] = por_vendedor.get(v, 0) + r["total"]
-            facturas_fab_dia = {}
-            for r in (raw_vf or []):
-                fid = r.get("factura_id", "")
-                if fid and fid not in facturas_fab_dia:
-                    abono_inicial = max(0.0, float(r.get("abono", 0) or 0) - cobrado_despues_fab_dia.get(fid, 0))
-                    facturas_fab_dia[fid] = {"abono": abono_inicial, "saldo": float(r.get("saldo", 0) or 0)}
+            facturas_fab_dia = {fid: f for fid, f in cobros_fab_dia["facturas"].items() if f["canal"] in ("Fábrica", "Cambio")}
             cobrado_ventas_fab_dia = sum(f["abono"] for f in facturas_fab_dia.values())
             cobrado_fab_dia = cobrado_ventas_fab_dia + cobro_creditos_fab_hoy
             credito_fab_dia = sum(f["saldo"] for f in facturas_fab_dia.values())
@@ -3192,42 +3227,20 @@ elif st.session_state.vista == "caja":
         f_fin_caja = col_c2.date_input("Hasta", value=hoy_caja, key="f_fin_caja")
 
         # INGRESOS — ventas pagadas (total - saldo = abonado) y cobros de créditos
-        with ThreadPoolExecutor(max_workers=4) as ex:
-            f_vf = ex.submit(sb_get, "ventas", f"select=fecha,total,abono,saldo,canal,cliente,factura_id&fecha=gte.{f_ini_caja}&fecha=lte.{f_fin_caja}&canal=in.(Fábrica,Carro)&order=fecha.desc")
-            f_pg = ex.submit(sb_get, "pagos_credito", "select=fecha,monto,tipo,factura_id,canal")
+        with ThreadPoolExecutor(max_workers=3) as ex:
+            f_cobros = ex.submit(calcular_cobros_periodo, f_ini_caja, f_fin_caja)
             f_mp = ex.submit(sb_get, "materia_prima", f"select=fecha,insumo,proveedor,precio_total,abono&fecha=gte.{f_ini_caja}&fecha=lte.{f_fin_caja}&order=fecha.desc")
             f_ing = ex.submit(sb_get, "caja_ingresos", f"select=*&fecha=gte.{f_ini_caja}&fecha=lte.{f_fin_caja}&order=fecha.desc")
-        raw_ventas_caja = f_vf.result() or []
-        raw_pagos_credito_todo = f_pg.result() or []
+        cobros_caja = f_cobros.result()
         raw_mp_pagos = f_mp.result() or []
         raw_egresos = sb_get("caja_egresos", f"select=*&fecha=gte.{f_ini_caja}&fecha=lte.{f_fin_caja}&order=fecha.desc") or []
         raw_ingresos_manuales = f_ing.result() or []
 
-        # Cuánto de cada factura se cobró DESPUÉS de la venta (vía "Cobrar" en créditos
-        # pendientes, registrado en pagos_credito) — se resta del abono actual para no
-        # contar ese dinero dos veces: una en la fecha de la venta y otra en la fecha
-        # real del cobro.
-        cobrado_despues_por_factura = {}
-        for r in raw_pagos_credito_todo:
-            if r.get("tipo") == "venta" and r.get("factura_id"):
-                fid = r["factura_id"]
-                cobrado_despues_por_factura[fid] = cobrado_despues_por_factura.get(fid, 0) + float(r["monto"])
-
-        # Calcular ingresos por venta — una sola entrada por factura (la primera fila de
-        # cada una), usando solo el abono que existía al momento de la venta.
-        facturas_vistas = {}
-        for r in raw_ventas_caja:
-            fid = r.get("factura_id", "")
-            if fid and fid not in facturas_vistas:
-                abono_total_fid = float(r.get("abono", 0))
-                facturas_vistas[fid] = max(0.0, abono_total_fid - cobrado_despues_por_factura.get(fid, 0))
-        ingresos_ventas = sum(facturas_vistas.values())
-
-        # Ingresos por cobro de créditos (ventas y créditos antiguos manuales), en la
-        # fecha real en que se cobraron — no en la fecha de la venta/deuda original.
-        ingresos_cobro_creditos = sum(
-            float(r["monto"]) for r in raw_pagos_credito_todo
-            if f_ini_caja <= date.fromisoformat(r["fecha"]) <= f_fin_caja
+        # Solo Fábrica y Carro cuentan como caja real (Regalo/Cambio no mueven plata).
+        ingresos_ventas = sum(f["abono"] for f in cobros_caja["facturas"].values() if f["canal"] in ("Fábrica", "Carro"))
+        ingresos_cobro_creditos = (
+            cobros_caja["cobro_creditos_por_canal"].get("Fábrica", 0.0)
+            + cobros_caja["cobro_creditos_por_canal"].get("Carro", 0.0)
         )
 
         ingresos_manuales = sum(float(r["valor"]) for r in raw_ingresos_manuales)
@@ -3449,33 +3462,20 @@ elif st.session_state.vista == "caja":
         fecha_arq = st.date_input("Fecha del arqueo", value=hoy_caja, max_value=hoy_caja, key="fecha_arqueo")
         fecha_arq_str = str(fecha_arq)
 
-        with ThreadPoolExecutor(max_workers=4) as ex:
-            f_v_a  = ex.submit(sb_get, "ventas", f"select=abono,saldo,factura_id&fecha=eq.{fecha_arq_str}&canal=in.(Fábrica,Carro)")
-            f_pg_a = ex.submit(sb_get, "pagos_credito", "select=fecha,monto,tipo,factura_id")
+        with ThreadPoolExecutor(max_workers=3) as ex:
+            f_cobros_a = ex.submit(calcular_cobros_periodo, fecha_arq_str, fecha_arq_str)
             f_mp_a = ex.submit(sb_get, "materia_prima", f"select=abono&fecha=eq.{fecha_arq_str}")
             f_ing_a = ex.submit(sb_get, "caja_ingresos", f"select=valor&fecha=eq.{fecha_arq_str}")
-        raw_v_a  = f_v_a.result() or []
-        raw_pg_a = f_pg_a.result() or []
+        cobros_a = f_cobros_a.result()
         raw_mp_a = f_mp_a.result() or []
         raw_ing_a = f_ing_a.result() or []
         raw_eg_a = sb_get("caja_egresos", f"select=valor&fecha=eq.{fecha_arq_str}") or []
 
-        # Igual que en Resumen: se resta lo que se cobró después de la venta (vía
-        # "Cobrar" en créditos pendientes) para no contarlo dos veces.
-        cobrado_despues_a = {}
-        for r in raw_pg_a:
-            if r.get("tipo") == "venta" and r.get("factura_id"):
-                fid = r["factura_id"]
-                cobrado_despues_a[fid] = cobrado_despues_a.get(fid, 0) + float(r["monto"])
-
-        facturas_a = {}
-        for r in raw_v_a:
-            fid = r.get("factura_id", "")
-            if fid and fid not in facturas_a:
-                facturas_a[fid] = max(0.0, float(r.get("abono", 0)) - cobrado_despues_a.get(fid, 0))
-        ingresos_ventas_a = sum(facturas_a.values())
-
-        ingresos_cobro_creditos_a = sum(float(r["monto"]) for r in raw_pg_a if r["fecha"] == fecha_arq_str)
+        ingresos_ventas_a = sum(f["abono"] for f in cobros_a["facturas"].values() if f["canal"] in ("Fábrica", "Carro"))
+        ingresos_cobro_creditos_a = (
+            cobros_a["cobro_creditos_por_canal"].get("Fábrica", 0.0)
+            + cobros_a["cobro_creditos_por_canal"].get("Carro", 0.0)
+        )
         ingresos_manuales_a = sum(float(r["valor"]) for r in raw_ing_a)
         total_ingresos_a = ingresos_ventas_a + ingresos_cobro_creditos_a + ingresos_manuales_a
 
@@ -3598,40 +3598,14 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
 
     with sub_r1:
         st.markdown('<div class="section-label">Resumen del día</div>', unsafe_allow_html=True)
-        raw_vt = sb_get("ventas", f"select=*&fecha=eq.{fecha_hoy()}&order=hora.asc")
-
-        # Cobros de crédito de hoy (vía "Cobrar" en créditos pendientes) — incluye
-        # tanto ventas de hoy como facturas viejas que se cobraron hoy en la calle.
-        # Sin esto, si Edison/Javier cobran una factura de días anteriores, esa
-        # plata no aparecía por ningún lado en "Resumen del día".
-        raw_pg_hoy = sb_get("pagos_credito", "select=fecha,monto,tipo,factura_id,canal") or []
-        cobrado_despues_hoy = {}
-        for r in raw_pg_hoy:
-            if r.get("tipo") == "venta" and r.get("factura_id"):
-                fid = r["factura_id"]
-                cobrado_despues_hoy[fid] = cobrado_despues_hoy.get(fid, 0) + float(r["monto"])
-        cobro_creditos_hoy_por_canal = {}
-        for r in raw_pg_hoy:
-            if r["fecha"] == fecha_hoy():
-                cobro_creditos_hoy_por_canal[r["canal"]] = cobro_creditos_hoy_por_canal.get(r["canal"], 0.0) + float(r["monto"])
+        cobros_hoy = calcular_cobros_periodo(fecha_hoy(), fecha_hoy())
+        raw_vt = cobros_hoy["raw_ventas"]
+        cobro_creditos_hoy_por_canal = cobros_hoy["cobro_creditos_por_canal"]
 
         if not raw_vt and not cobro_creditos_hoy_por_canal:
             st.info("Aún no hay ventas hoy.")
         else:
-            # Dinero realmente cobrado y pendiente en créditos — una sola vez por
-            # factura (abono/saldo quedan repetidos en cada línea de una misma factura).
-            # El abono se corrige restando lo que ya se contó aparte en cobro_creditos_hoy
-            # (para no duplicar una factura de hoy que también se cobró hoy mismo después).
-            facturas_hoy = {}
-            for r in (raw_vt or []):
-                fid = r.get("factura_id", "")
-                if fid and fid not in facturas_hoy:
-                    abono_inicial = max(0.0, float(r.get("abono", 0)) - cobrado_despues_hoy.get(fid, 0))
-                    facturas_hoy[fid] = {
-                        "canal": r.get("canal", ""),
-                        "abono": abono_inicial,
-                        "saldo": float(r.get("saldo", 0)),
-                    }
+            facturas_hoy = cobros_hoy["facturas"]
             cobrado_fab   = sum(f["abono"] for f in facturas_hoy.values() if f["canal"] == "Fábrica") + cobro_creditos_hoy_por_canal.get("Fábrica", 0.0)
             cobrado_carro = sum(f["abono"] for f in facturas_hoy.values() if f["canal"] == "Carro")   + cobro_creditos_hoy_por_canal.get("Carro", 0.0)
             pendiente_hoy = sum(f["saldo"] for f in facturas_hoy.values()) + _pendiente_creditos_antiguos(fecha_hoy(), fecha_hoy())
@@ -3688,20 +3662,9 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
         col_a, col_b = st.columns(2)
         f_ini = col_a.date_input("Desde", value=date(datetime.now(COL_TZ).year, datetime.now(COL_TZ).month, 1), key="f_ini")
         f_fin = col_b.date_input("Hasta", value=datetime.now(COL_TZ).date(), key="f_fin")
-        raw_rango = sb_get("ventas", f"select=*&fecha=gte.{f_ini}&fecha=lte.{f_fin}&order=fecha.asc")
-
-        # Cobros de crédito dentro del rango (vía "Cobrar" en créditos pendientes),
-        # incluyendo facturas originadas fuera del rango pero cobradas dentro de él.
-        raw_pg_rango = sb_get("pagos_credito", "select=fecha,monto,tipo,factura_id,canal") or []
-        cobrado_despues_rango = {}
-        for r in raw_pg_rango:
-            if r.get("tipo") == "venta" and r.get("factura_id"):
-                fid = r["factura_id"]
-                cobrado_despues_rango[fid] = cobrado_despues_rango.get(fid, 0) + float(r["monto"])
-        cobro_creditos_rango_por_canal = {}
-        for r in raw_pg_rango:
-            if f_ini <= date.fromisoformat(r["fecha"]) <= f_fin:
-                cobro_creditos_rango_por_canal[r["canal"]] = cobro_creditos_rango_por_canal.get(r["canal"], 0.0) + float(r["monto"])
+        cobros_rango = calcular_cobros_periodo(f_ini, f_fin)
+        raw_rango = cobros_rango["raw_ventas"]
+        cobro_creditos_rango_por_canal = cobros_rango["cobro_creditos_por_canal"]
 
         if not raw_rango and not cobro_creditos_rango_por_canal:
             st.info("No hay ventas en ese rango.")
@@ -3710,18 +3673,7 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
             bolsas_r = int(df_r["cantidad"].sum()) if not df_r.empty else 0
             dias_r   = df_r["fecha"].nunique() if not df_r.empty else 0
 
-            # Dinero realmente cobrado y pendiente en créditos — una sola vez por
-            # factura (abono/saldo quedan repetidos en cada línea de una misma factura).
-            facturas_rango = {}
-            for r in raw_rango:
-                fid = r.get("factura_id", "")
-                if fid and fid not in facturas_rango:
-                    abono_inicial = max(0.0, float(r.get("abono", 0)) - cobrado_despues_rango.get(fid, 0))
-                    facturas_rango[fid] = {
-                        "canal": r.get("canal", ""),
-                        "abono": abono_inicial,
-                        "saldo": float(r.get("saldo", 0)),
-                    }
+            facturas_rango = cobros_rango["facturas"]
             cobrado_fab_r = sum(f["abono"] for f in facturas_rango.values() if f["canal"] == "Fábrica") + cobro_creditos_rango_por_canal.get("Fábrica", 0.0)
             cobrado_carro_r = sum(f["abono"] for f in facturas_rango.values() if f["canal"] == "Carro") + cobro_creditos_rango_por_canal.get("Carro", 0.0)
             pendiente_fab_r = sum(f["saldo"] for f in facturas_rango.values() if f["canal"] == "Fábrica") + _pendiente_creditos_antiguos(f_ini, f_fin, "Fábrica")
@@ -3791,21 +3743,11 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
         nombre_mes = hoy_dt.strftime("%B %Y").capitalize()
         st.caption(f"Resumen automático de {nombre_mes}")
 
-        raw_mes = sb_get("ventas", f"select=*&fecha=gte.{primer_dia}&fecha=lte.{ultimo_dia}")
         raw_prod_mes = sb_get("produccion", f"select=cantidad&fecha=gte.{primer_dia}&fecha=lte.{ultimo_dia}")
 
-        # Cobros de crédito del mes (vía "Cobrar" en créditos pendientes), incluyendo
-        # facturas originadas en meses anteriores pero cobradas dentro de este mes.
-        raw_pg_mes = sb_get("pagos_credito", "select=fecha,monto,tipo,factura_id") or []
-        cobrado_despues_mes = {}
-        for r in raw_pg_mes:
-            if r.get("tipo") == "venta" and r.get("factura_id"):
-                fid = r["factura_id"]
-                cobrado_despues_mes[fid] = cobrado_despues_mes.get(fid, 0) + float(r["monto"])
-        cobro_creditos_mes = sum(
-            float(r["monto"]) for r in raw_pg_mes
-            if primer_dia <= date.fromisoformat(r["fecha"]) <= ultimo_dia
-        )
+        cobros_mes = calcular_cobros_periodo(primer_dia, ultimo_dia)
+        raw_mes = cobros_mes["raw_ventas"]
+        cobro_creditos_mes = cobros_mes["cobro_creditos_total"]
 
         if not raw_mes and cobro_creditos_mes == 0:
             st.info("Aún no hay ventas este mes.")
@@ -3815,17 +3757,7 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
             dias_mes    = df_mes["fecha"].nunique() if not df_mes.empty else 0
             prod_mes    = sum(r["cantidad"] for r in raw_prod_mes) if raw_prod_mes else 0
 
-            # Dinero realmente cobrado y pendiente en créditos — una sola vez por
-            # factura (abono/saldo quedan repetidos en cada línea de una misma factura).
-            facturas_mes = {}
-            for r in raw_mes:
-                fid = r.get("factura_id", "")
-                if fid and fid not in facturas_mes:
-                    abono_inicial = max(0.0, float(r.get("abono", 0)) - cobrado_despues_mes.get(fid, 0))
-                    facturas_mes[fid] = {
-                        "abono": abono_inicial,
-                        "saldo": float(r.get("saldo", 0)),
-                    }
+            facturas_mes = cobros_mes["facturas"]
             cobrado_mes   = sum(f["abono"] for f in facturas_mes.values()) + cobro_creditos_mes
             pendiente_mes = sum(f["saldo"] for f in facturas_mes.values()) + _pendiente_creditos_antiguos(primer_dia, ultimo_dia)
             promedio_dia  = cobrado_mes / dias_mes if dias_mes > 0 else 0
