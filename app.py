@@ -1980,18 +1980,26 @@ elif st.session_state.vista == "carro":
                 if fid and fid not in facturas_carro_dia:
                     abono_inicial = max(0.0, float(r.get("abono", 0) or 0) - cobrado_despues_carro_dia.get(fid, 0))
                     facturas_carro_dia[fid] = {"abono": abono_inicial, "saldo": float(r.get("saldo", 0) or 0)}
-            cobrado_carro_dia = sum(f["abono"] for f in facturas_carro_dia.values()) + cobro_creditos_carro_hoy
+            cobrado_ventas_carro_dia = sum(f["abono"] for f in facturas_carro_dia.values())
+            cobrado_carro_dia = cobrado_ventas_carro_dia + cobro_creditos_carro_hoy
             credito_carro_dia = sum(f["saldo"] for f in facturas_carro_dia.values())
+            fila_credito_viejo_carro = (
+                f'<div class="factura-row"><span>{ICO_CARD} Cobrado en créditos viejos</span><span><b>{fmt(cobro_creditos_carro_hoy)}</b></span></div>'
+                if cobro_creditos_carro_hoy > 0 else ""
+            )
             st.markdown('<div class="section-label">Resumen del día — Javier & Edison</div>', unsafe_allow_html=True)
             st.markdown(
                 f'<div class="factura-box">'
                 f'<div class="factura-row"><span>{ICO_CART} Bolsas vendidas hoy</span><span><b>{bolsas_carro_dia}</b></span></div>'
-                f'<div class="factura-row"><span>{ICO_DOLLAR} Cobrado</span><span><b>{fmt(cobrado_carro_dia)}</b></span></div>'
+                f'<div class="factura-row"><span>{ICO_DOLLAR} Cobrado (ventas de hoy)</span><span><b>{fmt(cobrado_ventas_carro_dia)}</b></span></div>'
+                f'{fila_credito_viejo_carro}'
                 f'<div class="factura-row"><span>{ICO_CLIPBOARD} Dejado en crédito</span><span><b>{fmt(credito_carro_dia)}</b></span></div>'
                 f'<div class="factura-total"><span>{ICO_DOLLAR} Total a entregar</span><span>{fmt(cobrado_carro_dia)}</span></div>'
                 f'</div>',
                 unsafe_allow_html=True
             )
+            if cobro_creditos_carro_hoy > 0:
+                st.markdown(f'<div class="warn-box">{ICO_CARD} Ojo: de los {fmt(cobrado_carro_dia)} a entregar, <b>{fmt(cobro_creditos_carro_hoy)}</b> son de créditos viejos que cobraron hoy, no de ventas nuevas — no lo olviden.</div>', unsafe_allow_html=True)
 
         render_venta_canal(CONFIG_CARRO, mostrar_creditos=False)
 
@@ -2096,7 +2104,7 @@ elif st.session_state.vista == "carro":
 # ══════════════════════════════════════════════════════════════════════════════
 elif st.session_state.vista == "fabrica":
 
-    sub_f1, sub_f2 = st.tabs(["💵 Registrar venta", "💳 Créditos"])
+    sub_f1, sub_f2, sub_f3 = st.tabs(["💵 Registrar venta", "💳 Créditos", "🎁 Regalar"])
 
     with sub_f1:
         # Visible para todos (no solo admin) — Sofía y Andrea lo necesitan para
@@ -2125,8 +2133,13 @@ elif st.session_state.vista == "fabrica":
                 if fid and fid not in facturas_fab_dia:
                     abono_inicial = max(0.0, float(r.get("abono", 0) or 0) - cobrado_despues_fab_dia.get(fid, 0))
                     facturas_fab_dia[fid] = {"abono": abono_inicial, "saldo": float(r.get("saldo", 0) or 0)}
-            cobrado_fab_dia = sum(f["abono"] for f in facturas_fab_dia.values()) + cobro_creditos_fab_hoy
+            cobrado_ventas_fab_dia = sum(f["abono"] for f in facturas_fab_dia.values())
+            cobrado_fab_dia = cobrado_ventas_fab_dia + cobro_creditos_fab_hoy
             credito_fab_dia = sum(f["saldo"] for f in facturas_fab_dia.values())
+            fila_credito_viejo_fab = (
+                f'<div class="factura-row"><span>{ICO_CARD} Cobrado en créditos viejos</span><span><b>{fmt(cobro_creditos_fab_hoy)}</b></span></div>'
+                if cobro_creditos_fab_hoy > 0 else ""
+            )
             st.markdown('<div class="section-label">Resumen del día — Fábrica</div>', unsafe_allow_html=True)
             filas_v = "".join(
                 f'<div class="factura-row"><span>{ICO_USER} {v}</span><span><b>{fmt(t)}</b></span></div>'
@@ -2135,18 +2148,74 @@ elif st.session_state.vista == "fabrica":
             st.markdown(
                 f'<div class="factura-box">{filas_v}'
                 f'<div class="factura-row"><span>{ICO_CART} Bolsas vendidas hoy</span><span><b>{bolsas_fab_dia}</b></span></div>'
-                f'<div class="factura-row"><span>{ICO_DOLLAR} Cobrado</span><span><b>{fmt(cobrado_fab_dia)}</b></span></div>'
+                f'<div class="factura-row"><span>{ICO_DOLLAR} Cobrado (ventas de hoy)</span><span><b>{fmt(cobrado_ventas_fab_dia)}</b></span></div>'
+                f'{fila_credito_viejo_fab}'
                 f'<div class="factura-row"><span>{ICO_CLIPBOARD} Dejado en crédito</span><span><b>{fmt(credito_fab_dia)}</b></span></div>'
                 f'<div class="factura-total"><span>{ICO_DOLLAR} Total a entregar</span><span>{fmt(cobrado_fab_dia)}</span></div>'
                 f'</div>',
                 unsafe_allow_html=True
             )
+            if cobro_creditos_fab_hoy > 0:
+                st.markdown(f'<div class="warn-box">{ICO_CARD} Ojo: de los {fmt(cobrado_fab_dia)} a entregar, <b>{fmt(cobro_creditos_fab_hoy)}</b> son de créditos viejos que cobraron hoy, no de ventas nuevas — no lo olviden.</div>', unsafe_allow_html=True)
 
         render_venta_canal(CONFIG_FABRICA, mostrar_creditos=False)
 
     with sub_f2:
         mostrar_creditos_pendientes("Fábrica")
         mostrar_historial_pagos_credito("Fábrica")
+
+    with sub_f3:
+        st.markdown(f'<div class="section-label">Regalar bolsa {ICO_GIFT}</div>', unsafe_allow_html=True)
+        st.caption("Registra las bolsas que se regalan — se descuentan del inventario pero no cuentan como venta.")
+
+        stock_fab_r = get_inventario_completo()
+        sabores_disp_fab_r = [s for s, v in stock_fab_r.items() if v > 0]
+
+        if not sabores_disp_fab_r:
+            st.markdown(f'<div class="warn-box">{ICO_WARN} No hay papas disponibles para regalar.</div>', unsafe_allow_html=True)
+        else:
+            sabor_reg_f = st.selectbox("Sabor", sabores_disp_fab_r, key="sabor_reg_fab")
+            disp_reg_f = int(stock_fab_r.get(sabor_reg_f, 0))
+            cant_reg_f = st.number_input("Cantidad", min_value=1, max_value=disp_reg_f, value=1, step=1, key="cant_reg_fab")
+            vendedor_reg_f = st.radio("Vendedor", VENDEDORES_FABRICA, horizontal=True, key="vendedor_reg_fab")
+            motivo_reg_f = st.text_input("Motivo (opcional)", placeholder="Ej: Cliente especial, muestra", key="motivo_reg_fab")
+            st.markdown(f'<div class="info-box">{ICO_GIFT} Regalando <b>{cant_reg_f}</b> bolsas de <b>{sabor_reg_f}</b> · Quedan: <b>{disp_reg_f - cant_reg_f}</b></div>', unsafe_allow_html=True)
+
+            if st.button("🎁 Registrar regalo", key="btn_reg_fab"):
+                sb_post("ventas", {
+                    "fecha": fecha_hoy(), "hora": ahora(), "canal": "Regalo Fábrica",
+                    "vendedor": vendedor_reg_f, "sabor": sabor_reg_f,
+                    "cantidad": cant_reg_f, "total": 0,
+                    "cliente": motivo_reg_f.strip() if motivo_reg_f.strip() else "Regalo",
+                    "factura_id": str(uuid.uuid4())[:8].upper(),
+                    "abono": 0, "saldo": 0
+                })
+                restar_stock(sabor_reg_f, cant_reg_f)
+                st.session_state.ok_reg_fab = True
+                time.sleep(0.3)
+                st.rerun()
+
+        if st.session_state.get("ok_reg_fab"):
+            st.markdown(f'<div class="success-toast">{ICO_CHECK} Regalo registrado. Descontado del inventario.</div>', unsafe_allow_html=True)
+            st.session_state.ok_reg_fab = False
+
+        # Historial de regalos del día
+        raw_reg_f = sb_get("ventas", f"select=hora,sabor,cantidad,cliente,vendedor&fecha=eq.{fecha_hoy()}&canal=eq.{requests.utils.quote('Regalo Fábrica')}&order=hora.desc")
+        if raw_reg_f:
+            st.markdown('<div class="section-label">Regalos de hoy</div>', unsafe_allow_html=True)
+            filas_reg_f = "".join(
+                f'<div class="factura-row"><span>{r["hora"]} · {r["sabor"]} × {r["cantidad"]}</span><span>{r["cliente"]}</span></div>'
+                for r in raw_reg_f
+            )
+            total_regalado_f = sum(r["cantidad"] for r in raw_reg_f)
+            valor_regalado_f = sum(r["cantidad"] * PRODUCTOS.get(r["sabor"], 0) for r in raw_reg_f)
+            st.markdown(
+                f'<div class="factura-box">{filas_reg_f}'
+                f'<div class="factura-row"><span>Total regalado hoy</span><span>{total_regalado_f} bolsas</span></div>'
+                f'<div class="factura-total"><span>Valor que se dejó de cobrar</span><span>{fmt(valor_regalado_f)}</span></div>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
 
 # ══════════════════════════════════════════════════════════════════════════════
 # VISTA: RESUMEN (solo admin)
@@ -3509,7 +3578,7 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
 
             # Bolsas regaladas hoy, valoradas al precio normal — no mueven caja (total=0
             # en la venta), así que sin esto el costo de lo regalado no se veía en ninguna parte.
-            reg_hoy = [r for r in (raw_vt or []) if r.get("canal") == "Regalo"]
+            reg_hoy = [r for r in (raw_vt or []) if r.get("canal") in ("Regalo", "Regalo Fábrica")]
             bolsas_reg_hoy = sum(r["cantidad"] for r in reg_hoy)
             valor_reg_hoy = sum(r["cantidad"] * PRODUCTOS.get(r["sabor"], 0) for r in reg_hoy)
 
@@ -3614,7 +3683,7 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
             st.caption("💰 \"Cobrado\" es el dinero que efectivamente entró. Los créditos sin pagar se muestran aparte.")
 
             # Bolsas regaladas en el rango, valoradas al precio normal — no mueven caja.
-            reg_r = [r for r in raw_rango if r.get("canal") == "Regalo"]
+            reg_r = [r for r in raw_rango if r.get("canal") in ("Regalo", "Regalo Fábrica")]
             bolsas_reg_r = sum(r["cantidad"] for r in reg_r)
             valor_reg_r = sum(r["cantidad"] * PRODUCTOS.get(r["sabor"], 0) for r in reg_r)
             if bolsas_reg_r > 0:
@@ -3711,7 +3780,7 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
             st.caption("💰 \"Cobrado\" incluye ventas del mes y créditos viejos cobrados este mes. Los créditos sin pagar se muestran aparte.")
 
             # Bolsas regaladas en el mes, valoradas al precio normal — no mueven caja.
-            reg_mes = [r for r in raw_mes if r.get("canal") == "Regalo"]
+            reg_mes = [r for r in raw_mes if r.get("canal") in ("Regalo", "Regalo Fábrica")]
             bolsas_reg_mes = sum(r["cantidad"] for r in reg_mes)
             valor_reg_mes = sum(r["cantidad"] * PRODUCTOS.get(r["sabor"], 0) for r in reg_mes)
             if bolsas_reg_mes > 0:
