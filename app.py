@@ -1212,6 +1212,8 @@ label,.stSelectbox label,.stNumberInput label,.stDateInput label,.stTextInput la
 .brand-header{background:linear-gradient(135deg,#1565C0,#1E88E5);border-radius:0 0 22px 22px;padding:12px 20px 12px;margin:-1rem -1rem 16px -1rem;text-align:center;}
 .brand-header p{color:rgba(255,255,255,0.85);font-size:0.78rem;margin:0;}
 .brand-logo img{height:620px !important;margin-bottom:0 !important;animation:logoBounce 2.2s ease-in-out infinite;transform-origin:bottom center;}
+.splash-screen{background:linear-gradient(135deg,#1565C0,#1E88E5);border-radius:0 0 28px 28px;margin:-1rem -1rem 10px -1rem;padding:40px 20px 56px;min-height:68vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;}
+.splash-screen p{color:rgba(255,255,255,0.9);font-size:1.05rem;margin:16px 0 0;}
 .metric-row{display:flex;gap:9px;margin-bottom:16px;}
 .metric-box{flex:1;background:#FFFFFF;border-radius:14px;padding:14px 8px;text-align:center;box-shadow:0 2px 8px rgba(21,101,192,0.12);}
 .metric-box .val{font-size:1.2rem;font-weight:700;line-height:1.1;}
@@ -1504,7 +1506,7 @@ if _fondo_b64:
 _fondo_logo_b64 = get_img_b64("Fondo_del_logo.jpg")
 if _fondo_logo_b64:
     _css_botones_menu += f"""
-.brand-header{{
+.brand-header, .splash-screen{{
   background:linear-gradient(135deg,rgba(21,101,192,0.55),rgba(30,136,229,0.55)),url("data:image/jpeg;base64,{_fondo_logo_b64}") center/cover no-repeat !important;
 }}
 """
@@ -1659,7 +1661,7 @@ if "limpieza" not in st.session_state:
 # Session state
 defaults = {
     "es_admin": False,
-    "vista": "menu",        # menu | produccion | carro | fabrica | resumen
+    "vista": "splash",      # splash | menu | produccion | carro | fabrica | resumen
     "vista_anterior": "resumen",
     "carrito": {},
     "precios_carrito": {},  # precio modificado por item
@@ -1694,6 +1696,23 @@ def check_login(usuario, pw):
 
 if "admin_actual" not in st.session_state:
     st.session_state.admin_actual = None
+
+# ══════════════════════════════════════════════════════════════════════════════
+# SPLASH DE BIENVENIDA (solo la primera vez que se abre la app en la sesión)
+# ══════════════════════════════════════════════════════════════════════════════
+if st.session_state.vista == "splash":
+    st.markdown(f"""
+    <div class="splash-screen">
+        <div class="brand-logo">{logo_html}</div>
+        <p>Control de producción y ventas</p>
+    </div>
+    """, unsafe_allow_html=True)
+    _sp1, _sp2, _sp3 = st.columns([1, 2, 1])
+    with _sp2:
+        if st.button("👋 Bienvenido — Entrar", key="btn_splash_entrar", use_container_width=True):
+            st.session_state.vista = "menu"
+            st.rerun()
+    st.stop()
 
 # ══════════════════════════════════════════════════════════════════════════════
 # HEADER
