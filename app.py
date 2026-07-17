@@ -1212,8 +1212,10 @@ label,.stSelectbox label,.stNumberInput label,.stDateInput label,.stTextInput la
 .brand-header{background:linear-gradient(135deg,#1565C0,#1E88E5);border-radius:0 0 22px 22px;padding:12px 20px 12px;margin:-1rem -1rem 16px -1rem;text-align:center;}
 .brand-header p{color:rgba(255,255,255,0.85);font-size:0.78rem;margin:0;}
 .brand-logo img{height:620px !important;margin-bottom:0 !important;animation:logoBounce 2.2s ease-in-out infinite;transform-origin:bottom center;}
-.splash-screen{background:linear-gradient(135deg,#1565C0,#1E88E5);border-radius:0 0 28px 28px;margin:-1rem -1rem 10px -1rem;padding:40px 20px 56px;min-height:68vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;}
+.splash-screen{background:linear-gradient(135deg,#1565C0,#1E88E5);border-radius:0 0 28px 28px;margin:-1rem -1rem 0 -1rem;padding:15vh 20px 24px;display:flex;flex-direction:column;align-items:center;text-align:center;}
 .splash-screen p{color:rgba(255,255,255,0.9);font-size:1.05rem;margin:16px 0 0;}
+.st-key-btn_splash_entrar{margin-top:0 !important;}
+.st-key-btn_splash_entrar button{margin-top:0 !important;}
 .metric-row{display:flex;gap:9px;margin-bottom:16px;}
 .metric-box{flex:1;background:#FFFFFF;border-radius:14px;padding:14px 8px;text-align:center;box-shadow:0 2px 8px rgba(21,101,192,0.12);}
 .metric-box .val{font-size:1.2rem;font-weight:700;line-height:1.1;}
