@@ -1987,19 +1987,19 @@ elif st.session_state.vista == "carro":
                 f'<div class="factura-row"><span>{ICO_CARD} Cobrado en créditos viejos</span><span><b>{fmt(cobro_creditos_carro_hoy)}</b></span></div>'
                 if cobro_creditos_carro_hoy > 0 else ""
             )
-            st.markdown('<div class="section-label">Resumen del día — Javier & Edison</div>', unsafe_allow_html=True)
-            st.markdown(
-                f'<div class="factura-box">'
-                f'<div class="factura-row"><span>{ICO_CART} Bolsas vendidas hoy</span><span><b>{bolsas_carro_dia}</b></span></div>'
-                f'<div class="factura-row"><span>{ICO_DOLLAR} Cobrado (ventas de hoy)</span><span><b>{fmt(cobrado_ventas_carro_dia)}</b></span></div>'
-                f'{fila_credito_viejo_carro}'
-                f'<div class="factura-row"><span>{ICO_CLIPBOARD} Dejado en crédito</span><span><b>{fmt(credito_carro_dia)}</b></span></div>'
-                f'<div class="factura-total"><span>{ICO_DOLLAR} Total a entregar</span><span>{fmt(cobrado_carro_dia)}</span></div>'
-                f'</div>',
-                unsafe_allow_html=True
-            )
-            if cobro_creditos_carro_hoy > 0:
-                st.markdown(f'<div class="warn-box">{ICO_CARD} Ojo: de los {fmt(cobrado_carro_dia)} a entregar, <b>{fmt(cobro_creditos_carro_hoy)}</b> son de créditos viejos que cobraron hoy, no de ventas nuevas — no lo olviden.</div>', unsafe_allow_html=True)
+            with st.expander(f"🧾 Resumen del día — Javier & Edison (a entregar: {fmt(cobrado_carro_dia)})"):
+                st.markdown(
+                    f'<div class="factura-box">'
+                    f'<div class="factura-row"><span>{ICO_CART} Bolsas vendidas hoy</span><span><b>{bolsas_carro_dia}</b></span></div>'
+                    f'<div class="factura-row"><span>{ICO_DOLLAR} Cobrado (ventas de hoy)</span><span><b>{fmt(cobrado_ventas_carro_dia)}</b></span></div>'
+                    f'{fila_credito_viejo_carro}'
+                    f'<div class="factura-row"><span>{ICO_CLIPBOARD} Dejado en crédito</span><span><b>{fmt(credito_carro_dia)}</b></span></div>'
+                    f'<div class="factura-total"><span>{ICO_DOLLAR} Total a entregar</span><span>{fmt(cobrado_carro_dia)}</span></div>'
+                    f'</div>',
+                    unsafe_allow_html=True
+                )
+                if cobro_creditos_carro_hoy > 0:
+                    st.markdown(f'<div class="warn-box">{ICO_CARD} Ojo: de los {fmt(cobrado_carro_dia)} a entregar, <b>{fmt(cobro_creditos_carro_hoy)}</b> son de créditos viejos que cobraron hoy, no de ventas nuevas — no lo olviden.</div>', unsafe_allow_html=True)
 
         render_venta_canal(CONFIG_CARRO, mostrar_creditos=False)
 
@@ -2140,23 +2140,23 @@ elif st.session_state.vista == "fabrica":
                 f'<div class="factura-row"><span>{ICO_CARD} Cobrado en créditos viejos</span><span><b>{fmt(cobro_creditos_fab_hoy)}</b></span></div>'
                 if cobro_creditos_fab_hoy > 0 else ""
             )
-            st.markdown('<div class="section-label">Resumen del día — Fábrica</div>', unsafe_allow_html=True)
             filas_v = "".join(
                 f'<div class="factura-row"><span>{ICO_USER} {v}</span><span><b>{fmt(t)}</b></span></div>'
                 for v, t in por_vendedor.items()
             )
-            st.markdown(
-                f'<div class="factura-box">{filas_v}'
-                f'<div class="factura-row"><span>{ICO_CART} Bolsas vendidas hoy</span><span><b>{bolsas_fab_dia}</b></span></div>'
-                f'<div class="factura-row"><span>{ICO_DOLLAR} Cobrado (ventas de hoy)</span><span><b>{fmt(cobrado_ventas_fab_dia)}</b></span></div>'
-                f'{fila_credito_viejo_fab}'
-                f'<div class="factura-row"><span>{ICO_CLIPBOARD} Dejado en crédito</span><span><b>{fmt(credito_fab_dia)}</b></span></div>'
-                f'<div class="factura-total"><span>{ICO_DOLLAR} Total a entregar</span><span>{fmt(cobrado_fab_dia)}</span></div>'
-                f'</div>',
-                unsafe_allow_html=True
-            )
-            if cobro_creditos_fab_hoy > 0:
-                st.markdown(f'<div class="warn-box">{ICO_CARD} Ojo: de los {fmt(cobrado_fab_dia)} a entregar, <b>{fmt(cobro_creditos_fab_hoy)}</b> son de créditos viejos que cobraron hoy, no de ventas nuevas — no lo olviden.</div>', unsafe_allow_html=True)
+            with st.expander(f"🧾 Resumen del día — Fábrica (a entregar: {fmt(cobrado_fab_dia)})"):
+                st.markdown(
+                    f'<div class="factura-box">{filas_v}'
+                    f'<div class="factura-row"><span>{ICO_CART} Bolsas vendidas hoy</span><span><b>{bolsas_fab_dia}</b></span></div>'
+                    f'<div class="factura-row"><span>{ICO_DOLLAR} Cobrado (ventas de hoy)</span><span><b>{fmt(cobrado_ventas_fab_dia)}</b></span></div>'
+                    f'{fila_credito_viejo_fab}'
+                    f'<div class="factura-row"><span>{ICO_CLIPBOARD} Dejado en crédito</span><span><b>{fmt(credito_fab_dia)}</b></span></div>'
+                    f'<div class="factura-total"><span>{ICO_DOLLAR} Total a entregar</span><span>{fmt(cobrado_fab_dia)}</span></div>'
+                    f'</div>',
+                    unsafe_allow_html=True
+                )
+                if cobro_creditos_fab_hoy > 0:
+                    st.markdown(f'<div class="warn-box">{ICO_CARD} Ojo: de los {fmt(cobrado_fab_dia)} a entregar, <b>{fmt(cobro_creditos_fab_hoy)}</b> son de créditos viejos que cobraron hoy, no de ventas nuevas — no lo olviden.</div>', unsafe_allow_html=True)
 
         render_venta_canal(CONFIG_FABRICA, mostrar_creditos=False)
 
