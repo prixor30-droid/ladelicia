@@ -178,6 +178,14 @@ UNIDADES_POR_BOLSA = {
     "Fósforo 70g (x10)": 10,
 }
 UNIDADES_POR_BOLSA_DEFAULT = 12  # docena — el resto de los sabores
+
+# Peso en kg de papa FRITA por bolsa individual — para calcular el costo de papa
+# por rendimiento (crudo → frito) en vez de repartirlo a ciegas entre bolsas.
+# Fósforo queda afuera hasta tener su dato de rendimiento.
+PESO_KG_BOLSA = {"Mega": 0.070, "Megaton": 0.180}
+PESO_KG_BOLSA_DOCENA = 0.035  # cada bolsita individual de los sabores por docena
+FOSFORO_SABORES = {"Fósforo 70g (x10)", "Fósforo 140g", "Fósforo 250g", "Fósforo 500g"}
+
 EMPLEADOS = ["Andrea", "Sofía", "Javier", "Edison", "Otro"]
 RESERVA_META = {"Papa": 50_000_000, "Empaque": 50_000_000}
 VENDEDORES_FABRICA = ["Sofía", "Andrea"]
@@ -4058,6 +4066,11 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
     col_ct1, col_ct2 = st.columns(2)
     f_ini_cont = col_ct1.date_input("Desde", value=datetime.now(COL_TZ).date().replace(day=1), key="f_ini_cont")
     f_fin_cont = col_ct2.date_input("Hasta", value=datetime.now(COL_TZ).date(), key="f_fin_cont")
+    rendimiento_bulto_kg_c = st.number_input(
+        "Rendimiento del bulto de papa (kg fritos por bulto de 50kg crudo)",
+        min_value=1.0, max_value=50.0, value=14.3, step=0.1, key="rendimiento_papa_kg",
+        help="Varía según la calidad de la papa (aprox. 14 a 14.6 kg por bulto). Ajustalo si cambia."
+    )
 
     with ThreadPoolExecutor(max_workers=4) as ex:
         f_ent_prom_c = ex.submit(sb_get, "materia_prima", "select=insumo,precio_unitario,cantidad")
@@ -4082,14 +4095,36 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
             prom_pond_c[k]["total_costo"] += pu * cant
             prom_pond_c[k]["total_cant"]  += cant
 
+    # Saborizantes + empaque consumidos (excluye la papa, que se calcula abajo por
+    # rendimiento crudo→frito en vez de repartirse a ciegas entre bolsas).
     costo_mp_periodo_c = 0
     for r in raw_sal_periodo_c:
+        if r["insumo"] == "Papa (bulto)":
+            continue
         d = prom_pond_c.get(r["insumo"])
         if d and d["total_cant"] > 0:
             costo_mp_periodo_c += float(r["cantidad"]) * (d["total_costo"] / d["total_cant"])
 
+    # Costo de papa por rendimiento: precio promedio del bulto crudo ÷ kg fritos que
+    # rinde, aplicado al peso real de cada sabor. Fósforo queda afuera hasta tener
+    # su dato de rendimiento — su papa no se cuenta todavía (ver aviso abajo).
+    d_papa_c = prom_pond_c.get("Papa (bulto)")
+    precio_bulto_papa_c = (d_papa_c["total_costo"] / d_papa_c["total_cant"]) if d_papa_c and d_papa_c["total_cant"] > 0 else 0
+    costo_por_kg_frito_c = (precio_bulto_papa_c / rendimiento_bulto_kg_c) if rendimiento_bulto_kg_c > 0 else 0
+
+    costo_papa_periodo_c = 0
+    bolsas_fosforo_sin_costo_c = 0
+    for r in raw_prod_periodo_c:
+        sabor_r = r.get("sabor")
+        bolsas_r = float(r["cantidad"]) * UNIDADES_POR_BOLSA.get(sabor_r, UNIDADES_POR_BOLSA_DEFAULT)
+        if sabor_r in FOSFORO_SABORES:
+            bolsas_fosforo_sin_costo_c += bolsas_r
+            continue
+        peso_kg_r = PESO_KG_BOLSA.get(sabor_r, PESO_KG_BOLSA_DOCENA)
+        costo_papa_periodo_c += bolsas_r * peso_kg_r * costo_por_kg_frito_c
+
     costo_planta_c = sum(float(r["valor"]) for r in raw_egresos_cont if r.get("tipo") == "costo")
-    costo_produccion_periodo_c = costo_mp_periodo_c + costo_planta_c
+    costo_produccion_periodo_c = costo_mp_periodo_c + costo_papa_periodo_c + costo_planta_c
     unidades_producidas_periodo_c = sum(
         float(r["cantidad"]) * UNIDADES_POR_BOLSA.get(r.get("sabor"), UNIDADES_POR_BOLSA_DEFAULT)
         for r in raw_prod_periodo_c
@@ -4105,7 +4140,9 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
         <div class="metric-box metric-green"><div class="val">{fmt(round(valor_inventario_terminado_c))}</div><div class="lbl">Producto terminado en bodega</div></div>
     </div>
     """, unsafe_allow_html=True)
-    st.caption(f"💡 Costo de producción = materia prima+saborizantes+empaque consumidos en el período (a precio promedio histórico) + egresos marcados como \"costo de producción\" ({fmt(round(costo_planta_c))}). Costo unitario = ese total ÷ {unidades_producidas_periodo_c:.0f} bolsas individuales producidas en el período (las docenas y decenas ya están convertidas a bolsas para que el promedio sea comparable entre sabores). Para comparar contra el precio de venta de un sabor por docena, multiplica este costo unitario ×12 (o ×10 si es Fósforo 70g). Los egresos sin clasificar no cuentan aquí.")
+    st.caption(f"💡 Costo de producción = papa (según rendimiento crudo→frito y peso real de cada sabor, {fmt(round(costo_papa_periodo_c))}) + saborizantes/empaque consumidos a precio promedio histórico ({fmt(round(costo_mp_periodo_c))}) + egresos marcados como \"costo de producción\" ({fmt(round(costo_planta_c))}). Costo unitario = ese total ÷ {unidades_producidas_periodo_c:.0f} bolsas individuales producidas en el período. Para comparar contra el precio de venta por docena, multiplica ×12 (o ×10 si es Fósforo 70g). Los egresos sin clasificar no cuentan aquí.")
+    if bolsas_fosforo_sin_costo_c > 0:
+        st.caption(f"⚠️ {bolsas_fosforo_sin_costo_c:.0f} bolsas de Fósforo producidas en el período no tienen costo de papa incluido todavía (falta el dato de rendimiento) — el costo unitario promedio queda un poco subestimado mientras tanto.")
 
     # --- Historial de pagos por empleado ---
     st.markdown(f'<div class="section-label">{ICO_RECEIPT} Historial por empleado</div>', unsafe_allow_html=True)
