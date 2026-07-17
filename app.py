@@ -3176,7 +3176,7 @@ elif st.session_state.vista == "materia_prima":
         f_ini_hcp = col_hcp1.date_input("Desde", value=datetime.now(COL_TZ).date().replace(day=1), key="f_ini_hist_cred_mp")
         f_fin_hcp = col_hcp2.date_input("Hasta", value=datetime.now(COL_TZ).date(), key="f_fin_hist_cred_mp")
 
-        raw_pagados_mp = sb_get("materia_prima", f"select=*&estado=eq.pagado&fecha=gte.{f_ini_hcp}&fecha=lte.{f_fin_hcp}&order=fecha.desc") or []
+        raw_pagados_mp = sb_get("materia_prima", f"select=*&estado=eq.pagado&abono=gt.0&fecha=gte.{f_ini_hcp}&fecha=lte.{f_fin_hcp}&order=fecha.desc") or []
         if not raw_pagados_mp:
             st.caption("No hay créditos pagados en ese rango.")
         else:
