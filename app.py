@@ -1209,11 +1209,9 @@ label,.stSelectbox label,.stNumberInput label,.stDateInput label,.stTextInput la
 .stTabs [data-baseweb="tab-list"]{background:#FFFFFF;border-radius:12px;padding:4px;gap:2px;box-shadow:0 1px 4px rgba(21,101,192,0.10);margin-bottom:16px;}
 .stTabs [data-baseweb="tab"]{border-radius:10px;font-size:0.78rem;font-weight:600;padding:8px 4px;color:#7A2050 !important;flex:1;justify-content:center;background:transparent !important;}
 .stTabs [aria-selected="true"]{background-color:#1565C0 !important;color:white !important;}
-.brand-header{background:linear-gradient(135deg,#1565C0,#1E88E5);border-radius:0 0 22px 22px;padding:12px 20px 12px;margin:-1rem -1rem 16px -1rem;text-align:center;transition:padding 0.25s ease;}
-.brand-header.brand-header-mini{padding:8px 16px;text-align:left;border-radius:0 0 16px 16px;display:flex;align-items:center;gap:10px;}
+.brand-header{background:linear-gradient(135deg,#1565C0,#1E88E5);border-radius:0 0 22px 22px;padding:12px 20px 12px;margin:-1rem -1rem 16px -1rem;text-align:center;}
 .brand-header p{color:rgba(255,255,255,0.85);font-size:0.78rem;margin:0;}
 .brand-logo img{height:620px !important;margin-bottom:0 !important;animation:logoBounce 2.2s ease-in-out infinite;transform-origin:bottom center;}
-.brand-logo.brand-logo-mini img{height:40px !important;margin-bottom:0 !important;animation:logoShrink 0.4s ease-out both !important;transform-origin:center !important;}
 .metric-row{display:flex;gap:9px;margin-bottom:16px;}
 .metric-box{flex:1;background:#FFFFFF;border-radius:14px;padding:14px 8px;text-align:center;box-shadow:0 2px 8px rgba(21,101,192,0.12);}
 .metric-box .val{font-size:1.2rem;font-weight:700;line-height:1.1;}
@@ -1223,7 +1221,6 @@ label,.stSelectbox label,.stNumberInput label,.stDateInput label,.stTextInput la
 @keyframes btnPress{0%{transform:scale(1);}40%{transform:scale(0.93);}100%{transform:scale(0.97);}}
 @keyframes cardPress{0%{transform:scale(1) translateY(0);}40%{transform:scale(0.95) translateY(1px);}100%{transform:scale(0.98) translateY(0);}}
 @keyframes logoBounce{0%,100%{transform:translateY(0) scale(1,1);}10%{transform:translateY(0) scale(1.08,0.92);}35%{transform:translateY(-36px) scale(0.96,1.06);}55%{transform:translateY(0) scale(1.1,0.9);}65%{transform:translateY(-12px) scale(1,1);}80%{transform:translateY(0) scale(1.04,0.96);}90%{transform:translateY(0) scale(1,1);}}
-@keyframes logoShrink{0%{transform:scale(2.6) translateX(30%);opacity:0.5;}60%{transform:scale(0.85) translateX(-3%);opacity:1;}100%{transform:scale(1) translateX(0);}}
 .alert-low,.info-box,.warn-box,.success-toast,.factura-box,.recibo-ticket,.metric-box{animation:fadeInUp 0.25s ease both;}
 .alert-low{background:#FFEBEE;border-left:3px solid #D32F2F;border-radius:0 10px 10px 0;padding:10px 14px;margin-bottom:9px;font-size:0.83rem;color:#B71C1C;}
 .info-box{background:#FFFFFF;border-left:3px solid #1B9E5A;border-radius:10px;padding:12px 14px;margin:8px 0 14px;font-size:0.82rem;color:#1B5E20;box-shadow:0 1px 6px rgba(0,0,0,0.05);}
@@ -1469,7 +1466,7 @@ _fondo_b64 = get_img_b64("fondo.jpg")
 if _fondo_b64:
     _css_botones_menu += f"""
 .stApp{{
-  background:linear-gradient(rgba(240,244,255,0.88),rgba(240,244,255,0.88)),url("data:image/jpeg;base64,{_fondo_b64}") center/cover no-repeat !important;
+  background:linear-gradient(rgba(240,244,255,0.55),rgba(240,244,255,0.55)),url("data:image/jpeg;base64,{_fondo_b64}") center/cover no-repeat !important;
 }}
 """
 
@@ -1670,14 +1667,10 @@ if "admin_actual" not in st.session_state:
 # ══════════════════════════════════════════════════════════════════════════════
 # HEADER
 # ══════════════════════════════════════════════════════════════════════════════
-_header_mini = st.session_state.vista != "menu"
-_header_cls = "brand-header brand-header-mini" if _header_mini else "brand-header"
-_logo_cls = "brand-logo brand-logo-mini" if _header_mini else "brand-logo"
-_subtitulo_html = "" if _header_mini else "<p>Control de producción y ventas</p>"
 st.markdown(f"""
-<div class="{_header_cls}">
-    <div class="{_logo_cls}">{logo_html}</div>
-    {_subtitulo_html}
+<div class="brand-header">
+    <div class="brand-logo">{logo_html}</div>
+    <p>Control de producción y ventas</p>
 </div>
 """, unsafe_allow_html=True)
 
