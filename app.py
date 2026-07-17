@@ -1444,6 +1444,22 @@ for _key_cat, _archivo_cat in _imagenes_cat_mp.items():
 }}
 """
 
+_b64_volver = get_img_b64("Volver.jpg")
+if _b64_volver:
+    _css_botones_menu += f"""
+.st-key-btn_back button{{
+  background:linear-gradient(90deg,rgba(0,0,0,0.6) 0%,rgba(0,0,0,0.6) 100%),url("data:image/jpeg;base64,{_b64_volver}") center/cover no-repeat !important;
+  color:#FFFFFF !important;
+  -webkit-text-fill-color:#FFFFFF !important;
+  border:none !important;
+  text-shadow:0 1px 3px rgba(0,0,0,0.9),0 2px 8px rgba(0,0,0,0.6) !important;
+}}
+.st-key-btn_back button:hover{{
+  background:linear-gradient(90deg,rgba(0,0,0,0.48) 0%,rgba(0,0,0,0.48) 100%),url("data:image/jpeg;base64,{_b64_volver}") center/cover no-repeat !important;
+  opacity:1 !important;
+}}
+"""
+
 if _css_botones_menu:
     st.markdown(f"<style>{_css_botones_menu}</style>", unsafe_allow_html=True)
 
