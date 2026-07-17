@@ -3086,6 +3086,17 @@ elif st.session_state.vista == "materia_prima":
             } for r in raw_hist_sal])
             with st.container(height=380):
                 tabla_view(df_hist_sal)
+
+            ids_hist_sal = {
+                f'{r["fecha"]} {r.get("hora","")} — {r["insumo"]} ({r["cantidad"]} {r.get("unidad","")})': r
+                for r in raw_hist_sal
+            }
+            sel_del_hist_sal = st.selectbox("Eliminar una salida mal registrada", ["— Selecciona —"] + list(ids_hist_sal.keys()), key="sel_del_hist_sal")
+            if sel_del_hist_sal != "— Selecciona —" and st.button("🗑️ Eliminar salida", key="btn_del_hist_sal"):
+                reg_del_hist_sal = ids_hist_sal[sel_del_hist_sal]
+                if sb_delete("salidas_mp", f"id=eq.{reg_del_hist_sal['id']}"):
+                    st.markdown(f'<div class="success-toast">{ICO_CHECK} Salida eliminada — el stock queda disponible de nuevo.</div>', unsafe_allow_html=True)
+                    time.sleep(0.3); st.rerun()
         else:
             st.caption("Aún no hay salidas registradas.")
 
