@@ -2078,9 +2078,11 @@ elif st.session_state.vista == "carro":
                 for r in raw_reg
             )
             total_regalado = sum(r["cantidad"] for r in raw_reg)
+            valor_regalado = sum(r["cantidad"] * PRODUCTOS.get(r["sabor"], 0) for r in raw_reg)
             st.markdown(
                 f'<div class="factura-box">{filas_reg}'
-                f'<div class="factura-total"><span>Total regalado hoy</span><span>{total_regalado} bolsas</span></div>'
+                f'<div class="factura-row"><span>Total regalado hoy</span><span>{total_regalado} bolsas</span></div>'
+                f'<div class="factura-total"><span>Valor que se dejó de cobrar</span><span>{fmt(valor_regalado)}</span></div>'
                 f'</div>',
                 unsafe_allow_html=True
             )
@@ -3505,6 +3507,12 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
             cobrado_carro = sum(f["abono"] for f in facturas_hoy.values() if f["canal"] == "Carro")   + cobro_creditos_hoy_por_canal.get("Carro", 0.0)
             pendiente_hoy = sum(f["saldo"] for f in facturas_hoy.values()) + _pendiente_creditos_antiguos(fecha_hoy(), fecha_hoy())
 
+            # Bolsas regaladas hoy, valoradas al precio normal — no mueven caja (total=0
+            # en la venta), así que sin esto el costo de lo regalado no se veía en ninguna parte.
+            reg_hoy = [r for r in (raw_vt or []) if r.get("canal") == "Regalo"]
+            bolsas_reg_hoy = sum(r["cantidad"] for r in reg_hoy)
+            valor_reg_hoy = sum(r["cantidad"] * PRODUCTOS.get(r["sabor"], 0) for r in reg_hoy)
+
             st.markdown(f"""
             <div class="metric-row">
                 <div class="metric-box metric-blue"><div class="val">{fmt(cobrado_fab)}</div><div class="lbl">Fábrica</div></div>
@@ -3513,6 +3521,13 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
                 <div class="metric-box metric-red"><div class="val">{fmt(pendiente_hoy)}</div><div class="lbl">Pendiente en créditos</div></div>
             </div>""", unsafe_allow_html=True)
             st.caption("💰 \"Total cobrado\" incluye ventas de hoy y créditos viejos cobrados hoy. Los créditos sin pagar aparecen aparte, en \"Pendiente en créditos\".")
+
+            if bolsas_reg_hoy > 0:
+                st.markdown(
+                    f'<div class="warn-box">{ICO_GIFT} Regalado hoy: <b>{bolsas_reg_hoy} bolsas</b> · '
+                    f'valor que se dejó de cobrar: <b>{fmt(valor_reg_hoy)}</b></div>',
+                    unsafe_allow_html=True
+                )
 
         if raw_vt:
             df_vt = pd.DataFrame(raw_vt)
@@ -3597,6 +3612,17 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
                 <div class="metric-box metric-yellow"><div class="val">{dias_r}</div><div class="lbl">Días</div></div>
             </div>""", unsafe_allow_html=True)
             st.caption("💰 \"Cobrado\" es el dinero que efectivamente entró. Los créditos sin pagar se muestran aparte.")
+
+            # Bolsas regaladas en el rango, valoradas al precio normal — no mueven caja.
+            reg_r = [r for r in raw_rango if r.get("canal") == "Regalo"]
+            bolsas_reg_r = sum(r["cantidad"] for r in reg_r)
+            valor_reg_r = sum(r["cantidad"] * PRODUCTOS.get(r["sabor"], 0) for r in reg_r)
+            if bolsas_reg_r > 0:
+                st.markdown(
+                    f'<div class="warn-box">{ICO_GIFT} Regalado en el rango: <b>{bolsas_reg_r} bolsas</b> · '
+                    f'valor que se dejó de cobrar: <b>{fmt(valor_reg_r)}</b></div>',
+                    unsafe_allow_html=True
+                )
 
             if not df_r.empty:
                 st.markdown('<div class="section-label">Por día</div>', unsafe_allow_html=True)
@@ -3683,6 +3709,17 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
                 <div class="metric-box metric-red"><div class="val">{fmt(pendiente_mes)}</div><div class="lbl">Pendiente en créditos</div></div>
             </div>""", unsafe_allow_html=True)
             st.caption("💰 \"Cobrado\" incluye ventas del mes y créditos viejos cobrados este mes. Los créditos sin pagar se muestran aparte.")
+
+            # Bolsas regaladas en el mes, valoradas al precio normal — no mueven caja.
+            reg_mes = [r for r in raw_mes if r.get("canal") == "Regalo"]
+            bolsas_reg_mes = sum(r["cantidad"] for r in reg_mes)
+            valor_reg_mes = sum(r["cantidad"] * PRODUCTOS.get(r["sabor"], 0) for r in reg_mes)
+            if bolsas_reg_mes > 0:
+                st.markdown(
+                    f'<div class="warn-box">{ICO_GIFT} Regalado este mes: <b>{bolsas_reg_mes} bolsas</b> · '
+                    f'valor que se dejó de cobrar: <b>{fmt(valor_reg_mes)}</b></div>',
+                    unsafe_allow_html=True
+                )
 
             st.markdown(f'<div class="info-box">{ICO_PACKAGE} Producción total del mes: <b>{prod_mes} bolsas</b></div>', unsafe_allow_html=True)
 
