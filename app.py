@@ -1396,11 +1396,11 @@ if not get_img_b64(_imagenes_menu["contador"]):
 }}
 """
 
-_fondo_b64 = get_img_b64("fondo.png")
+_fondo_b64 = get_img_b64("fondo.jpg")
 if _fondo_b64:
     _css_botones_menu += f"""
 .stApp{{
-  background:linear-gradient(rgba(240,244,255,0.88),rgba(240,244,255,0.88)),url("data:image/png;base64,{_fondo_b64}") center/cover no-repeat !important;
+  background:linear-gradient(rgba(240,244,255,0.88),rgba(240,244,255,0.88)),url("data:image/jpeg;base64,{_fondo_b64}") center/cover no-repeat !important;
 }}
 """
 
