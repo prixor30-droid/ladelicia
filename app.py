@@ -1829,7 +1829,7 @@ elif st.session_state.vista == "produccion":
 # ══════════════════════════════════════════════════════════════════════════════
 elif st.session_state.vista == "carro":
 
-    sub1, sub2, sub3, sub4, sub5 = st.tabs(["🚗 Nuevo cargue", "💵 Registrar venta", "🔄 Devolución", "🎁 Regalar", "💳 Créditos"])
+    sub1, sub2, sub3, sub4, sub5, sub6 = st.tabs(["🚗 Nuevo cargue", "💵 Registrar venta", "🔄 Devolución", "🎁 Regalar", "📋 Resumen del día", "💳 Créditos"])
 
     with sub1:
         st.markdown('<div class="section-label">Cargue del carro</div>', unsafe_allow_html=True)
@@ -1958,49 +1958,6 @@ elif st.session_state.vista == "carro":
             st.info(f"No hay cargues registrados el {fecha_consulta_cg_str}.")
 
     with sub2:
-        # Visible para todos (no solo admin) — Javier y Edison lo necesitan para
-        # saber cuánto entregar al final del día. Arriba de todo para que se vea
-        # sin tener que bajar.
-        raw_resumen_carro = sb_get("ventas", f"select=total,cantidad,factura_id,abono,saldo&fecha=eq.{fecha_hoy()}&canal=eq.Carro")
-        # Cobros de hoy sobre créditos viejos (facturas de otros días que se
-        # cobraron hoy en la calle) — sin esto, "Total a entregar" no incluía esa
-        # plata aunque sí la hayan recibido en efectivo.
-        raw_pg_carro_dia = sb_get("pagos_credito", f"select=fecha,monto,tipo,factura_id&canal=eq.Carro") or []
-        cobrado_despues_carro_dia = {}
-        for r in raw_pg_carro_dia:
-            if r.get("tipo") == "venta" and r.get("factura_id"):
-                fid = r["factura_id"]
-                cobrado_despues_carro_dia[fid] = cobrado_despues_carro_dia.get(fid, 0) + float(r["monto"])
-        cobro_creditos_carro_hoy = sum(float(r["monto"]) for r in raw_pg_carro_dia if r["fecha"] == fecha_hoy())
-        if raw_resumen_carro or cobro_creditos_carro_hoy:
-            bolsas_carro_dia = sum(r["cantidad"] for r in raw_resumen_carro if r["cantidad"] > 0) if raw_resumen_carro else 0
-            facturas_carro_dia = {}
-            for r in (raw_resumen_carro or []):
-                fid = r.get("factura_id", "")
-                if fid and fid not in facturas_carro_dia:
-                    abono_inicial = max(0.0, float(r.get("abono", 0) or 0) - cobrado_despues_carro_dia.get(fid, 0))
-                    facturas_carro_dia[fid] = {"abono": abono_inicial, "saldo": float(r.get("saldo", 0) or 0)}
-            cobrado_ventas_carro_dia = sum(f["abono"] for f in facturas_carro_dia.values())
-            cobrado_carro_dia = cobrado_ventas_carro_dia + cobro_creditos_carro_hoy
-            credito_carro_dia = sum(f["saldo"] for f in facturas_carro_dia.values())
-            fila_credito_viejo_carro = (
-                f'<div class="factura-row"><span>{ICO_CARD} Cobrado en créditos viejos</span><span><b>{fmt(cobro_creditos_carro_hoy)}</b></span></div>'
-                if cobro_creditos_carro_hoy > 0 else ""
-            )
-            with st.expander(f"🧾 Resumen del día — Javier & Edison (a entregar: {fmt(cobrado_carro_dia)})"):
-                st.markdown(
-                    f'<div class="factura-box">'
-                    f'<div class="factura-row"><span>{ICO_CART} Bolsas vendidas hoy</span><span><b>{bolsas_carro_dia}</b></span></div>'
-                    f'<div class="factura-row"><span>{ICO_DOLLAR} Cobrado (ventas de hoy)</span><span><b>{fmt(cobrado_ventas_carro_dia)}</b></span></div>'
-                    f'{fila_credito_viejo_carro}'
-                    f'<div class="factura-row"><span>{ICO_CLIPBOARD} Dejado en crédito</span><span><b>{fmt(credito_carro_dia)}</b></span></div>'
-                    f'<div class="factura-total"><span>{ICO_DOLLAR} Total a entregar</span><span>{fmt(cobrado_carro_dia)}</span></div>'
-                    f'</div>',
-                    unsafe_allow_html=True
-                )
-                if cobro_creditos_carro_hoy > 0:
-                    st.markdown(f'<div class="warn-box">{ICO_CARD} Ojo: de los {fmt(cobrado_carro_dia)} a entregar, <b>{fmt(cobro_creditos_carro_hoy)}</b> son de créditos viejos que cobraron hoy, no de ventas nuevas — no lo olviden.</div>', unsafe_allow_html=True)
-
         render_venta_canal(CONFIG_CARRO, mostrar_creditos=False)
 
         # Papas disponibles del cargue — histórico completo
@@ -2096,6 +2053,51 @@ elif st.session_state.vista == "carro":
             )
 
     with sub5:
+        # Visible para todos (no solo admin) — Javier y Edison lo necesitan para
+        # saber cuánto entregar al final del día.
+        raw_resumen_carro = sb_get("ventas", f"select=total,cantidad,factura_id,abono,saldo&fecha=eq.{fecha_hoy()}&canal=eq.Carro")
+        # Cobros de hoy sobre créditos viejos (facturas de otros días que se
+        # cobraron hoy en la calle) — sin esto, "Total a entregar" no incluía esa
+        # plata aunque sí la hayan recibido en efectivo.
+        raw_pg_carro_dia = sb_get("pagos_credito", f"select=fecha,monto,tipo,factura_id&canal=eq.Carro") or []
+        cobrado_despues_carro_dia = {}
+        for r in raw_pg_carro_dia:
+            if r.get("tipo") == "venta" and r.get("factura_id"):
+                fid = r["factura_id"]
+                cobrado_despues_carro_dia[fid] = cobrado_despues_carro_dia.get(fid, 0) + float(r["monto"])
+        cobro_creditos_carro_hoy = sum(float(r["monto"]) for r in raw_pg_carro_dia if r["fecha"] == fecha_hoy())
+        if not raw_resumen_carro and not cobro_creditos_carro_hoy:
+            st.info("Aún no hay ventas hoy.")
+        else:
+            bolsas_carro_dia = sum(r["cantidad"] for r in raw_resumen_carro if r["cantidad"] > 0) if raw_resumen_carro else 0
+            facturas_carro_dia = {}
+            for r in (raw_resumen_carro or []):
+                fid = r.get("factura_id", "")
+                if fid and fid not in facturas_carro_dia:
+                    abono_inicial = max(0.0, float(r.get("abono", 0) or 0) - cobrado_despues_carro_dia.get(fid, 0))
+                    facturas_carro_dia[fid] = {"abono": abono_inicial, "saldo": float(r.get("saldo", 0) or 0)}
+            cobrado_ventas_carro_dia = sum(f["abono"] for f in facturas_carro_dia.values())
+            cobrado_carro_dia = cobrado_ventas_carro_dia + cobro_creditos_carro_hoy
+            credito_carro_dia = sum(f["saldo"] for f in facturas_carro_dia.values())
+            fila_credito_viejo_carro = (
+                f'<div class="factura-row"><span>{ICO_CARD} Cobrado en créditos viejos</span><span><b>{fmt(cobro_creditos_carro_hoy)}</b></span></div>'
+                if cobro_creditos_carro_hoy > 0 else ""
+            )
+            st.markdown('<div class="section-label">Resumen del día — Javier & Edison</div>', unsafe_allow_html=True)
+            st.markdown(
+                f'<div class="factura-box">'
+                f'<div class="factura-row"><span>{ICO_CART} Bolsas vendidas hoy</span><span><b>{bolsas_carro_dia}</b></span></div>'
+                f'<div class="factura-row"><span>{ICO_DOLLAR} Cobrado (ventas de hoy)</span><span><b>{fmt(cobrado_ventas_carro_dia)}</b></span></div>'
+                f'{fila_credito_viejo_carro}'
+                f'<div class="factura-row"><span>{ICO_CLIPBOARD} Dejado en crédito</span><span><b>{fmt(credito_carro_dia)}</b></span></div>'
+                f'<div class="factura-total"><span>{ICO_DOLLAR} Total a entregar</span><span>{fmt(cobrado_carro_dia)}</span></div>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
+            if cobro_creditos_carro_hoy > 0:
+                st.markdown(f'<div class="warn-box">{ICO_CARD} Ojo: de los {fmt(cobrado_carro_dia)} a entregar, <b>{fmt(cobro_creditos_carro_hoy)}</b> son de créditos viejos que cobraron hoy, no de ventas nuevas — no lo olviden.</div>', unsafe_allow_html=True)
+
+    with sub6:
         mostrar_creditos_pendientes("Carro")
         mostrar_historial_pagos_credito("Carro")
 
@@ -2104,60 +2106,9 @@ elif st.session_state.vista == "carro":
 # ══════════════════════════════════════════════════════════════════════════════
 elif st.session_state.vista == "fabrica":
 
-    sub_f1, sub_f2, sub_f3 = st.tabs(["💵 Registrar venta", "💳 Créditos", "🎁 Regalar"])
+    sub_f1, sub_f2, sub_f3, sub_f4 = st.tabs(["💵 Registrar venta", "💳 Créditos", "🎁 Regalar", "📋 Resumen del día"])
 
     with sub_f1:
-        # Visible para todos (no solo admin) — Sofía y Andrea lo necesitan para
-        # saber cuánto entregar al final del día. Arriba de todo para que se vea
-        # sin tener que bajar.
-        raw_vf = sb_get("ventas", f"select=total,cantidad,vendedor,factura_id,abono,saldo&fecha=eq.{fecha_hoy()}&canal=in.(Fábrica,Cambio)")
-        # Cobros de hoy sobre créditos viejos (facturas de otros días cobradas hoy)
-        # — sin esto, "Total a entregar" no incluía esa plata aunque sí se recibió.
-        raw_pg_fab_dia = sb_get("pagos_credito", f"select=fecha,monto,tipo,factura_id&canal=eq.Fábrica") or []
-        cobrado_despues_fab_dia = {}
-        for r in raw_pg_fab_dia:
-            if r.get("tipo") == "venta" and r.get("factura_id"):
-                fid = r["factura_id"]
-                cobrado_despues_fab_dia[fid] = cobrado_despues_fab_dia.get(fid, 0) + float(r["monto"])
-        cobro_creditos_fab_hoy = sum(float(r["monto"]) for r in raw_pg_fab_dia if r["fecha"] == fecha_hoy())
-        if raw_vf or cobro_creditos_fab_hoy:
-            bolsas_fab_dia = sum(r["cantidad"] for r in raw_vf if r["cantidad"] > 0) if raw_vf else 0
-            por_vendedor = {}
-            for r in (raw_vf or []):
-                if r["total"] > 0:
-                    v = r["vendedor"]
-                    por_vendedor[v] = por_vendedor.get(v, 0) + r["total"]
-            facturas_fab_dia = {}
-            for r in (raw_vf or []):
-                fid = r.get("factura_id", "")
-                if fid and fid not in facturas_fab_dia:
-                    abono_inicial = max(0.0, float(r.get("abono", 0) or 0) - cobrado_despues_fab_dia.get(fid, 0))
-                    facturas_fab_dia[fid] = {"abono": abono_inicial, "saldo": float(r.get("saldo", 0) or 0)}
-            cobrado_ventas_fab_dia = sum(f["abono"] for f in facturas_fab_dia.values())
-            cobrado_fab_dia = cobrado_ventas_fab_dia + cobro_creditos_fab_hoy
-            credito_fab_dia = sum(f["saldo"] for f in facturas_fab_dia.values())
-            fila_credito_viejo_fab = (
-                f'<div class="factura-row"><span>{ICO_CARD} Cobrado en créditos viejos</span><span><b>{fmt(cobro_creditos_fab_hoy)}</b></span></div>'
-                if cobro_creditos_fab_hoy > 0 else ""
-            )
-            filas_v = "".join(
-                f'<div class="factura-row"><span>{ICO_USER} {v}</span><span><b>{fmt(t)}</b></span></div>'
-                for v, t in por_vendedor.items()
-            )
-            with st.expander(f"🧾 Resumen del día — Fábrica (a entregar: {fmt(cobrado_fab_dia)})"):
-                st.markdown(
-                    f'<div class="factura-box">{filas_v}'
-                    f'<div class="factura-row"><span>{ICO_CART} Bolsas vendidas hoy</span><span><b>{bolsas_fab_dia}</b></span></div>'
-                    f'<div class="factura-row"><span>{ICO_DOLLAR} Cobrado (ventas de hoy)</span><span><b>{fmt(cobrado_ventas_fab_dia)}</b></span></div>'
-                    f'{fila_credito_viejo_fab}'
-                    f'<div class="factura-row"><span>{ICO_CLIPBOARD} Dejado en crédito</span><span><b>{fmt(credito_fab_dia)}</b></span></div>'
-                    f'<div class="factura-total"><span>{ICO_DOLLAR} Total a entregar</span><span>{fmt(cobrado_fab_dia)}</span></div>'
-                    f'</div>',
-                    unsafe_allow_html=True
-                )
-                if cobro_creditos_fab_hoy > 0:
-                    st.markdown(f'<div class="warn-box">{ICO_CARD} Ojo: de los {fmt(cobrado_fab_dia)} a entregar, <b>{fmt(cobro_creditos_fab_hoy)}</b> son de créditos viejos que cobraron hoy, no de ventas nuevas — no lo olviden.</div>', unsafe_allow_html=True)
-
         render_venta_canal(CONFIG_FABRICA, mostrar_creditos=False)
 
     with sub_f2:
@@ -2216,6 +2167,59 @@ elif st.session_state.vista == "fabrica":
                 f'</div>',
                 unsafe_allow_html=True
             )
+
+    with sub_f4:
+        # Visible para todos (no solo admin) — Sofía y Andrea lo necesitan para
+        # saber cuánto entregar al final del día.
+        raw_vf = sb_get("ventas", f"select=total,cantidad,vendedor,factura_id,abono,saldo&fecha=eq.{fecha_hoy()}&canal=in.(Fábrica,Cambio)")
+        # Cobros de hoy sobre créditos viejos (facturas de otros días cobradas hoy)
+        # — sin esto, "Total a entregar" no incluía esa plata aunque sí se recibió.
+        raw_pg_fab_dia = sb_get("pagos_credito", f"select=fecha,monto,tipo,factura_id&canal=eq.Fábrica") or []
+        cobrado_despues_fab_dia = {}
+        for r in raw_pg_fab_dia:
+            if r.get("tipo") == "venta" and r.get("factura_id"):
+                fid = r["factura_id"]
+                cobrado_despues_fab_dia[fid] = cobrado_despues_fab_dia.get(fid, 0) + float(r["monto"])
+        cobro_creditos_fab_hoy = sum(float(r["monto"]) for r in raw_pg_fab_dia if r["fecha"] == fecha_hoy())
+        if not raw_vf and not cobro_creditos_fab_hoy:
+            st.info("Aún no hay ventas hoy.")
+        else:
+            bolsas_fab_dia = sum(r["cantidad"] for r in raw_vf if r["cantidad"] > 0) if raw_vf else 0
+            por_vendedor = {}
+            for r in (raw_vf or []):
+                if r["total"] > 0:
+                    v = r["vendedor"]
+                    por_vendedor[v] = por_vendedor.get(v, 0) + r["total"]
+            facturas_fab_dia = {}
+            for r in (raw_vf or []):
+                fid = r.get("factura_id", "")
+                if fid and fid not in facturas_fab_dia:
+                    abono_inicial = max(0.0, float(r.get("abono", 0) or 0) - cobrado_despues_fab_dia.get(fid, 0))
+                    facturas_fab_dia[fid] = {"abono": abono_inicial, "saldo": float(r.get("saldo", 0) or 0)}
+            cobrado_ventas_fab_dia = sum(f["abono"] for f in facturas_fab_dia.values())
+            cobrado_fab_dia = cobrado_ventas_fab_dia + cobro_creditos_fab_hoy
+            credito_fab_dia = sum(f["saldo"] for f in facturas_fab_dia.values())
+            fila_credito_viejo_fab = (
+                f'<div class="factura-row"><span>{ICO_CARD} Cobrado en créditos viejos</span><span><b>{fmt(cobro_creditos_fab_hoy)}</b></span></div>'
+                if cobro_creditos_fab_hoy > 0 else ""
+            )
+            filas_v = "".join(
+                f'<div class="factura-row"><span>{ICO_USER} {v}</span><span><b>{fmt(t)}</b></span></div>'
+                for v, t in por_vendedor.items()
+            )
+            st.markdown('<div class="section-label">Resumen del día — Fábrica</div>', unsafe_allow_html=True)
+            st.markdown(
+                f'<div class="factura-box">{filas_v}'
+                f'<div class="factura-row"><span>{ICO_CART} Bolsas vendidas hoy</span><span><b>{bolsas_fab_dia}</b></span></div>'
+                f'<div class="factura-row"><span>{ICO_DOLLAR} Cobrado (ventas de hoy)</span><span><b>{fmt(cobrado_ventas_fab_dia)}</b></span></div>'
+                f'{fila_credito_viejo_fab}'
+                f'<div class="factura-row"><span>{ICO_CLIPBOARD} Dejado en crédito</span><span><b>{fmt(credito_fab_dia)}</b></span></div>'
+                f'<div class="factura-total"><span>{ICO_DOLLAR} Total a entregar</span><span>{fmt(cobrado_fab_dia)}</span></div>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
+            if cobro_creditos_fab_hoy > 0:
+                st.markdown(f'<div class="warn-box">{ICO_CARD} Ojo: de los {fmt(cobrado_fab_dia)} a entregar, <b>{fmt(cobro_creditos_fab_hoy)}</b> son de créditos viejos que cobraron hoy, no de ventas nuevas — no lo olviden.</div>', unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # VISTA: RESUMEN (solo admin)
