@@ -1396,6 +1396,14 @@ if _fondo_b64:
 }}
 """
 
+_fondo_logo_b64 = get_img_b64("Fondo_del_logo.jpg")
+if _fondo_logo_b64:
+    _css_botones_menu += f"""
+.brand-header{{
+  background:linear-gradient(135deg,rgba(21,101,192,0.55),rgba(30,136,229,0.55)),url("data:image/jpeg;base64,{_fondo_logo_b64}") center/cover no-repeat !important;
+}}
+"""
+
 if _css_botones_menu:
     st.markdown(f"<style>{_css_botones_menu}</style>", unsafe_allow_html=True)
 
