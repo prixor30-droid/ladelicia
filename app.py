@@ -4176,7 +4176,7 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
                 "Sabor": sabor_r + (" ⚠️" if es_fosforo_r else ""),
                 "Bolsas prod.": f"{bolsas_r:.0f}",
                 "Se vende por": etiqueta_r,
-                f"Costo x {etiqueta_r}": fmt(round(costo_unidad_venta_r)),
+                "Costo x unidad de venta": fmt(round(costo_unidad_venta_r)),
                 "Precio venta": fmt(precio_venta_r) if precio_venta_r else "—",
                 "Margen": fmt(round(margen_r)) if precio_venta_r else "—",
                 "Margen %": f"{margen_pct_r:.0f}%" if margen_pct_r is not None else "—",
