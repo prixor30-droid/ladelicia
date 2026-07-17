@@ -3199,7 +3199,8 @@ elif st.session_state.vista == "materia_prima":
                     "Cantidad": f'{float(r["cantidad"]):.3f}' if r["unidad"] == "kg" else r["cantidad"],
                     "Total": fmt(r["precio_total"]),
                 } for r in filas_hcp])
-                tabla_view(df_hist_cred_mp)
+                with st.container(height=420):
+                    tabla_view(df_hist_cred_mp)
 
     with tab_mp4:
         st.markdown('<div class="section-label">Resumen del período</div>', unsafe_allow_html=True)
