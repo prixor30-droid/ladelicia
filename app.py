@@ -425,6 +425,39 @@ def mostrar_creditos_pendientes(canal):
             time.sleep(0.3)
             st.rerun()
 
+def mostrar_historial_pagos_credito(canal):
+    """Historial de créditos ya cobrados en este canal, con la fecha real del pago
+    (no la fecha de la venta original) — visible para Fábrica y Carro, no solo admin."""
+    st.markdown('<div class="section-label">🕒 Historial de créditos pagados</div>', unsafe_allow_html=True)
+    col_hp1, col_hp2 = st.columns(2)
+    f_ini_hp = col_hp1.date_input("Desde", value=datetime.now(COL_TZ).date().replace(day=1), key=f"hp_ini_{canal}")
+    f_fin_hp = col_hp2.date_input("Hasta", value=datetime.now(COL_TZ).date(), key=f"hp_fin_{canal}")
+
+    raw_hp = sb_get("pagos_credito", f"select=*&canal=eq.{requests.utils.quote(canal)}&fecha=gte.{f_ini_hp}&fecha=lte.{f_fin_hp}&order=fecha.desc,hora.desc")
+    if not raw_hp:
+        st.caption("No hay créditos pagados en ese rango.")
+        return
+
+    df_hp = pd.DataFrame(raw_hp)
+    total_hp = df_hp["monto"].sum()
+    st.markdown(f'<div class="info-box">{ICO_DOLLAR} Total cobrado en el rango: <b>{fmt(total_hp)}</b></div>', unsafe_allow_html=True)
+
+    busqueda_hp = st.text_input("🔍 Buscar por cliente", key=f"buscar_hp_{canal}", placeholder="Ej: Don Carlos")
+    if busqueda_hp.strip():
+        df_hp = df_hp[df_hp["cliente"].apply(lambda c: _coincide_nombre(busqueda_hp, c or ""))]
+
+    if df_hp.empty:
+        st.caption("No hay créditos pagados para ese cliente en ese rango.")
+    else:
+        tabla_hp = df_hp.copy()
+        tabla_hp["Referencia"] = tabla_hp.apply(
+            lambda r: f"FV-{r['factura_id']}" if r["tipo"]=="venta" else "Crédito antiguo", axis=1
+        )
+        tabla_hp["monto"] = tabla_hp["monto"].apply(fmt)
+        tabla_hp = tabla_hp[["fecha","hora","cliente","vendedor","Referencia","monto"]]
+        tabla_hp.columns = ["Fecha","Hora","Cliente","Vendedor","Factura","Monto cobrado"]
+        tabla_view(tabla_hp)
+
 def _recargar_factura(key_factura, fac):
     """Recarga una factura (fábrica o carro) desde Supabase y actualiza session_state[key_factura]."""
     registros_act = sb_get("ventas", f"select=sabor,cantidad,total&factura_id=eq.{fac['id']}")
@@ -2034,6 +2067,7 @@ elif st.session_state.vista == "carro":
 
     with sub5:
         mostrar_creditos_pendientes("Carro")
+        mostrar_historial_pagos_credito("Carro")
 
 # ══════════════════════════════════════════════════════════════════════════════
 # VISTA: FÁBRICA
@@ -2090,6 +2124,7 @@ elif st.session_state.vista == "fabrica":
 
     with sub_f2:
         mostrar_creditos_pendientes("Fábrica")
+        mostrar_historial_pagos_credito("Fábrica")
 
 # ══════════════════════════════════════════════════════════════════════════════
 # VISTA: RESUMEN (solo admin)
