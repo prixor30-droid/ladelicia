@@ -1412,6 +1412,38 @@ if _fondo_logo_b64:
 }}
 """
 
+_imagenes_cat_mp = {
+    "btn_cat_mp":  "MateriaprimaInsumos.jpg",
+    "btn_cat_sab": "saborizantes.jpg",
+    "btn_cat_emp": "rollos_empaque.jpg",
+}
+for _key_cat, _archivo_cat in _imagenes_cat_mp.items():
+    _b64_cat = get_img_b64(_archivo_cat)
+    if _b64_cat:
+        _css_botones_menu += f"""
+.st-key-{_key_cat} button{{
+  background:linear-gradient(90deg,rgba(0,0,0,0.68) 0%,rgba(0,0,0,0.5) 55%,rgba(0,0,0,0.35) 100%),url("data:image/jpeg;base64,{_b64_cat}") center/cover no-repeat !important;
+  color:#FFFFFF !important;
+  -webkit-text-fill-color:#FFFFFF !important;
+  border:none !important;
+  border-radius:18px !important;
+  box-shadow:0 3px 12px rgba(21,101,192,0.25) !important;
+  min-height:110px !important;
+  padding:18px 20px !important;
+  font-size:1rem !important;
+  font-weight:700 !important;
+  white-space:pre-line !important;
+  line-height:1.5 !important;
+  text-align:left !important;
+  text-shadow:0 1px 3px rgba(0,0,0,0.9),0 2px 8px rgba(0,0,0,0.6) !important;
+}}
+.st-key-{_key_cat} button:hover{{
+  background:linear-gradient(90deg,rgba(0,0,0,0.58) 0%,rgba(0,0,0,0.4) 55%,rgba(0,0,0,0.25) 100%),url("data:image/jpeg;base64,{_b64_cat}") center/cover no-repeat !important;
+  box-shadow:0 5px 16px rgba(21,101,192,0.32) !important;
+  opacity:1 !important;
+}}
+"""
+
 if _css_botones_menu:
     st.markdown(f"<style>{_css_botones_menu}</style>", unsafe_allow_html=True)
 
