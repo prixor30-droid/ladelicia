@@ -4144,6 +4144,46 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
     if bolsas_fosforo_sin_costo_c > 0:
         st.caption(f"⚠️ {bolsas_fosforo_sin_costo_c:.0f} bolsas de Fósforo producidas en el período no tienen costo de papa incluido todavía (falta el dato de rendimiento) — el costo unitario promedio queda un poco subestimado mientras tanto.")
 
+    # --- Costo unitario por referencia (sabor) ---
+    bolsas_por_sabor_c = {}
+    for r in raw_prod_periodo_c:
+        sabor_r = r.get("sabor")
+        bolsas_r = float(r["cantidad"]) * UNIDADES_POR_BOLSA.get(sabor_r, UNIDADES_POR_BOLSA_DEFAULT)
+        bolsas_por_sabor_c[sabor_r] = bolsas_por_sabor_c.get(sabor_r, 0) + bolsas_r
+
+    if bolsas_por_sabor_c:
+        st.markdown('<div class="section-label">Costo unitario por referencia</div>', unsafe_allow_html=True)
+        # La papa se calcula por rendimiento (precisa por sabor); saborizante+empaque+planta
+        # no se pueden separar de forma confiable por sabor, así que se reparten parejo
+        # entre todas las bolsas del período — la diferencia entre sabores acá viene sobre
+        # todo del peso de papa de cada uno.
+        otros_costo_por_bolsa_c = (
+            (costo_mp_periodo_c + costo_planta_c) / unidades_producidas_periodo_c
+            if unidades_producidas_periodo_c > 0 else 0
+        )
+        filas_costo_sabor_c = []
+        for sabor_r, bolsas_r in sorted(bolsas_por_sabor_c.items()):
+            mult_r = UNIDADES_POR_BOLSA.get(sabor_r, UNIDADES_POR_BOLSA_DEFAULT)
+            es_fosforo_r = sabor_r in FOSFORO_SABORES
+            costo_papa_bolsa_r = 0 if es_fosforo_r else PESO_KG_BOLSA.get(sabor_r, PESO_KG_BOLSA_DOCENA) * costo_por_kg_frito_c
+            costo_bolsa_r = costo_papa_bolsa_r + otros_costo_por_bolsa_c
+            costo_unidad_venta_r = costo_bolsa_r * mult_r
+            precio_venta_r = PRODUCTOS.get(sabor_r, 0)
+            margen_r = precio_venta_r - costo_unidad_venta_r
+            margen_pct_r = (margen_r / precio_venta_r * 100) if precio_venta_r > 0 else None
+            etiqueta_r = "unidad" if mult_r == 1 else ("decena" if mult_r == 10 else "docena")
+            filas_costo_sabor_c.append({
+                "Sabor": sabor_r + (" ⚠️" if es_fosforo_r else ""),
+                "Bolsas prod.": f"{bolsas_r:.0f}",
+                "Se vende por": etiqueta_r,
+                f"Costo x {etiqueta_r}": fmt(round(costo_unidad_venta_r)),
+                "Precio venta": fmt(precio_venta_r) if precio_venta_r else "—",
+                "Margen": fmt(round(margen_r)) if precio_venta_r else "—",
+                "Margen %": f"{margen_pct_r:.0f}%" if margen_pct_r is not None else "—",
+            })
+        tabla_view(pd.DataFrame(filas_costo_sabor_c))
+        st.caption("💡 El costo de papa por sabor es preciso (según su peso real); el resto (saborizante, empaque, planta) se reparte parejo entre todas las bolsas del período porque no se puede rastrear por sabor con los datos actuales. \"Precio venta\" es el precio base — puede variar según el tipo de cliente. ⚠️ = Fósforo, sin costo de papa todavía.")
+
     # --- Historial de pagos por empleado ---
     st.markdown(f'<div class="section-label">{ICO_RECEIPT} Historial por empleado</div>', unsafe_allow_html=True)
     raw_salarios = sb_get("caja_egresos", "select=fecha,hora,concepto,valor,empleado&categoria=eq.Salario&empleado=not.is.null&order=fecha.desc,hora.desc") or []
