@@ -4301,7 +4301,7 @@ elif st.session_state.vista == "nomina" and st.session_state.es_admin:
                 if sn > semestres_pagados_por_emp.get(eid, 0):
                     semestres_pagados_por_emp[eid] = sn
 
-            raw_pagos_periodo_n3 = sb_get("nomina_pagos", f"select=empleado_id&periodo_inicio=eq.{periodo_ini_n}&periodo_fin=eq.{periodo_fin_n}") or []
+            raw_pagos_periodo_n3 = sb_get("nomina_pagos", f"select=empleado_id&periodo_inicio=eq.{periodo_ini_n}") or []
             ids_ya_pagados = {r["empleado_id"] for r in raw_pagos_periodo_n3}
 
             for emp in raw_emp_n3:
@@ -4351,10 +4351,10 @@ elif st.session_state.vista == "nomina" and st.session_state.es_admin:
                     st.markdown(f'<div class="info-box">{ICO_DOLLAR} Total a pagar: <b>{fmt(total_n)}</b></div>', unsafe_allow_html=True)
 
                     if not quincena_completa_n:
-                        st.caption("ℹ️ Esto es un avance — la quincena todavía no termina, así que el botón de pagar aparece solo cuando pongas la fecha de fin del período (o una posterior).")
-                    elif st.button(f"💾 Registrar pago — {emp['nombre']}", key=f"btn_pago_{eid}", disabled=ya_pagado):
+                        st.caption(f"ℹ️ La quincena todavía no termina — si le pagas ahora, queda registrado como el pago final de este período (del {periodo_ini_n} al {periodo_calculo_n}), útil si dejó de trabajar antes de completarla.")
+                    if st.button(f"💾 Registrar pago — {emp['nombre']}", key=f"btn_pago_{eid}", disabled=ya_pagado):
                         if _registrar_pago_nomina(
-                            emp, periodo_ini_n, periodo_fin_n, dias_trab, salario_diario,
+                            emp, periodo_ini_n, periodo_calculo_n, dias_trab, salario_diario,
                             monto_base, bono_monto, semestre_a_pagar if incluir_bono else None
                         ):
                             st.session_state.ok_nomina = True
