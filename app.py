@@ -4255,7 +4255,7 @@ elif st.session_state.vista == "nomina" and st.session_state.es_admin:
     # ── Calcular quincena ──
     with sub_n3:
         st.markdown('<div class="section-label">Calcular quincena</div>', unsafe_allow_html=True)
-        fecha_ref_n = st.date_input("Fecha dentro de la quincena a calcular", value=datetime.now(COL_TZ).date(), key="fecha_ref_n")
+        fecha_ref_n = st.date_input("Calcular hasta esta fecha", value=datetime.now(COL_TZ).date(), key="fecha_ref_n")
         if fecha_ref_n.day <= 15:
             periodo_ini_n = date(fecha_ref_n.year, fecha_ref_n.month, 1)
             periodo_fin_n = date(fecha_ref_n.year, fecha_ref_n.month, 15)
@@ -4265,7 +4265,13 @@ elif st.session_state.vista == "nomina" and st.session_state.es_admin:
                 periodo_fin_n = date(fecha_ref_n.year, 12, 31)
             else:
                 periodo_fin_n = date(fecha_ref_n.year, fecha_ref_n.month + 1, 1) - timedelta(days=1)
-        st.caption(f"Período: {periodo_ini_n} a {periodo_fin_n} (15 días base)")
+
+        quincena_completa_n = fecha_ref_n >= periodo_fin_n
+        periodo_calculo_n = periodo_fin_n if quincena_completa_n else fecha_ref_n
+        if quincena_completa_n:
+            st.caption(f"Período: {periodo_ini_n} a {periodo_fin_n} — quincena completa (15 días base)")
+        else:
+            st.caption(f"Período: {periodo_ini_n} a {periodo_fin_n} — mostrando el avance hasta {fecha_ref_n} (todavía no termina la quincena)")
 
         busqueda_n3 = st.text_input("🔎 Buscar empleado", placeholder="Escribe el nombre...", key="busqueda_n3")
 
@@ -4283,7 +4289,7 @@ elif st.session_state.vista == "nomina" and st.session_state.es_admin:
                 st.warning("No se encontró ningún empleado con ese nombre.")
 
         if raw_emp_n3:
-            raw_aus_n3 = sb_get("nomina_ausencias", f"select=empleado_id,fecha&fecha=gte.{periodo_ini_n}&fecha=lte.{periodo_fin_n}") or []
+            raw_aus_n3 = sb_get("nomina_ausencias", f"select=empleado_id,fecha&fecha=gte.{periodo_ini_n}&fecha=lte.{periodo_calculo_n}") or []
             ausencias_por_emp = {}
             for r in raw_aus_n3:
                 ausencias_por_emp[r["empleado_id"]] = ausencias_por_emp.get(r["empleado_id"], 0) + 1
@@ -4312,13 +4318,17 @@ elif st.session_state.vista == "nomina" and st.session_state.es_admin:
                             time.sleep(0.3); st.rerun()
                 else:
                     dias_ausencia = ausencias_por_emp.get(eid, 0)
-                    dias_trab = max(0, 15 - dias_ausencia)
+                    if quincena_completa_n:
+                        dias_base_n3 = 15
+                    else:
+                        dias_base_n3 = min(15, (periodo_calculo_n - periodo_ini_n).days + 1)
+                    dias_trab = max(0, dias_base_n3 - dias_ausencia)
                     salario_diario = emp["salario_mensual"] / 30
                     monto_base = round(salario_diario * dias_trab)
 
                     fecha_ingreso_emp = datetime.strptime(emp["fecha_ingreso"], "%Y-%m-%d").date()
-                    meses_antig = (periodo_fin_n.year - fecha_ingreso_emp.year) * 12 + (periodo_fin_n.month - fecha_ingreso_emp.month)
-                    if periodo_fin_n.day < fecha_ingreso_emp.day:
+                    meses_antig = (periodo_calculo_n.year - fecha_ingreso_emp.year) * 12 + (periodo_calculo_n.month - fecha_ingreso_emp.month)
+                    if periodo_calculo_n.day < fecha_ingreso_emp.day:
                         meses_antig -= 1
                     meses_antig = max(0, meses_antig)
                     semestres_cumplidos = meses_antig // 6
@@ -4326,7 +4336,7 @@ elif st.session_state.vista == "nomina" and st.session_state.es_admin:
                     bono_pendiente = emp.get("bono_semestral", True) and semestres_cumplidos > semestres_pagados
                     semestre_a_pagar = semestres_pagados + 1 if bono_pendiente else None
 
-                    st.caption(f"{dias_trab} de 15 días trabajados" + (f" ({dias_ausencia} ausencia(s))" if dias_ausencia else "") + f" · Salario diario: {fmt(salario_diario)}")
+                    st.caption(f"{dias_trab} de {dias_base_n3} días trabajados" + (f" ({dias_ausencia} ausencia(s))" if dias_ausencia else "") + f" · Salario diario: {fmt(salario_diario)}")
 
                     incluir_bono = False
                     if bono_pendiente:
@@ -4340,7 +4350,9 @@ elif st.session_state.vista == "nomina" and st.session_state.es_admin:
                     total_n = monto_base + bono_monto
                     st.markdown(f'<div class="info-box">{ICO_DOLLAR} Total a pagar: <b>{fmt(total_n)}</b></div>', unsafe_allow_html=True)
 
-                    if st.button(f"💾 Registrar pago — {emp['nombre']}", key=f"btn_pago_{eid}", disabled=ya_pagado):
+                    if not quincena_completa_n:
+                        st.caption("ℹ️ Esto es un avance — la quincena todavía no termina, así que el botón de pagar aparece solo cuando pongas la fecha de fin del período (o una posterior).")
+                    elif st.button(f"💾 Registrar pago — {emp['nombre']}", key=f"btn_pago_{eid}", disabled=ya_pagado):
                         if _registrar_pago_nomina(
                             emp, periodo_ini_n, periodo_fin_n, dias_trab, salario_diario,
                             monto_base, bono_monto, semestre_a_pagar if incluir_bono else None
