@@ -2726,7 +2726,6 @@ elif st.session_state.vista == "materia_prima":
 
         else:
             nombre_sel, unidad_sel, cat_sel = st.session_state.insumo_sel
-            con_credito = cat_sel != "emp"
             st.markdown(f'<div class="section-label">Entrada — {nombre_sel}</div>', unsafe_allow_html=True)
 
             raw_ent_actual = sb_get("materia_prima", f"select=cantidad&insumo=eq.{requests.utils.quote(nombre_sel)}") or []
@@ -2774,7 +2773,7 @@ elif st.session_state.vista == "materia_prima":
                 abono_mp = 0
                 saldo_mp = 0
                 st.markdown(f'<div class="info-box">{ICO_CHECK} Se sumará al stock. No se descuenta de caja ni queda como deuda con proveedor.</div>', unsafe_allow_html=True)
-            elif con_credito:
+            else:
                 abono_mp = st.number_input("Abono inicial ($)", min_value=0, max_value=max(0, precio_mp), value=0, step=1000, key="abono_mp")
                 saldo_mp = max(0, precio_mp - abono_mp)
                 if precio_mp > 0:
@@ -2784,8 +2783,6 @@ elif st.session_state.vista == "materia_prima":
                         st.markdown(f'<div class="warn-box">{ICO_CLIPBOARD} Debe: <b>{fmt(saldo_mp)}</b></div>', unsafe_allow_html=True)
                     else:
                         st.markdown(f'<div class="warn-box">{ICO_CLIPBOARD} Fiado: <b>{fmt(precio_mp)}</b></div>', unsafe_allow_html=True)
-            else:
-                abono_mp = precio_mp; saldo_mp = 0
             col1, col2 = st.columns(2)
             if col1.button("✅ Registrar", key="btn_mp"):
                 if registrar_entrada_mp(nombre_sel, unidad_sel, cant_mp, prov_mp, precio_mp, abono_mp, saldo_mp, precio_unit_mp, fecha_mp, es_stock_existente=ya_tengo_mp, numero_factura_mp=numero_factura_mp):
