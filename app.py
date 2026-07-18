@@ -4091,21 +4091,18 @@ elif st.session_state.vista == "nomina" and st.session_state.es_admin:
                 caja_egreso_id = data_eg_n[0]["id"] if data_eg_n else None
             else:
                 st.error(f"Error al registrar el egreso en caja: {r_eg_n.status_code} — {r_eg_n.text}")
-                return
+                return False
         except requests.RequestException as e:
             st.error(f"Error al registrar el egreso en caja: {e}")
-            return
+            return False
 
-        ok1 = sb_post("nomina_pagos", {
+        return sb_post("nomina_pagos", {
             "empleado_id": emp["id"], "periodo_inicio": str(periodo_ini), "periodo_fin": str(periodo_fin),
             "dias_trabajados": dias_trab, "salario_diario": salario_diario,
             "monto_base": monto_base, "bono_semestral": bono, "semestre_num": semestre_num,
             "total_pagado": total, "fecha_pago": fecha_hoy(), "pagado_por": st.session_state.admin_actual,
             "caja_egreso_id": caja_egreso_id
         })
-        if ok1:
-            st.session_state.ok_nomina = True
-            time.sleep(0.3); st.rerun()
 
     sub_n1, sub_n2, sub_n3, sub_n4 = st.tabs(["👥 Empleados", "🚫 Ausencias", "🧮 Calcular quincena", "📋 Historial"])
 
@@ -4165,11 +4162,47 @@ elif st.session_state.vista == "nomina" and st.session_state.es_admin:
 
             st.markdown('<div class="section-label">Dar de baja</div>', unsafe_allow_html=True)
             emp_baja_sel_ne = st.selectbox("Empleado", nombres_edit_ne, key="emp_baja_sel_ne")
-            if st.button("🚫 Marcar como inactivo", key="btn_baja_ne"):
-                id_baja_ne = next(r["id"] for r in raw_emp_n1 if r["nombre"] == emp_baja_sel_ne)
-                sb_patch("nomina_empleados", f"id=eq.{id_baja_ne}", {"activo": False})
+            emp_baja_obj_ne = next(r for r in raw_emp_n1 if r["nombre"] == emp_baja_sel_ne)
+
+            bono_prorr_monto_ne = 0
+            dias_prorr_ne = 0
+            semestre_prorr_ne = None
+            if emp_baja_obj_ne["tipo"] == "fijo" and emp_baja_obj_ne.get("bono_semestral"):
+                fecha_salida_ne = st.date_input("Fecha de salida", value=datetime.now(COL_TZ).date(), key="fecha_salida_ne")
+                fecha_ingreso_baja_ne = datetime.strptime(emp_baja_obj_ne["fecha_ingreso"], "%Y-%m-%d").date()
+                raw_bonos_baja_ne = sb_get("nomina_pagos", f"select=semestre_num&empleado_id=eq.{emp_baja_obj_ne['id']}&bono_semestral=gt.0") or []
+                semestres_pagados_ne = max([r.get("semestre_num") or 0 for r in raw_bonos_baja_ne], default=0)
+                meses_extra_ne = semestres_pagados_ne * 6
+                anio_ini_ne = fecha_ingreso_baja_ne.year + (fecha_ingreso_baja_ne.month - 1 + meses_extra_ne) // 12
+                mes_ini_ne = (fecha_ingreso_baja_ne.month - 1 + meses_extra_ne) % 12 + 1
+                inicio_semestre_ne = date(anio_ini_ne, mes_ini_ne, min(fecha_ingreso_baja_ne.day, 28))
+                dias_comerciales_ne = (
+                    (fecha_salida_ne.year - inicio_semestre_ne.year) * 360
+                    + (fecha_salida_ne.month - inicio_semestre_ne.month) * 30
+                    + (fecha_salida_ne.day - inicio_semestre_ne.day)
+                )
+                dias_prorr_ne = max(0, min(180, dias_comerciales_ne))
+                bono_prorr_monto_ne = round(dias_prorr_ne / 180 * emp_baja_obj_ne["salario_mensual"] / 2)
+                semestre_prorr_ne = semestres_pagados_ne + 1
+                if bono_prorr_monto_ne > 0:
+                    st.markdown(
+                        f'<div class="info-box">{ICO_DOLLAR} Bono proporcional a los {dias_prorr_ne} días trabajados de este semestre incompleto: <b>{fmt(bono_prorr_monto_ne)}</b></div>',
+                        unsafe_allow_html=True
+                    )
+
+            col_baja1, col_baja2 = st.columns(2)
+            if col_baja1.button("🚫 Marcar inactivo (sin bono)", key="btn_baja_ne"):
+                sb_patch("nomina_empleados", f"id=eq.{emp_baja_obj_ne['id']}", {"activo": False})
                 st.markdown(f'<div class="success-toast">{ICO_CHECK} Empleado marcado como inactivo.</div>', unsafe_allow_html=True)
                 time.sleep(0.3); st.rerun()
+            if bono_prorr_monto_ne > 0 and col_baja2.button("💾 Pagar bono proporcional y dar de baja", key="btn_baja_bono_ne"):
+                if _registrar_pago_nomina(
+                    emp_baja_obj_ne, fecha_salida_ne, fecha_salida_ne, None, None,
+                    0, bono_prorr_monto_ne, semestre_prorr_ne
+                ):
+                    sb_patch("nomina_empleados", f"id=eq.{emp_baja_obj_ne['id']}", {"activo": False})
+                    st.markdown(f'<div class="success-toast">{ICO_CHECK} Bono proporcional pagado y empleado marcado como inactivo.</div>', unsafe_allow_html=True)
+                    time.sleep(0.3); st.rerun()
 
     # ── Ausencias ──
     with sub_n2:
@@ -4274,7 +4307,9 @@ elif st.session_state.vista == "nomina" and st.session_state.es_admin:
                     monto_sugerido = round(emp["salario_mensual"] / 2)
                     monto_var = st.number_input("Monto a pagar esta quincena ($)", min_value=0, value=monto_sugerido, step=50000, key=f"monto_var_{eid}")
                     if st.button(f"💾 Registrar pago — {emp['nombre']}", key=f"btn_pago_{eid}", disabled=ya_pagado):
-                        _registrar_pago_nomina(emp, periodo_ini_n, periodo_fin_n, None, None, float(monto_var), 0, None)
+                        if _registrar_pago_nomina(emp, periodo_ini_n, periodo_fin_n, None, None, float(monto_var), 0, None):
+                            st.session_state.ok_nomina = True
+                            time.sleep(0.3); st.rerun()
                 else:
                     dias_ausencia = ausencias_por_emp.get(eid, 0)
                     dias_trab = max(0, 15 - dias_ausencia)
@@ -4306,10 +4341,12 @@ elif st.session_state.vista == "nomina" and st.session_state.es_admin:
                     st.markdown(f'<div class="info-box">{ICO_DOLLAR} Total a pagar: <b>{fmt(total_n)}</b></div>', unsafe_allow_html=True)
 
                     if st.button(f"💾 Registrar pago — {emp['nombre']}", key=f"btn_pago_{eid}", disabled=ya_pagado):
-                        _registrar_pago_nomina(
+                        if _registrar_pago_nomina(
                             emp, periodo_ini_n, periodo_fin_n, dias_trab, salario_diario,
                             monto_base, bono_monto, semestre_a_pagar if incluir_bono else None
-                        )
+                        ):
+                            st.session_state.ok_nomina = True
+                            time.sleep(0.3); st.rerun()
                 st.markdown("---")
 
     # ── Historial ──
