@@ -4260,10 +4260,12 @@ elif st.session_state.vista == "nomina" and st.session_state.es_admin:
 
                     incluir_bono = False
                     if bono_pendiente:
-                        incluir_bono = st.checkbox(
-                            f"🎉 Incluir bono semestral #{semestre_a_pagar} (medio sueldo) — {fmt(round(emp['salario_mensual']/2))}",
-                            value=True, key=f"bono_chk_{eid}"
+                        opcion_bono = st.radio(
+                            f"🎉 Bono semestral #{semestre_a_pagar} (medio sueldo) — {fmt(round(emp['salario_mensual']/2))}",
+                            ["✅ Incluir en este pago", "❌ No incluir (ya se dio antes / omitir)"],
+                            horizontal=True, key=f"bono_chk_{eid}"
                         )
+                        incluir_bono = opcion_bono.startswith("✅")
                     bono_monto = round(emp["salario_mensual"] / 2) if incluir_bono else 0
                     total_n = monto_base + bono_monto
                     st.markdown(f'<div class="info-box">{ICO_DOLLAR} Total a pagar: <b>{fmt(total_n)}</b></div>', unsafe_allow_html=True)
