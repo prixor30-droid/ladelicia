@@ -4199,10 +4199,22 @@ elif st.session_state.vista == "nomina" and st.session_state.es_admin:
                 periodo_fin_n = date(fecha_ref_n.year, fecha_ref_n.month + 1, 1) - timedelta(days=1)
         st.caption(f"Período: {periodo_ini_n} a {periodo_fin_n} (15 días base)")
 
-        raw_emp_n3 = sb_get("nomina_empleados", "select=*&activo=eq.true&order=nombre.asc") or []
-        if not raw_emp_n3:
+        busqueda_n3 = st.text_input("🔎 Buscar empleado", placeholder="Escribe el nombre...", key="busqueda_n3")
+
+        raw_emp_todos_n3 = sb_get("nomina_empleados", "select=*&activo=eq.true&order=nombre.asc") or []
+        raw_emp_n3 = []
+        if not raw_emp_todos_n3:
             st.info("No hay empleados registrados todavía. Agrégalos en la pestaña Empleados.")
+        elif not busqueda_n3.strip():
+            st.caption("Escribe un nombre arriba para calcular su quincena.")
+            raw_emp_n3 = []
         else:
+            texto_b_n3 = busqueda_n3.strip().lower()
+            raw_emp_n3 = [r for r in raw_emp_todos_n3 if texto_b_n3 in r["nombre"].lower()]
+            if not raw_emp_n3:
+                st.warning("No se encontró ningún empleado con ese nombre.")
+
+        if raw_emp_n3:
             raw_aus_n3 = sb_get("nomina_ausencias", f"select=empleado_id,fecha&fecha=gte.{periodo_ini_n}&fecha=lte.{periodo_fin_n}") or []
             ausencias_por_emp = {}
             for r in raw_aus_n3:
