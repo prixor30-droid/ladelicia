@@ -4401,6 +4401,14 @@ elif st.session_state.vista == "nomina" and st.session_state.es_admin:
                     st.markdown(f'<div class="success-toast">{ICO_CHECK} Pago actualizado.</div>', unsafe_allow_html=True)
                     time.sleep(0.3); st.rerun()
 
+            st.markdown('<div class="section-label">Eliminar un pago</div>', unsafe_allow_html=True)
+            st.caption("Solo borra el registro del historial de Nómina — nunca borra el egreso en Caja, aunque esté enlazado. Útil para quitar duplicados (ej. si un pago quedó importado dos veces).")
+            sel_pago_del = st.selectbox("Pago a eliminar", ["— Selecciona —"] + list(ids_pago_edit.keys()), key="sel_pago_del")
+            if sel_pago_del != "— Selecciona —" and st.button("🗑️ Eliminar del historial", key="btn_del_pago_n4"):
+                sb_delete("nomina_pagos", f"id=eq.{ids_pago_edit[sel_pago_del]['id']}")
+                st.markdown(f'<div class="success-toast">{ICO_CHECK} Pago eliminado del historial.</div>', unsafe_allow_html=True)
+                time.sleep(0.3); st.rerun()
+
 # ══════════════════════════════════════════════════════════════════════════════
 # VISTA: CONTADOR (solo admin) — inventario invertido, costo de producción,
 # cuentas por cobrar/pagar. Antes vivían en Materia Prima→Historial y Caja→Resumen,
