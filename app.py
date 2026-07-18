@@ -4075,19 +4075,35 @@ elif st.session_state.vista == "nomina" and st.session_state.es_admin:
 
     def _registrar_pago_nomina(emp, periodo_ini, periodo_fin, dias_trab, salario_diario, monto_base, bono, semestre_num):
         total = monto_base + bono
+        concepto_pago = f"Quincena {periodo_ini} a {periodo_fin}" + (" + bono semestral" if bono else "")
+        caja_egreso_id = None
+        try:
+            r_eg_n = requests.post(
+                f"{SUPABASE_URL}/rest/v1/caja_egresos", headers=HEADERS, timeout=10,
+                json={
+                    "fecha": fecha_hoy(), "hora": ahora(), "concepto": concepto_pago, "valor": float(total),
+                    "categoria": "Salario", "tipo": "gasto" if emp["tipo"] == "variable" else "costo",
+                    "empleado": emp["nombre"]
+                }
+            )
+            if r_eg_n.ok:
+                data_eg_n = r_eg_n.json()
+                caja_egreso_id = data_eg_n[0]["id"] if data_eg_n else None
+            else:
+                st.error(f"Error al registrar el egreso en caja: {r_eg_n.status_code} — {r_eg_n.text}")
+                return
+        except requests.RequestException as e:
+            st.error(f"Error al registrar el egreso en caja: {e}")
+            return
+
         ok1 = sb_post("nomina_pagos", {
             "empleado_id": emp["id"], "periodo_inicio": str(periodo_ini), "periodo_fin": str(periodo_fin),
             "dias_trabajados": dias_trab, "salario_diario": salario_diario,
             "monto_base": monto_base, "bono_semestral": bono, "semestre_num": semestre_num,
-            "total_pagado": total, "fecha_pago": fecha_hoy(), "pagado_por": st.session_state.admin_actual
+            "total_pagado": total, "fecha_pago": fecha_hoy(), "pagado_por": st.session_state.admin_actual,
+            "caja_egreso_id": caja_egreso_id
         })
-        concepto_pago = f"Quincena {periodo_ini} a {periodo_fin}" + (" + bono semestral" if bono else "")
-        ok2 = sb_post("caja_egresos", {
-            "fecha": fecha_hoy(), "hora": ahora(), "concepto": concepto_pago, "valor": float(total),
-            "categoria": "Salario", "tipo": "gasto" if emp["tipo"] == "variable" else "costo",
-            "empleado": emp["nombre"]
-        })
-        if ok1 and ok2:
+        if ok1:
             st.session_state.ok_nomina = True
             time.sleep(0.3); st.rerun()
 
@@ -4189,6 +4205,17 @@ elif st.session_state.vista == "nomina" and st.session_state.es_admin:
                 "Fecha": r["fecha"], "Empleado": nombre_por_id_aus.get(r["empleado_id"], "?"), "Motivo": r["motivo"]
             } for r in raw_aus_mes])
             tabla_view(df_aus)
+
+            ids_aus_del = {
+                f'{r["fecha"]} — {nombre_por_id_aus.get(r["empleado_id"], "?")} — {r["motivo"]}': r
+                for r in raw_aus_mes
+            }
+            sel_del_aus = st.selectbox("Eliminar registro", ["— Selecciona —"] + list(ids_aus_del.keys()), key="sel_del_aus")
+            if sel_del_aus != "— Selecciona —" and st.button("🗑️ Eliminar ausencia", key="btn_del_aus"):
+                reg_del_aus = ids_aus_del[sel_del_aus]
+                sb_delete("nomina_ausencias", f"id=eq.{reg_del_aus['id']}")
+                st.markdown(f'<div class="success-toast">{ICO_CHECK} Ausencia eliminada.</div>', unsafe_allow_html=True)
+                time.sleep(0.3); st.rerun()
         else:
             st.caption("Sin ausencias registradas este mes.")
 
@@ -4288,6 +4315,33 @@ elif st.session_state.vista == "nomina" and st.session_state.es_admin:
     # ── Historial ──
     with sub_n4:
         st.markdown('<div class="section-label">Historial de pagos</div>', unsafe_allow_html=True)
+
+        with st.expander("🔧 Registrar bono ya pagado antes (no descuenta de caja)"):
+            st.caption("Úsalo solo para bonos semestrales que ya pagaste con plata que salió de caja en un mes anterior, antes de tener este sistema — así queda registrado el semestre como pagado (para que no se lo vuelva a sugerir en Calcular quincena) pero sin volver a descontarlo de caja hoy.")
+            raw_emp_bono_retro = sb_get("nomina_empleados", "select=id,nombre,salario_mensual&activo=eq.true&tipo=eq.fijo&order=nombre.asc") or []
+            if not raw_emp_bono_retro:
+                st.info("No hay empleados fijos registrados todavía.")
+            else:
+                emp_retro_sel = st.selectbox("Empleado", [r["nombre"] for r in raw_emp_bono_retro], key="emp_retro_sel")
+                emp_retro_obj = next(r for r in raw_emp_bono_retro if r["nombre"] == emp_retro_sel)
+                semestre_retro = st.number_input("N° de semestre que cumple con este bono", min_value=1, value=1, step=1, key="semestre_retro")
+                monto_retro = st.number_input(
+                    "Monto que se le pagó ($)", min_value=0,
+                    value=round(emp_retro_obj["salario_mensual"] / 2), step=50000, key="monto_retro"
+                )
+                fecha_retro = st.date_input("Fecha en que se le pagó", value=datetime.now(COL_TZ).date(), key="fecha_retro")
+                if st.button("💾 Registrar (sin afectar caja)", key="btn_bono_retro"):
+                    sb_post("nomina_pagos", {
+                        "empleado_id": emp_retro_obj["id"],
+                        "periodo_inicio": str(fecha_retro), "periodo_fin": str(fecha_retro),
+                        "dias_trabajados": None, "salario_diario": None, "monto_base": 0,
+                        "bono_semestral": float(monto_retro), "semestre_num": int(semestre_retro),
+                        "total_pagado": float(monto_retro), "fecha_pago": str(fecha_retro),
+                        "pagado_por": st.session_state.admin_actual
+                    })
+                    st.markdown(f'<div class="success-toast">{ICO_CHECK} Bono registrado como pagado — no se tocó caja.</div>', unsafe_allow_html=True)
+                    time.sleep(0.3); st.rerun()
+
         raw_emp_n4 = sb_get("nomina_empleados", "select=id,nombre&order=nombre.asc") or []
         nombre_por_id_n4 = {r["id"]: r["nombre"] for r in raw_emp_n4}
         nombres_hist_n4 = ["Todos"] + sorted(nombre_por_id_n4.values())
@@ -4313,6 +4367,39 @@ elif st.session_state.vista == "nomina" and st.session_state.es_admin:
                 "Total": fmt(r["total_pagado"]),
             } for r in raw_pagos_n4])
             tabla_view(df_hist_n4)
+
+            st.markdown('<div class="section-label">Editar un pago</div>', unsafe_allow_html=True)
+            ids_pago_edit = {
+                f'{r["fecha_pago"]} — {nombre_por_id_n4.get(r["empleado_id"], "?")} — {fmt(r["total_pagado"])}': r
+                for r in raw_pagos_n4
+            }
+            sel_pago_edit = st.selectbox("Pago a editar", ["— Selecciona —"] + list(ids_pago_edit.keys()), key="sel_pago_edit")
+            if sel_pago_edit != "— Selecciona —":
+                pago_edit = ids_pago_edit[sel_pago_edit]
+                monto_base_edit = st.number_input(
+                    "Monto base ($)", min_value=0, value=int(pago_edit["monto_base"]), step=10000, key="monto_base_edit"
+                )
+                bono_edit = st.number_input(
+                    "Bono semestral ($)", min_value=0, value=int(pago_edit.get("bono_semestral") or 0), step=10000, key="bono_edit"
+                )
+                fecha_pago_edit = st.date_input(
+                    "Fecha de pago", value=datetime.strptime(pago_edit["fecha_pago"], "%Y-%m-%d").date(), key="fecha_pago_edit"
+                )
+                total_edit = monto_base_edit + bono_edit
+                st.markdown(f'<div class="info-box">{ICO_DOLLAR} Nuevo total: <b>{fmt(total_edit)}</b></div>', unsafe_allow_html=True)
+                if not pago_edit.get("caja_egreso_id"):
+                    st.caption("⚠️ Este pago es anterior a que Nómina quedara enlazada con Caja (o es un bono retroactivo) — al guardar solo se actualiza el historial, no toca ningún egreso de Caja. Si ya se había descontado, ajústalo tú a mano en Caja → Historial.")
+                if st.button("💾 Guardar cambios del pago", key="btn_guardar_pago_edit"):
+                    sb_patch("nomina_pagos", f"id=eq.{pago_edit['id']}", {
+                        "monto_base": float(monto_base_edit), "bono_semestral": float(bono_edit),
+                        "total_pagado": float(total_edit), "fecha_pago": str(fecha_pago_edit)
+                    })
+                    if pago_edit.get("caja_egreso_id"):
+                        sb_patch("caja_egresos", f"id=eq.{pago_edit['caja_egreso_id']}", {
+                            "valor": float(total_edit), "fecha": str(fecha_pago_edit)
+                        })
+                    st.markdown(f'<div class="success-toast">{ICO_CHECK} Pago actualizado.</div>', unsafe_allow_html=True)
+                    time.sleep(0.3); st.rerun()
 
 # ══════════════════════════════════════════════════════════════════════════════
 # VISTA: CONTADOR (solo admin) — inventario invertido, costo de producción,
