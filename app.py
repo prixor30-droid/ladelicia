@@ -4073,35 +4073,83 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
 elif st.session_state.vista == "nomina" and st.session_state.es_admin:
     st.markdown(f'<div class="section-label">{ICO_USER} Nómina</div>', unsafe_allow_html=True)
 
-    def _registrar_pago_nomina(emp, periodo_ini, periodo_fin, dias_trab, salario_diario, monto_base, bono, semestre_num):
-        total = monto_base + bono
+    def _registrar_pago_nomina(emp, periodo_ini, periodo_fin, dias_trab, salario_diario, monto_base, bono, semestre_num, adelantos_monto=0, adelantos_ids=None):
+        total_bruto = monto_base + bono
+        total = max(0, total_bruto - adelantos_monto)
         concepto_pago = f"Quincena {periodo_ini} a {periodo_fin}" + (" + bono semestral" if bono else "")
+        if adelantos_monto:
+            concepto_pago += f" − adelanto {fmt(adelantos_monto)}"
+        caja_egreso_id = None
+        if total > 0:
+            try:
+                r_eg_n = requests.post(
+                    f"{SUPABASE_URL}/rest/v1/caja_egresos", headers=HEADERS, timeout=10,
+                    json={
+                        "fecha": fecha_hoy(), "hora": ahora(), "concepto": concepto_pago, "valor": float(total),
+                        "categoria": "Salario", "tipo": "gasto" if emp["tipo"] == "variable" else "costo",
+                        "empleado": emp["nombre"]
+                    }
+                )
+                if r_eg_n.ok:
+                    data_eg_n = r_eg_n.json()
+                    caja_egreso_id = data_eg_n[0]["id"] if data_eg_n else None
+                else:
+                    st.error(f"Error al registrar el egreso en caja: {r_eg_n.status_code} — {r_eg_n.text}")
+                    return False
+            except requests.RequestException as e:
+                st.error(f"Error al registrar el egreso en caja: {e}")
+                return False
+
+        try:
+            r_pago_n = requests.post(
+                f"{SUPABASE_URL}/rest/v1/nomina_pagos", headers=HEADERS, timeout=10,
+                json={
+                    "empleado_id": emp["id"], "periodo_inicio": str(periodo_ini), "periodo_fin": str(periodo_fin),
+                    "dias_trabajados": dias_trab, "salario_diario": salario_diario,
+                    "monto_base": monto_base, "bono_semestral": bono, "semestre_num": semestre_num,
+                    "adelantos": adelantos_monto, "total_pagado": total, "fecha_pago": fecha_hoy(),
+                    "pagado_por": st.session_state.admin_actual, "caja_egreso_id": caja_egreso_id
+                }
+            )
+            if not r_pago_n.ok:
+                st.error(f"Error al registrar el pago: {r_pago_n.status_code} — {r_pago_n.text}")
+                return False
+            data_pago_n = r_pago_n.json()
+            pago_id = data_pago_n[0]["id"] if data_pago_n else None
+        except requests.RequestException as e:
+            st.error(f"Error al registrar el pago: {e}")
+            return False
+
+        if adelantos_ids and pago_id:
+            for aid in adelantos_ids:
+                sb_patch("nomina_adelantos", f"id=eq.{aid}", {"aplicado_pago_id": pago_id})
+        return True
+
+    def _registrar_adelanto(emp, valor, motivo, fecha):
+        concepto_adel = "Adelanto de nómina" + (f" — {motivo}" if motivo else "")
         caja_egreso_id = None
         try:
-            r_eg_n = requests.post(
+            r_eg_a = requests.post(
                 f"{SUPABASE_URL}/rest/v1/caja_egresos", headers=HEADERS, timeout=10,
                 json={
-                    "fecha": fecha_hoy(), "hora": ahora(), "concepto": concepto_pago, "valor": float(total),
+                    "fecha": str(fecha), "hora": ahora(), "concepto": concepto_adel, "valor": float(valor),
                     "categoria": "Salario", "tipo": "gasto" if emp["tipo"] == "variable" else "costo",
                     "empleado": emp["nombre"]
                 }
             )
-            if r_eg_n.ok:
-                data_eg_n = r_eg_n.json()
-                caja_egreso_id = data_eg_n[0]["id"] if data_eg_n else None
+            if r_eg_a.ok:
+                data_eg_a = r_eg_a.json()
+                caja_egreso_id = data_eg_a[0]["id"] if data_eg_a else None
             else:
-                st.error(f"Error al registrar el egreso en caja: {r_eg_n.status_code} — {r_eg_n.text}")
+                st.error(f"Error al registrar el egreso en caja: {r_eg_a.status_code} — {r_eg_a.text}")
                 return False
         except requests.RequestException as e:
             st.error(f"Error al registrar el egreso en caja: {e}")
             return False
 
-        return sb_post("nomina_pagos", {
-            "empleado_id": emp["id"], "periodo_inicio": str(periodo_ini), "periodo_fin": str(periodo_fin),
-            "dias_trabajados": dias_trab, "salario_diario": salario_diario,
-            "monto_base": monto_base, "bono_semestral": bono, "semestre_num": semestre_num,
-            "total_pagado": total, "fecha_pago": fecha_hoy(), "pagado_por": st.session_state.admin_actual,
-            "caja_egreso_id": caja_egreso_id
+        return sb_post("nomina_adelantos", {
+            "empleado_id": emp["id"], "fecha": str(fecha), "valor": float(valor),
+            "motivo": motivo.strip() or None, "caja_egreso_id": caja_egreso_id
         })
 
     sub_n1, sub_n2, sub_n3, sub_n4 = st.tabs(["👥 Empleados", "🚫 Ausencias", "🧮 Calcular quincena", "📋 Historial"])
@@ -4304,16 +4352,53 @@ elif st.session_state.vista == "nomina" and st.session_state.es_admin:
             raw_pagos_periodo_n3 = sb_get("nomina_pagos", f"select=empleado_id&periodo_inicio=eq.{periodo_ini_n}") or []
             ids_ya_pagados = {r["empleado_id"] for r in raw_pagos_periodo_n3}
 
+            raw_adel_n3 = sb_get("nomina_adelantos", "select=id,empleado_id,fecha,valor,motivo&aplicado_pago_id=is.null&order=fecha.asc") or []
+            adelantos_por_emp = {}
+            for r in raw_adel_n3:
+                adelantos_por_emp.setdefault(r["empleado_id"], []).append(r)
+
             for emp in raw_emp_n3:
                 eid = emp["id"]
                 ya_pagado = eid in ids_ya_pagados
                 st.markdown(f'<div class="section-label">{emp["nombre"]}{" — ✅ ya pagado este período" if ya_pagado else ""}</div>', unsafe_allow_html=True)
 
+                with st.expander(f"💵 Registrar adelanto — {emp['nombre']}"):
+                    valor_adel = st.number_input("Valor del adelanto ($)", min_value=0, value=0, step=10000, key=f"valor_adel_{eid}")
+                    motivo_adel = st.text_input("Motivo (opcional)", key=f"motivo_adel_{eid}")
+                    fecha_adel = st.date_input("Fecha del adelanto", value=datetime.now(COL_TZ).date(), key=f"fecha_adel_{eid}")
+                    if st.button(f"✅ Registrar adelanto — {emp['nombre']}", key=f"btn_adel_{eid}"):
+                        if valor_adel <= 0:
+                            st.markdown(f'<div class="alert-low">{ICO_WARN} Ingresa el valor del adelanto.</div>', unsafe_allow_html=True)
+                        elif _registrar_adelanto(emp, float(valor_adel), motivo_adel, fecha_adel):
+                            st.session_state.ok_nomina = True
+                            time.sleep(0.3); st.rerun()
+
+                adelantos_pend = adelantos_por_emp.get(eid, [])
+                total_adelantos_pend = sum(float(a["valor"]) for a in adelantos_pend)
+                if adelantos_pend:
+                    detalle_adel = ", ".join(f'{fmt(float(a["valor"]))} ({a["fecha"]}{" — " + a["motivo"] if a.get("motivo") else ""})' for a in adelantos_pend)
+                    st.caption(f"💵 Adelantos pendientes: {fmt(total_adelantos_pend)} — {detalle_adel}")
+
                 if emp["tipo"] == "variable":
                     monto_sugerido = round(emp["salario_mensual"] / 2)
                     monto_var = st.number_input("Monto a pagar esta quincena ($)", min_value=0, value=monto_sugerido, step=50000, key=f"monto_var_{eid}")
+
+                    acumulado_adel_var = 0
+                    adelantos_aplicables_var = []
+                    for a in adelantos_pend:
+                        if acumulado_adel_var + float(a["valor"]) <= monto_var:
+                            acumulado_adel_var += float(a["valor"])
+                            adelantos_aplicables_var.append(a["id"])
+                        else:
+                            break
+                    total_neto_var = monto_var - acumulado_adel_var
+                    if acumulado_adel_var > 0:
+                        st.markdown(f'<div class="info-box">{ICO_DOLLAR} {fmt(monto_var)} − adelantos {fmt(acumulado_adel_var)} = <b>{fmt(total_neto_var)}</b></div>', unsafe_allow_html=True)
+                        if acumulado_adel_var < total_adelantos_pend:
+                            st.caption("⚠️ No caben todos los adelantos pendientes en este monto — el resto queda para el próximo pago.")
+
                     if st.button(f"💾 Registrar pago — {emp['nombre']}", key=f"btn_pago_{eid}", disabled=ya_pagado):
-                        if _registrar_pago_nomina(emp, periodo_ini_n, periodo_fin_n, None, None, float(monto_var), 0, None):
+                        if _registrar_pago_nomina(emp, periodo_ini_n, periodo_fin_n, None, None, float(monto_var), 0, None, acumulado_adel_var, adelantos_aplicables_var):
                             st.session_state.ok_nomina = True
                             time.sleep(0.3); st.rerun()
                 else:
@@ -4348,14 +4433,30 @@ elif st.session_state.vista == "nomina" and st.session_state.es_admin:
                         incluir_bono = opcion_bono.startswith("✅")
                     bono_monto = round(emp["salario_mensual"] / 2) if incluir_bono else 0
                     total_n = monto_base + bono_monto
-                    st.markdown(f'<div class="info-box">{ICO_DOLLAR} Total a pagar: <b>{fmt(total_n)}</b></div>', unsafe_allow_html=True)
+
+                    acumulado_adel_n = 0
+                    adelantos_aplicables_n = []
+                    for a in adelantos_pend:
+                        if acumulado_adel_n + float(a["valor"]) <= total_n:
+                            acumulado_adel_n += float(a["valor"])
+                            adelantos_aplicables_n.append(a["id"])
+                        else:
+                            break
+                    total_neto_n = total_n - acumulado_adel_n
+                    if acumulado_adel_n > 0:
+                        st.markdown(f'<div class="info-box">{ICO_DOLLAR} {fmt(total_n)} − adelantos {fmt(acumulado_adel_n)} = <b>{fmt(total_neto_n)}</b></div>', unsafe_allow_html=True)
+                        if acumulado_adel_n < total_adelantos_pend:
+                            st.caption("⚠️ No caben todos los adelantos pendientes en este monto — el resto queda para el próximo pago.")
+                    else:
+                        st.markdown(f'<div class="info-box">{ICO_DOLLAR} Total a pagar: <b>{fmt(total_n)}</b></div>', unsafe_allow_html=True)
 
                     if not quincena_completa_n:
                         st.caption(f"ℹ️ La quincena todavía no termina — si le pagas ahora, queda registrado como el pago final de este período (del {periodo_ini_n} al {periodo_calculo_n}), útil si dejó de trabajar antes de completarla.")
                     if st.button(f"💾 Registrar pago — {emp['nombre']}", key=f"btn_pago_{eid}", disabled=ya_pagado):
                         if _registrar_pago_nomina(
                             emp, periodo_ini_n, periodo_calculo_n, dias_trab, salario_diario,
-                            monto_base, bono_monto, semestre_a_pagar if incluir_bono else None
+                            monto_base, bono_monto, semestre_a_pagar if incluir_bono else None,
+                            acumulado_adel_n, adelantos_aplicables_n
                         ):
                             st.session_state.ok_nomina = True
                             time.sleep(0.3); st.rerun()
@@ -4413,6 +4514,7 @@ elif st.session_state.vista == "nomina" and st.session_state.es_admin:
                 "Días": r["dias_trabajados"] if r.get("dias_trabajados") is not None else "—",
                 "Base": fmt(r["monto_base"]),
                 "Bono": fmt(r["bono_semestral"]) if r.get("bono_semestral") else "—",
+                "Adelanto": fmt(r["adelantos"]) if r.get("adelantos") else "—",
                 "Total": fmt(r["total_pagado"]),
             } for r in raw_pagos_n4])
             tabla_view(df_hist_n4)
@@ -4457,6 +4559,35 @@ elif st.session_state.vista == "nomina" and st.session_state.es_admin:
                 sb_delete("nomina_pagos", f"id=eq.{ids_pago_edit[sel_pago_del]['id']}")
                 st.markdown(f'<div class="success-toast">{ICO_CHECK} Pago eliminado del historial.</div>', unsafe_allow_html=True)
                 time.sleep(0.3); st.rerun()
+
+        st.markdown('<div class="section-label">💵 Adelantos</div>', unsafe_allow_html=True)
+        raw_adel_n4 = sb_get("nomina_adelantos", "select=*&order=fecha.desc") or []
+        if emp_hist_sel != "Todos":
+            id_filtro_adel_n4 = next((eid for eid, n in nombre_por_id_n4.items() if n == emp_hist_sel), None)
+            raw_adel_n4 = [r for r in raw_adel_n4 if r["empleado_id"] == id_filtro_adel_n4]
+
+        if not raw_adel_n4:
+            st.caption("Sin adelantos registrados todavía.")
+        else:
+            df_adel_n4 = pd.DataFrame([{
+                "Fecha": r["fecha"], "Empleado": nombre_por_id_n4.get(r["empleado_id"], "?"),
+                "Valor": fmt(r["valor"]), "Motivo": r.get("motivo") or "—",
+                "Estado": "✅ Aplicado a un pago" if r.get("aplicado_pago_id") else "⏳ Pendiente",
+            } for r in raw_adel_n4])
+            tabla_view(df_adel_n4)
+
+            adel_pendientes_n4 = [r for r in raw_adel_n4 if not r.get("aplicado_pago_id")]
+            if adel_pendientes_n4:
+                st.caption("Solo se pueden eliminar adelantos que todavía no se han descontado de ningún pago. Esto no borra el egreso que ya salió de Caja — si fue un error, ajústalo tú a mano ahí.")
+                ids_adel_del = {
+                    f'{r["fecha"]} — {nombre_por_id_n4.get(r["empleado_id"], "?")} — {fmt(r["valor"])}': r
+                    for r in adel_pendientes_n4
+                }
+                sel_adel_del = st.selectbox("Adelanto a eliminar", ["— Selecciona —"] + list(ids_adel_del.keys()), key="sel_adel_del")
+                if sel_adel_del != "— Selecciona —" and st.button("🗑️ Eliminar adelanto", key="btn_del_adel_n4"):
+                    sb_delete("nomina_adelantos", f"id=eq.{ids_adel_del[sel_adel_del]['id']}")
+                    st.markdown(f'<div class="success-toast">{ICO_CHECK} Adelanto eliminado.</div>', unsafe_allow_html=True)
+                    time.sleep(0.3); st.rerun()
 
 # ══════════════════════════════════════════════════════════════════════════════
 # VISTA: CONTADOR (solo admin) — inventario invertido, costo de producción,
