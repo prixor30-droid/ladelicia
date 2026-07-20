@@ -2219,7 +2219,7 @@ elif st.session_state.vista == "carro":
             st.session_state.ok_reg = False
 
         # Historial de regalos del día
-        raw_reg = sb_get("ventas", f"select=hora,sabor,cantidad,cliente&fecha=eq.{fecha_hoy()}&canal=eq.Regalo&order=hora.desc")
+        raw_reg = sb_get("ventas", f"select=id,hora,sabor,cantidad,cliente&fecha=eq.{fecha_hoy()}&canal=eq.Regalo&order=hora.desc")
         if raw_reg:
             st.markdown('<div class="section-label">Regalos de hoy</div>', unsafe_allow_html=True)
             filas_reg = "".join(
@@ -2235,6 +2235,13 @@ elif st.session_state.vista == "carro":
                 f'</div>',
                 unsafe_allow_html=True
             )
+
+            ids_reg_del = {f'{r["hora"]} — {r["sabor"]} × {r["cantidad"]} ({r["cliente"]})': r for r in raw_reg}
+            sel_reg_del = st.selectbox("Eliminar un regalo", ["— Selecciona —"] + list(ids_reg_del.keys()), key="sel_reg_del")
+            if sel_reg_del != "— Selecciona —" and st.button("🗑️ Eliminar regalo", key="btn_del_reg"):
+                sb_delete("ventas", f"id=eq.{ids_reg_del[sel_reg_del]['id']}")
+                st.markdown(f'<div class="success-toast">{ICO_CHECK} Regalo eliminado.</div>', unsafe_allow_html=True)
+                time.sleep(0.3); st.rerun()
 
     with sub5:
         # Visible para todos (no solo admin) — Javier y Edison lo necesitan para
@@ -2322,7 +2329,7 @@ elif st.session_state.vista == "fabrica":
             st.session_state.ok_reg_fab = False
 
         # Historial de regalos del día
-        raw_reg_f = sb_get("ventas", f"select=hora,sabor,cantidad,cliente,vendedor&fecha=eq.{fecha_hoy()}&canal=eq.{requests.utils.quote('Regalo Fábrica')}&order=hora.desc")
+        raw_reg_f = sb_get("ventas", f"select=id,hora,sabor,cantidad,cliente,vendedor&fecha=eq.{fecha_hoy()}&canal=eq.{requests.utils.quote('Regalo Fábrica')}&order=hora.desc")
         if raw_reg_f:
             st.markdown('<div class="section-label">Regalos de hoy</div>', unsafe_allow_html=True)
             filas_reg_f = "".join(
@@ -2338,6 +2345,15 @@ elif st.session_state.vista == "fabrica":
                 f'</div>',
                 unsafe_allow_html=True
             )
+
+            ids_reg_f_del = {f'{r["hora"]} — {r["sabor"]} × {r["cantidad"]} ({r["cliente"]})': r for r in raw_reg_f}
+            sel_reg_f_del = st.selectbox("Eliminar un regalo", ["— Selecciona —"] + list(ids_reg_f_del.keys()), key="sel_reg_f_del")
+            if sel_reg_f_del != "— Selecciona —" and st.button("🗑️ Eliminar regalo", key="btn_del_reg_f"):
+                reg_f_del = ids_reg_f_del[sel_reg_f_del]
+                sb_delete("ventas", f"id=eq.{reg_f_del['id']}")
+                agregar_stock(reg_f_del["sabor"], reg_f_del["cantidad"])
+                st.markdown(f'<div class="success-toast">{ICO_CHECK} Regalo eliminado. Stock devuelto.</div>', unsafe_allow_html=True)
+                time.sleep(0.3); st.rerun()
 
     with sub_f4:
         # Visible para todos (no solo admin) — Sofía y Andrea lo necesitan para
