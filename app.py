@@ -3597,11 +3597,14 @@ elif st.session_state.vista == "caja" and st.session_state.es_admin:
         raw_ing_a = f_ing_a.result() or []
         raw_eg_a = sb_get("caja_egresos", f"select=valor&fecha=eq.{fecha_arq_str}") or []
 
-        ingresos_ventas_a = sum(f["abono"] for f in cobros_a["facturas"].values() if f["canal"] in ("Fábrica", "Carro"))
-        ingresos_cobro_creditos_a = (
-            cobros_a["cobro_creditos_por_canal"].get("Fábrica", 0.0)
-            + cobros_a["cobro_creditos_por_canal"].get("Carro", 0.0)
-        )
+        ingresos_ventas_fab_a = sum(f["abono"] for f in cobros_a["facturas"].values() if f["canal"] == "Fábrica")
+        ingresos_ventas_carro_a = sum(f["abono"] for f in cobros_a["facturas"].values() if f["canal"] == "Carro")
+        ingresos_cobro_creditos_fab_a = cobros_a["cobro_creditos_por_canal"].get("Fábrica", 0.0)
+        ingresos_cobro_creditos_carro_a = cobros_a["cobro_creditos_por_canal"].get("Carro", 0.0)
+        total_fab_a = ingresos_ventas_fab_a + ingresos_cobro_creditos_fab_a
+        total_carro_a = ingresos_ventas_carro_a + ingresos_cobro_creditos_carro_a
+        ingresos_ventas_a = ingresos_ventas_fab_a + ingresos_ventas_carro_a
+        ingresos_cobro_creditos_a = ingresos_cobro_creditos_fab_a + ingresos_cobro_creditos_carro_a
         ingresos_manuales_a = sum(float(r["valor"]) for r in raw_ing_a)
         total_ingresos_a = ingresos_ventas_a + ingresos_cobro_creditos_a + ingresos_manuales_a
 
@@ -3619,6 +3622,36 @@ elif st.session_state.vista == "caja" and st.session_state.es_admin:
             min_value=0, value=int(efectivo_inicial_sugerido), step=1000, key="efectivo_inicial_arqueo",
             help="Se sugiere con lo contado en el último arqueo anterior. Ajústalo si es distinto."
         )
+
+        st.markdown('<div class="section-label">💰 Caja real ahora mismo</div>', unsafe_allow_html=True)
+        st.caption("Marca si ya recibiste físicamente lo vendido hoy — mientras no lo marques, esa plata no se cuenta en 'Caja real' (aunque ya esté registrada como venta).")
+
+        opcion_recibido_fab_a = st.radio(
+            f"¿Ya recibiste el efectivo de Fábrica de hoy? ({fmt(total_fab_a)})",
+            ["❌ Todavía no", "✅ Ya lo recibí"], horizontal=True, key="recibido_fab_arq"
+        )
+        recibido_fab_a = opcion_recibido_fab_a.startswith("✅")
+
+        opcion_recibido_carro_a = st.radio(
+            f"¿Ya recibiste el efectivo de Edison y Javier (Carro) de hoy? ({fmt(total_carro_a)})",
+            ["❌ Todavía no", "✅ Ya lo recibí"], horizontal=True, key="recibido_carro_arq"
+        )
+        recibido_carro_a = opcion_recibido_carro_a.startswith("✅")
+
+        caja_real_a = (
+            efectivo_inicial_a + ingresos_manuales_a
+            + (total_fab_a if recibido_fab_a else 0)
+            + (total_carro_a if recibido_carro_a else 0)
+            - total_egresos_a
+        )
+        st.markdown(f'<div class="info-box">{ICO_DOLLAR} Caja real ahora mismo: <b>{fmt(caja_real_a)}</b></div>', unsafe_allow_html=True)
+        if not recibido_fab_a or not recibido_carro_a:
+            pendientes_msg = []
+            if not recibido_fab_a:
+                pendientes_msg.append(f"Fábrica ({fmt(total_fab_a)})")
+            if not recibido_carro_a:
+                pendientes_msg.append(f"Carro ({fmt(total_carro_a)})")
+            st.caption(f"⏳ Todavía no contado en \"Caja real\": {', '.join(pendientes_msg)} — sí está incluido en \"Efectivo esperado\" de abajo, que asume que ya se recibió todo el día.")
 
         efectivo_esperado_a = efectivo_inicial_a + total_ingresos_a - total_egresos_a
         st.markdown(
