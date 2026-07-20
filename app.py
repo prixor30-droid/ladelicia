@@ -3099,31 +3099,37 @@ elif st.session_state.vista == "materia_prima":
                 except Exception as e:
                     st.error(f"Error: {e}")
 
-        st.markdown(f'<div class="section-label">🕒 Últimas salidas — {cat_sal}</div>', unsafe_allow_html=True)
-        raw_hist_sal = sb_get("salidas_mp", f"select=*&categoria=eq.{cat_key}&order=fecha.desc,hora.desc&limit=20") or []
-        if raw_hist_sal:
-            df_hist_sal = pd.DataFrame([{
-                "Fecha": r["fecha"], "Hora": r.get("hora", ""),
-                "Insumo": r["insumo"],
-                "Cantidad": f'{float(r["cantidad"]):.3f}' if r.get("unidad") == "kg" else r["cantidad"],
-                "Unidad": r.get("unidad", ""),
-                "Motivo": r.get("motivo") or "—",
-            } for r in raw_hist_sal])
-            with st.container(height=380):
-                tabla_view(df_hist_sal)
+        if cat_key != "emp":
+            # Para Empaque el historial de eliminar ya está cubierto arriba (control de
+            # rollo), con reconciliación del peso_actual en rollos_empaque. Duplicar esta
+            # lista genérica aquí permitía borrar una salida de rollo sin esa reconciliación,
+            # dejando un "rollo activo" fantasma con un peso que ya no está respaldado por
+            # ningún registro (encontrado 2026-07-20).
+            st.markdown(f'<div class="section-label">🕒 Últimas salidas — {cat_sal}</div>', unsafe_allow_html=True)
+            raw_hist_sal = sb_get("salidas_mp", f"select=*&categoria=eq.{cat_key}&order=fecha.desc,hora.desc&limit=20") or []
+            if raw_hist_sal:
+                df_hist_sal = pd.DataFrame([{
+                    "Fecha": r["fecha"], "Hora": r.get("hora", ""),
+                    "Insumo": r["insumo"],
+                    "Cantidad": f'{float(r["cantidad"]):.3f}' if r.get("unidad") == "kg" else r["cantidad"],
+                    "Unidad": r.get("unidad", ""),
+                    "Motivo": r.get("motivo") or "—",
+                } for r in raw_hist_sal])
+                with st.container(height=380):
+                    tabla_view(df_hist_sal)
 
-            ids_hist_sal = {
-                f'{r["fecha"]} {r.get("hora","")} — {r["insumo"]} ({r["cantidad"]} {r.get("unidad","")})': r
-                for r in raw_hist_sal
-            }
-            sel_del_hist_sal = st.selectbox("Eliminar una salida mal registrada", ["— Selecciona —"] + list(ids_hist_sal.keys()), key="sel_del_hist_sal")
-            if sel_del_hist_sal != "— Selecciona —" and st.button("🗑️ Eliminar salida", key="btn_del_hist_sal"):
-                reg_del_hist_sal = ids_hist_sal[sel_del_hist_sal]
-                if sb_delete("salidas_mp", f"id=eq.{reg_del_hist_sal['id']}"):
-                    st.markdown(f'<div class="success-toast">{ICO_CHECK} Salida eliminada — el stock queda disponible de nuevo.</div>', unsafe_allow_html=True)
-                    time.sleep(0.3); st.rerun()
-        else:
-            st.caption("Aún no hay salidas registradas.")
+                ids_hist_sal = {
+                    f'{r["fecha"]} {r.get("hora","")} — {r["insumo"]} ({r["cantidad"]} {r.get("unidad","")})': r
+                    for r in raw_hist_sal
+                }
+                sel_del_hist_sal = st.selectbox("Eliminar una salida mal registrada", ["— Selecciona —"] + list(ids_hist_sal.keys()), key="sel_del_hist_sal")
+                if sel_del_hist_sal != "— Selecciona —" and st.button("🗑️ Eliminar salida", key="btn_del_hist_sal"):
+                    reg_del_hist_sal = ids_hist_sal[sel_del_hist_sal]
+                    if sb_delete("salidas_mp", f"id=eq.{reg_del_hist_sal['id']}"):
+                        st.markdown(f'<div class="success-toast">{ICO_CHECK} Salida eliminada — el stock queda disponible de nuevo.</div>', unsafe_allow_html=True)
+                        time.sleep(0.3); st.rerun()
+            else:
+                st.caption("Aún no hay salidas registradas.")
 
     with tab_mp3:
         raw_pend = sb_get("materia_prima", "select=*&estado=eq.pendiente&order=fecha.desc") or []
