@@ -4424,14 +4424,20 @@ elif st.session_state.vista == "nomina" and st.session_state.es_admin:
                     st.caption(f"{dias_trab} de {dias_base_n3} días trabajados" + (f" ({dias_ausencia} ausencia(s))" if dias_ausencia else "") + f" · Salario diario: {fmt(salario_diario)}")
 
                     incluir_bono = False
+                    bono_monto = 0
                     if bono_pendiente:
                         opcion_bono = st.radio(
-                            f"🎉 Bono semestral #{semestre_a_pagar} (medio sueldo) — {fmt(round(emp['salario_mensual']/2))}",
+                            f"🎉 Bono semestral #{semestre_a_pagar} (sugerido: medio sueldo = {fmt(round(emp['salario_mensual']/2))})",
                             ["✅ Incluir en este pago", "❌ No incluir (ya se dio antes / omitir)"],
                             horizontal=True, key=f"bono_chk_{eid}"
                         )
                         incluir_bono = opcion_bono.startswith("✅")
-                    bono_monto = round(emp["salario_mensual"] / 2) if incluir_bono else 0
+                        if incluir_bono:
+                            bono_monto = st.number_input(
+                                "Monto del bono ($)", min_value=0,
+                                value=round(emp["salario_mensual"] / 2), step=10000, key=f"bono_monto_{eid}",
+                                help="Ajústalo si la contadora te da un valor distinto a medio sueldo."
+                            )
                     total_n = monto_base + bono_monto
 
                     acumulado_adel_n = 0
