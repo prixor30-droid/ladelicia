@@ -3339,7 +3339,7 @@ elif st.session_state.vista == "materia_prima":
 
 elif st.session_state.vista == "caja" and st.session_state.es_admin:
     st.markdown(f'<div class="section-label">{ICO_DOLLAR} Caja</div>', unsafe_allow_html=True)
-    tab_caja1, tab_caja2, tab_caja3, tab_caja4, tab_caja5 = st.tabs(["📊 Resumen", "➕ Ingreso / Egreso", "📋 Historial", "🧮 Arqueo de caja", "🎯 Reservas"])
+    tab_caja1, tab_caja2, tab_caja3, tab_caja4, tab_caja5, tab_caja6 = st.tabs(["📊 Resumen", "➕ Ingreso / Egreso", "📋 Historial", "🧮 Arqueo de caja", "🎯 Reservas", "💰 Caja real"])
 
     # Fechas del período
     hoy_caja = datetime.now(COL_TZ).date()
@@ -3597,14 +3597,11 @@ elif st.session_state.vista == "caja" and st.session_state.es_admin:
         raw_ing_a = f_ing_a.result() or []
         raw_eg_a = sb_get("caja_egresos", f"select=valor&fecha=eq.{fecha_arq_str}") or []
 
-        ingresos_ventas_fab_a = sum(f["abono"] for f in cobros_a["facturas"].values() if f["canal"] == "Fábrica")
-        ingresos_ventas_carro_a = sum(f["abono"] for f in cobros_a["facturas"].values() if f["canal"] == "Carro")
-        ingresos_cobro_creditos_fab_a = cobros_a["cobro_creditos_por_canal"].get("Fábrica", 0.0)
-        ingresos_cobro_creditos_carro_a = cobros_a["cobro_creditos_por_canal"].get("Carro", 0.0)
-        total_fab_a = ingresos_ventas_fab_a + ingresos_cobro_creditos_fab_a
-        total_carro_a = ingresos_ventas_carro_a + ingresos_cobro_creditos_carro_a
-        ingresos_ventas_a = ingresos_ventas_fab_a + ingresos_ventas_carro_a
-        ingresos_cobro_creditos_a = ingresos_cobro_creditos_fab_a + ingresos_cobro_creditos_carro_a
+        ingresos_ventas_a = sum(f["abono"] for f in cobros_a["facturas"].values() if f["canal"] in ("Fábrica", "Carro"))
+        ingresos_cobro_creditos_a = (
+            cobros_a["cobro_creditos_por_canal"].get("Fábrica", 0.0)
+            + cobros_a["cobro_creditos_por_canal"].get("Carro", 0.0)
+        )
         ingresos_manuales_a = sum(float(r["valor"]) for r in raw_ing_a)
         total_ingresos_a = ingresos_ventas_a + ingresos_cobro_creditos_a + ingresos_manuales_a
 
@@ -3622,36 +3619,6 @@ elif st.session_state.vista == "caja" and st.session_state.es_admin:
             min_value=0, value=int(efectivo_inicial_sugerido), step=1000, key="efectivo_inicial_arqueo",
             help="Se sugiere con lo contado en el último arqueo anterior. Ajústalo si es distinto."
         )
-
-        st.markdown('<div class="section-label">💰 Caja real ahora mismo</div>', unsafe_allow_html=True)
-        st.caption("Marca si ya recibiste físicamente lo vendido hoy — mientras no lo marques, esa plata no se cuenta en 'Caja real' (aunque ya esté registrada como venta).")
-
-        opcion_recibido_fab_a = st.radio(
-            f"¿Ya recibiste el efectivo de Fábrica de hoy? ({fmt(total_fab_a)})",
-            ["❌ Todavía no", "✅ Ya lo recibí"], horizontal=True, key="recibido_fab_arq"
-        )
-        recibido_fab_a = opcion_recibido_fab_a.startswith("✅")
-
-        opcion_recibido_carro_a = st.radio(
-            f"¿Ya recibiste el efectivo de Edison y Javier (Carro) de hoy? ({fmt(total_carro_a)})",
-            ["❌ Todavía no", "✅ Ya lo recibí"], horizontal=True, key="recibido_carro_arq"
-        )
-        recibido_carro_a = opcion_recibido_carro_a.startswith("✅")
-
-        caja_real_a = (
-            efectivo_inicial_a + ingresos_manuales_a
-            + (total_fab_a if recibido_fab_a else 0)
-            + (total_carro_a if recibido_carro_a else 0)
-            - total_egresos_a
-        )
-        st.markdown(f'<div class="info-box">{ICO_DOLLAR} Caja real ahora mismo: <b>{fmt(caja_real_a)}</b></div>', unsafe_allow_html=True)
-        if not recibido_fab_a or not recibido_carro_a:
-            pendientes_msg = []
-            if not recibido_fab_a:
-                pendientes_msg.append(f"Fábrica ({fmt(total_fab_a)})")
-            if not recibido_carro_a:
-                pendientes_msg.append(f"Carro ({fmt(total_carro_a)})")
-            st.caption(f"⏳ Todavía no contado en \"Caja real\": {', '.join(pendientes_msg)} — sí está incluido en \"Efectivo esperado\" de abajo, que asume que ya se recibió todo el día.")
 
         efectivo_esperado_a = efectivo_inicial_a + total_ingresos_a - total_egresos_a
         st.markdown(
@@ -3751,6 +3718,73 @@ elif st.session_state.vista == "caja" and st.session_state.es_admin:
             tabla_view(df_res)
         else:
             st.caption("Aún no hay movimientos de reserva.")
+
+    with tab_caja6:
+        st.markdown('<div class="section-label">💰 Caja real ahora mismo</div>', unsafe_allow_html=True)
+        st.caption("Vista rápida de cuánta plata hay físicamente en la caja de HOY, sin contar lo que Fábrica o Carro (Edison y Javier) todavía no han entregado. Solo es para mirar — no se guarda nada aquí (eso se hace en 🧮 Arqueo de caja).")
+
+        fecha_cr = fecha_hoy()
+        with ThreadPoolExecutor(max_workers=3) as ex:
+            f_cobros_cr = ex.submit(calcular_cobros_periodo, fecha_cr, fecha_cr)
+            f_mp_cr = ex.submit(sb_get, "materia_prima", f"select=abono&fecha=eq.{fecha_cr}")
+            f_ing_cr = ex.submit(sb_get, "caja_ingresos", f"select=valor&fecha=eq.{fecha_cr}")
+        cobros_cr = f_cobros_cr.result()
+        raw_mp_cr = f_mp_cr.result() or []
+        raw_ing_cr = f_ing_cr.result() or []
+        raw_eg_cr = sb_get("caja_egresos", f"select=valor&fecha=eq.{fecha_cr}") or []
+
+        total_fab_cr = (
+            sum(f["abono"] for f in cobros_cr["facturas"].values() if f["canal"] == "Fábrica")
+            + cobros_cr["cobro_creditos_por_canal"].get("Fábrica", 0.0)
+        )
+        total_carro_cr = (
+            sum(f["abono"] for f in cobros_cr["facturas"].values() if f["canal"] == "Carro")
+            + cobros_cr["cobro_creditos_por_canal"].get("Carro", 0.0)
+        )
+        ingresos_manuales_cr = sum(float(r["valor"]) for r in raw_ing_cr)
+        total_egresos_cr = sum(float(r["abono"]) for r in raw_mp_cr) + sum(float(r["valor"]) for r in raw_eg_cr)
+
+        raw_arq_prev_cr = sb_get("arqueos_caja", f"select=fecha,efectivo_contado&fecha=lt.{fecha_cr}&order=fecha.desc&limit=1") or []
+        efectivo_inicial_cr = float(raw_arq_prev_cr[0]["efectivo_contado"]) if raw_arq_prev_cr else 0.0
+
+        col_cr1, col_cr2 = st.columns(2)
+        opcion_recibido_fab_cr = col_cr1.radio(
+            f"¿Ya recibiste el efectivo de Fábrica de hoy?",
+            ["❌ Todavía no", "✅ Ya lo recibí"], key="recibido_fab_arq"
+        )
+        recibido_fab_cr = opcion_recibido_fab_cr.startswith("✅")
+        opcion_recibido_carro_cr = col_cr2.radio(
+            f"¿Ya recibiste el efectivo de Edison y Javier (Carro) de hoy?",
+            ["❌ Todavía no", "✅ Ya lo recibí"], key="recibido_carro_arq"
+        )
+        recibido_carro_cr = opcion_recibido_carro_cr.startswith("✅")
+
+        color_fab_cr = "metric-green" if recibido_fab_cr else "metric-yellow"
+        color_carro_cr = "metric-green" if recibido_carro_cr else "metric-yellow"
+        st.markdown(f"""
+        <div class="metric-row">
+            <div class="metric-box {color_fab_cr}"><div class="val">{fmt(total_fab_cr)}</div><div class="lbl">Fábrica {"✅ recibido" if recibido_fab_cr else "⏳ pendiente"}</div></div>
+            <div class="metric-box {color_carro_cr}"><div class="val">{fmt(total_carro_cr)}</div><div class="lbl">Carro {"✅ recibido" if recibido_carro_cr else "⏳ pendiente"}</div></div>
+            <div class="metric-box metric-blue"><div class="val">{fmt(efectivo_inicial_cr + ingresos_manuales_cr)}</div><div class="lbl">Base + ingresos manuales</div></div>
+            <div class="metric-box metric-red"><div class="val">{fmt(total_egresos_cr)}</div><div class="lbl">Egresos de hoy</div></div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        caja_real_cr = (
+            efectivo_inicial_cr + ingresos_manuales_cr
+            + (total_fab_cr if recibido_fab_cr else 0)
+            + (total_carro_cr if recibido_carro_cr else 0)
+            - total_egresos_cr
+        )
+        st.markdown(f'<div class="calc-box">{ICO_DOLLAR} Caja real ahora mismo: <b>{fmt(caja_real_cr)}</b></div>', unsafe_allow_html=True)
+
+        if not recibido_fab_cr or not recibido_carro_cr:
+            pendientes_msg = []
+            if not recibido_fab_cr:
+                pendientes_msg.append(f"Fábrica ({fmt(total_fab_cr)})")
+            if not recibido_carro_cr:
+                pendientes_msg.append(f"Carro ({fmt(total_carro_cr)})")
+            st.caption(f"⏳ Todavía no contado aquí: {', '.join(pendientes_msg)} — pero sí cuenta en \"Efectivo esperado\" de Arqueo de caja, que asume que ya se recibió todo el día.")
 
 elif st.session_state.vista == "resumen" and st.session_state.es_admin:
     sub_r1, sub_r2, sub_r3, sub_r5, sub_r4 = st.tabs(["Hoy", "Por fechas", "📅 Mes", "💳 Créditos pagados", "💾 Exportar"])
