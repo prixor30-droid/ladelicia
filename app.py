@@ -142,7 +142,7 @@ PRODUCTOS = {
     "Parrillada": 9000, "Chorizo Limón": 9000, "Mayonesa": 9000,
     "Queso": 9000, "Picante": 9000, "Almuerzo Pollo": 9000,
     "Almuerzo Limón": 9000, "Almuerzo Picante": 9000, "Surtidas": 9000,
-    "Mega": 1700, "Megaton": 5000,
+    "Mega": 1700, "Megaton": 5000, "Papa suelta": 2000,
     "Fósforo 70g (x10)": 14500, "Fósforo 140g": 3500,
     "Fósforo 250g": 7000, "Fósforo 500g": 14000,
 }
@@ -176,7 +176,7 @@ SABORES_LISTA = list(PRODUCTOS.keys())
 # no son comparables (1 docena de BBQ != 1 unidad de Mega).
 UNIDADES_POR_BOLSA = {
     "Mega": 1, "Megaton": 1, "Fósforo 140g": 1, "Fósforo 500g": 1,
-    "Fósforo 70g (x10)": 10,
+    "Fósforo 70g (x10)": 10, "Papa suelta": 1,
 }
 UNIDADES_POR_BOLSA_DEFAULT = 12  # docena — el resto de los sabores
 
@@ -4805,6 +4805,8 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
         if sabor_r in FOSFORO_SABORES:
             bolsas_fosforo_sin_costo_c += bolsas_r
             continue
+        if sabor_r == "Papa suelta":
+            continue  # sobras/rotas de otros sabores — esa papa ya se contó en el sabor original
         peso_kg_r = PESO_KG_BOLSA.get(sabor_r, PESO_KG_BOLSA_DOCENA)
         costo_papa_periodo_c += bolsas_r * peso_kg_r * costo_por_kg_frito_c
 
@@ -4850,7 +4852,8 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
         for sabor_r, bolsas_r in sorted(bolsas_por_sabor_c.items()):
             mult_r = UNIDADES_POR_BOLSA.get(sabor_r, UNIDADES_POR_BOLSA_DEFAULT)
             es_fosforo_r = sabor_r in FOSFORO_SABORES
-            costo_papa_bolsa_r = 0 if es_fosforo_r else PESO_KG_BOLSA.get(sabor_r, PESO_KG_BOLSA_DOCENA) * costo_por_kg_frito_c
+            sin_costo_papa_r = es_fosforo_r or sabor_r == "Papa suelta"
+            costo_papa_bolsa_r = 0 if sin_costo_papa_r else PESO_KG_BOLSA.get(sabor_r, PESO_KG_BOLSA_DOCENA) * costo_por_kg_frito_c
             costo_bolsa_r = costo_papa_bolsa_r + otros_costo_por_bolsa_c
             costo_unidad_venta_r = costo_bolsa_r * mult_r
             precio_venta_r = PRODUCTOS.get(sabor_r, 0)
