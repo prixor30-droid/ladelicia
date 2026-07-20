@@ -2771,12 +2771,15 @@ elif st.session_state.vista == "materia_prima":
                 )
             precio_unit_mp = st.number_input(
                 f"Precio unitario ($ por {unidad_sel})" + (" — opcional" if ya_tengo_mp else ""),
-                min_value=0, value=0, step=1000, key="precio_unit_mp"
+                min_value=0.0, value=0.0, step=1.0, format="%.6f", key="precio_unit_mp",
+                help="Acepta decimales — útil cuando el total de la factura no da un precio unitario en pesos redondos."
             )
             precio_mp = round(precio_unit_mp * cant_mp)
             if precio_mp > 0:
                 nota_caja = " (solo de referencia, no se cobra en caja)" if ya_tengo_mp else ""
-                st.markdown(f'<div class="info-box">{ICO_DOLLAR} {cant_mp} × {fmt(precio_unit_mp)} = <b>{fmt(precio_mp)}</b> total{nota_caja}</div>', unsafe_allow_html=True)
+                _entero_pu, _dec_pu = f"{precio_unit_mp:.4f}".split(".")
+                precio_unit_fmt = f"{int(_entero_pu):,}".replace(",", ".") + f",{_dec_pu}"
+                st.markdown(f'<div class="info-box">{ICO_DOLLAR} {cant_mp} × ${precio_unit_fmt} = <b>{fmt(precio_mp)}</b> total{nota_caja}</div>', unsafe_allow_html=True)
 
             if ya_tengo_mp:
                 abono_mp = 0
@@ -2822,7 +2825,7 @@ elif st.session_state.vista == "materia_prima":
                         "Fecha":                      st.column_config.TextColumn("Fecha"),
                         "Hora":                       st.column_config.TextColumn("Hora"),
                         f"Cantidad ({unidad_sel})":   st.column_config.NumberColumn(f"Cantidad ({unidad_sel})", min_value=0.001, step=0.001, format="%.3f"),
-                        "Precio unitario":            st.column_config.NumberColumn("Precio unitario", min_value=0, step=1000),
+                        "Precio unitario":            st.column_config.NumberColumn("Precio unitario", min_value=0.0, step=1.0, format="%.6f"),
                         "Proveedor":                  st.column_config.TextColumn("Proveedor"),
                     },
                     key=f"mp_editor_{nombre_sel}"
