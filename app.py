@@ -4121,7 +4121,7 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
             if credito_otros_meses > 0:
                 st.markdown(f"""
                 <div class="metric-row">
-                    <div class="metric-box metric-blue"><div class="val">{fmt(credito_otros_meses)}</div><div class="lbl">Créditos de otros meses cobrados este mes</div></div>
+                    <div class="metric-box metric-blue"><div class="val">{fmt(credito_otros_meses)}</div><div class="lbl">Créditos cobrados este mes</div></div>
                 </div>""", unsafe_allow_html=True)
                 st.caption("ℹ️ Crédito cobrado este mes que NO es del mes anterior (de este mismo mes, o de 2+ meses atrás) — no cuenta en \"Total cobrado ese mes\" de arriba (ese es solo para el reporte de la contadora), pero sí es plata real y sí suma al Neto de abajo.")
 
