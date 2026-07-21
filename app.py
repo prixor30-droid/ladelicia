@@ -1389,13 +1389,15 @@ div[data-testid="stRadio"] input[type="radio"]{accent-color:#1565C0;}
 .st-key-radio_insumo_mp div[data-testid="stRadio"] > div,
 .st-key-insumo_sal div[data-testid="stRadio"] > div,
 .st-key-sabor_p div[data-testid="stRadio"] > div,
-.st-key-emp_aus_sel div[data-testid="stRadio"] > div{flex-direction:column;flex-wrap:nowrap;max-height:280px;overflow-y:auto;gap:8px;border:1px solid #BBDEFB;border-radius:14px;padding:10px;background:#F8FBFF;box-shadow:inset 0 1px 4px rgba(21,101,192,0.08);}
+.st-key-emp_aus_sel div[data-testid="stRadio"] > div,
+.st-key-liq_emp_sel div[data-testid="stRadio"] > div{flex-direction:column;flex-wrap:nowrap;max-height:280px;overflow-y:auto;gap:8px;border:1px solid #BBDEFB;border-radius:14px;padding:10px;background:#F8FBFF;box-shadow:inset 0 1px 4px rgba(21,101,192,0.08);}
 .st-key-cat_sal div[data-testid="stRadio"] label[data-baseweb="radio"],
 .st-key-rollo_insumo div[data-testid="stRadio"] label[data-baseweb="radio"],
 .st-key-radio_insumo_mp div[data-testid="stRadio"] label[data-baseweb="radio"],
 .st-key-insumo_sal div[data-testid="stRadio"] label[data-baseweb="radio"],
 .st-key-sabor_p div[data-testid="stRadio"] label[data-baseweb="radio"],
-.st-key-emp_aus_sel div[data-testid="stRadio"] label[data-baseweb="radio"]{width:100%;box-sizing:border-box;background:#FFFFFF !important;border:1.5px solid #BBDEFB !important;border-radius:10px !important;padding:12px 16px !important;transition:background .15s ease,border-color .15s ease;}
+.st-key-emp_aus_sel div[data-testid="stRadio"] label[data-baseweb="radio"],
+.st-key-liq_emp_sel div[data-testid="stRadio"] label[data-baseweb="radio"]{width:100%;box-sizing:border-box;background:#FFFFFF !important;border:1.5px solid #BBDEFB !important;border-radius:10px !important;padding:12px 16px !important;transition:background .15s ease,border-color .15s ease;}
 .st-key-cat_sal div[data-testid="stRadio"] label[data-baseweb="radio"] p,
 .st-key-cat_sal div[data-testid="stRadio"] label[data-baseweb="radio"] span,
 .st-key-rollo_insumo div[data-testid="stRadio"] label[data-baseweb="radio"] p,
@@ -1407,19 +1409,23 @@ div[data-testid="stRadio"] input[type="radio"]{accent-color:#1565C0;}
 .st-key-sabor_p div[data-testid="stRadio"] label[data-baseweb="radio"] p,
 .st-key-sabor_p div[data-testid="stRadio"] label[data-baseweb="radio"] span,
 .st-key-emp_aus_sel div[data-testid="stRadio"] label[data-baseweb="radio"] p,
-.st-key-emp_aus_sel div[data-testid="stRadio"] label[data-baseweb="radio"] span{color:#0D1B2A !important;font-weight:600 !important;}
+.st-key-emp_aus_sel div[data-testid="stRadio"] label[data-baseweb="radio"] span,
+.st-key-liq_emp_sel div[data-testid="stRadio"] label[data-baseweb="radio"] p,
+.st-key-liq_emp_sel div[data-testid="stRadio"] label[data-baseweb="radio"] span{color:#0D1B2A !important;font-weight:600 !important;}
 .st-key-cat_sal div[data-testid="stRadio"] label[data-baseweb="radio"]:active,
 .st-key-rollo_insumo div[data-testid="stRadio"] label[data-baseweb="radio"]:active,
 .st-key-radio_insumo_mp div[data-testid="stRadio"] label[data-baseweb="radio"]:active,
 .st-key-insumo_sal div[data-testid="stRadio"] label[data-baseweb="radio"]:active,
 .st-key-sabor_p div[data-testid="stRadio"] label[data-baseweb="radio"]:active,
-.st-key-emp_aus_sel div[data-testid="stRadio"] label[data-baseweb="radio"]:active{background:#E3F0FF !important;}
+.st-key-emp_aus_sel div[data-testid="stRadio"] label[data-baseweb="radio"]:active,
+.st-key-liq_emp_sel div[data-testid="stRadio"] label[data-baseweb="radio"]:active{background:#E3F0FF !important;}
 .st-key-cat_sal div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked),
 .st-key-rollo_insumo div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked),
 .st-key-radio_insumo_mp div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked),
 .st-key-insumo_sal div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked),
 .st-key-sabor_p div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked),
-.st-key-emp_aus_sel div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked){background:#1565C0 !important;border-color:#1565C0 !important;box-shadow:0 2px 8px rgba(21,101,192,0.35);}
+.st-key-emp_aus_sel div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked),
+.st-key-liq_emp_sel div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked){background:#1565C0 !important;border-color:#1565C0 !important;box-shadow:0 2px 8px rgba(21,101,192,0.35);}
 .st-key-cat_sal div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked) p,
 .st-key-cat_sal div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked) span,
 .st-key-rollo_insumo div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked) p,
@@ -1431,7 +1437,9 @@ div[data-testid="stRadio"] input[type="radio"]{accent-color:#1565C0;}
 .st-key-sabor_p div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked) p,
 .st-key-sabor_p div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked) span,
 .st-key-emp_aus_sel div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked) p,
-.st-key-emp_aus_sel div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked) span{color:#FFFFFF !important;}
+.st-key-emp_aus_sel div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked) span,
+.st-key-liq_emp_sel div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked) p,
+.st-key-liq_emp_sel div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked) span{color:#FFFFFF !important;}
 .calc-box{background:#FFFFFF;border-radius:14px;padding:14px;margin-bottom:14px;box-shadow:0 2px 10px rgba(21,101,192,0.10);}
 .main-btn{background:#F0F7FF;border:1px solid #BBDEFB;border-radius:14px;padding:20px 16px;margin-bottom:10px;cursor:pointer;display:flex;align-items:center;gap:14px;}
 .main-btn-icon{font-size:2rem;}
@@ -4314,6 +4322,51 @@ elif st.session_state.vista == "nomina" and st.session_state.es_admin:
                 sb_patch("nomina_adelantos", f"id=eq.{aid}", {"aplicado_pago_id": pago_id})
         return True
 
+    def _registrar_liquidacion(emp, monto, fecha, nota):
+        """Pago manual sin ningún cálculo (el monto lo da la contadora) — para cuando un
+        empleado se va en cualquier momento. Sí descuenta de caja, a diferencia del bono
+        retroactivo de abajo."""
+        concepto_liq = "Liquidación" + (f" — {nota}" if nota else "")
+        caja_egreso_id = None
+        try:
+            r_eg_liq = requests.post(
+                f"{SUPABASE_URL}/rest/v1/caja_egresos", headers=HEADERS, timeout=10,
+                json={
+                    "fecha": str(fecha), "hora": ahora(), "concepto": concepto_liq, "valor": float(monto),
+                    "categoria": "Salario", "tipo": "gasto" if emp["tipo"] == "variable" else "costo",
+                    "empleado": emp["nombre"]
+                }
+            )
+            if r_eg_liq.ok:
+                data_eg_liq = r_eg_liq.json()
+                caja_egreso_id = data_eg_liq[0]["id"] if data_eg_liq else None
+            else:
+                st.error(f"Error al registrar el egreso en caja: {r_eg_liq.status_code} — {r_eg_liq.text}")
+                return False
+        except requests.RequestException as e:
+            st.error(f"Error al registrar el egreso en caja: {e}")
+            return False
+
+        try:
+            r_pago_liq = requests.post(
+                f"{SUPABASE_URL}/rest/v1/nomina_pagos", headers=HEADERS, timeout=10,
+                json={
+                    "empleado_id": emp["id"], "periodo_inicio": str(fecha), "periodo_fin": str(fecha),
+                    "dias_trabajados": None, "salario_diario": None, "monto_base": float(monto),
+                    "bono_semestral": 0, "semestre_num": None, "adelantos": 0,
+                    "total_pagado": float(monto), "fecha_pago": str(fecha),
+                    "pagado_por": st.session_state.admin_actual, "caja_egreso_id": caja_egreso_id,
+                    "concepto": concepto_liq
+                }
+            )
+            if not r_pago_liq.ok:
+                st.error(f"Error al registrar la liquidación: {r_pago_liq.status_code} — {r_pago_liq.text}")
+                return False
+        except requests.RequestException as e:
+            st.error(f"Error al registrar la liquidación: {e}")
+            return False
+        return True
+
     def _registrar_adelanto(emp, valor, motivo, fecha):
         concepto_adel = "Adelanto de nómina" + (f" — {motivo}" if motivo else "")
         caja_egreso_id = None
@@ -4368,7 +4421,6 @@ elif st.session_state.vista == "nomina" and st.session_state.es_admin:
         fecha_ne = st.date_input("Fecha de ingreso", value=datetime.now(COL_TZ).date(), key="fecha_ne")
         tipo_ne = st.radio("Tipo de pago", ["Fijo (según días trabajados)", "Variable (monto manual cada quincena)"], key="tipo_ne")
         es_variable_ne = tipo_ne.startswith("Variable")
-        bono_ne = st.checkbox("¿Aplica bono semestral (medio sueldo cada 6 meses)?", value=not es_variable_ne, key="bono_ne")
         if st.button("✅ Agregar empleado", key="btn_add_ne"):
             if not nombre_ne.strip():
                 st.markdown(f'<div class="alert-low">{ICO_WARN} Escribe el nombre del empleado.</div>', unsafe_allow_html=True)
@@ -4378,7 +4430,7 @@ elif st.session_state.vista == "nomina" and st.session_state.es_admin:
                 sb_post("nomina_empleados", {
                     "nombre": nombre_ne.strip(), "salario_mensual": float(salario_ne),
                     "fecha_ingreso": str(fecha_ne), "tipo": "variable" if es_variable_ne else "fijo",
-                    "bono_semestral": bono_ne, "activo": True
+                    "bono_semestral": False, "activo": True
                 })
                 st.markdown(f'<div class="success-toast">{ICO_CHECK} Empleado agregado.</div>', unsafe_allow_html=True)
                 time.sleep(0.3); st.rerun()
@@ -4655,6 +4707,31 @@ elif st.session_state.vista == "nomina" and st.session_state.es_admin:
                     st.markdown(f'<div class="success-toast">{ICO_CHECK} Bono registrado como pagado — no se tocó caja.</div>', unsafe_allow_html=True)
                     time.sleep(0.3); st.rerun()
 
+        with st.expander("📋 Registrar liquidación (sin cálculo)"):
+            st.caption("Para cuando un empleado se va en cualquier momento — el monto te lo da la contadora, aquí solo lo registras. A diferencia del bono retroactivo de arriba, esto sí descuenta de caja.")
+            raw_emp_liq = sb_get("nomina_empleados", "select=id,nombre,tipo,activo&order=nombre.asc") or []
+            if not raw_emp_liq:
+                st.info("No hay empleados registrados todavía.")
+            else:
+                etiquetas_liq = [f'{r["nombre"]}{"" if r["activo"] else " (inactivo)"}' for r in raw_emp_liq]
+                etiqueta_sel_liq = st.radio("Empleado", etiquetas_liq, key="liq_emp_sel")
+                emp_liq_obj = raw_emp_liq[etiquetas_liq.index(etiqueta_sel_liq)]
+                monto_liq = st.number_input("Monto de la liquidación ($)", min_value=0, value=0, step=50000, key="monto_liq")
+                fecha_liq = st.date_input("Fecha de pago", value=datetime.now(COL_TZ).date(), key="fecha_liq")
+                nota_liq = st.text_input("Nota (opcional)", key="nota_liq", placeholder="Ej: incluye cesantías y vacaciones")
+                opcion_baja_liq = st.radio(
+                    "¿Marcar también a este empleado como inactivo?",
+                    ["✅ Sí, marcarlo inactivo", "❌ No, dejarlo activo"], horizontal=True, key="baja_liq"
+                )
+                if st.button("💾 Registrar liquidación", key="btn_liq"):
+                    if monto_liq <= 0:
+                        st.markdown(f'<div class="alert-low">{ICO_WARN} Ingresa el monto de la liquidación.</div>', unsafe_allow_html=True)
+                    elif _registrar_liquidacion(emp_liq_obj, float(monto_liq), fecha_liq, nota_liq.strip()):
+                        if opcion_baja_liq.startswith("✅"):
+                            sb_patch("nomina_empleados", f"id=eq.{emp_liq_obj['id']}", {"activo": False})
+                        st.markdown(f'<div class="success-toast">{ICO_CHECK} Liquidación registrada.</div>', unsafe_allow_html=True)
+                        time.sleep(0.3); st.rerun()
+
         raw_emp_n4 = sb_get("nomina_empleados", "select=id,nombre&order=nombre.asc") or []
         nombre_por_id_n4 = {r["id"]: r["nombre"] for r in raw_emp_n4}
         nombres_hist_n4 = ["Todos"] + sorted(nombre_por_id_n4.values())
@@ -4673,6 +4750,7 @@ elif st.session_state.vista == "nomina" and st.session_state.es_admin:
             df_hist_n4 = pd.DataFrame([{
                 "Fecha pago": r["fecha_pago"],
                 "Empleado": nombre_por_id_n4.get(r["empleado_id"], "?"),
+                "Concepto": r.get("concepto") or "Quincena",
                 "Período": f'{r["periodo_inicio"]} a {r["periodo_fin"]}',
                 "Días": r["dias_trabajados"] if r.get("dias_trabajados") is not None else "—",
                 "Base": fmt(r["monto_base"]),
