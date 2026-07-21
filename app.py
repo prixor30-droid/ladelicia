@@ -4092,14 +4092,22 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
             total_cobrado_mes = ingresos_ventas_mes + ingreso_credito_mes_ant
             promedio_dia = total_cobrado_mes / dias_mes if dias_mes > 0 else 0
 
+            # Crédito cobrado este mes que no es ni de ventas de este mes ni del mes
+            # justo anterior (de este mismo mes cobrado el mismo mes, o de 2+ meses
+            # atrás) — no entra en el reporte limpio de la contadora, pero SÍ es plata
+            # real que entró a caja, así que sí debe sumar al Neto de abajo.
+            credito_otros_meses = max(0.0, cobro_creditos_mes - ingreso_credito_mes_ant)
+
             # Egresos + ingresos manuales del mes, mismo criterio que Caja→Resumen,
-            # para que el neto de aquí coincida con el "Saldo caja" de allá.
+            # para que el neto de aquí coincida con el "Saldo caja" de allá — por eso
+            # usa cobro_creditos_mes completo (todo crédito cobrado, cualquier origen),
+            # no el total_cobrado_mes recortado que se muestra arriba para la contadora.
             raw_mp_mes = sb_get("materia_prima", f"select=abono&fecha=gte.{primer_dia}&fecha=lte.{ultimo_dia}") or []
             raw_eg_mes = sb_get("caja_egresos", f"select=valor&fecha=gte.{primer_dia}&fecha=lte.{ultimo_dia}") or []
             raw_ing_man_mes = sb_get("caja_ingresos", f"select=valor&fecha=gte.{primer_dia}&fecha=lte.{ultimo_dia}") or []
             egresos_mes = sum(float(r["abono"]) for r in raw_mp_mes) + sum(float(r["valor"]) for r in raw_eg_mes)
             ingresos_manuales_mes = sum(float(r["valor"]) for r in raw_ing_man_mes)
-            neto_mes = total_cobrado_mes + ingresos_manuales_mes - egresos_mes
+            neto_mes = ingresos_ventas_mes + cobro_creditos_mes + ingresos_manuales_mes - egresos_mes
 
             st.markdown(f"""
             <div class="metric-row">
@@ -4110,12 +4118,8 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
             </div>""", unsafe_allow_html=True)
             st.caption("💰 \"Total cobrado ese mes\" = Ingresos por ventas + Créditos cobrados del mes anterior — sin mezclar con crédito de otros meses. \"Créditos pendientes por cobrar\" es lo que sigue debiendo, a hoy, de lo vendido a crédito ese mes.")
 
-            # Crédito cobrado este mes que no es ni de ventas de este mes ni del mes
-            # justo anterior (de este mismo mes cobrado el mismo mes, o de 2+ meses
-            # atrás) — se muestra aparte para que no desaparezca sin explicación.
-            credito_otros_origenes_mes = max(0.0, cobro_creditos_mes - ingreso_credito_mes_ant)
-            if credito_otros_origenes_mes > 0:
-                st.caption(f"ℹ️ Aparte de lo anterior, este mes también entraron {fmt(credito_otros_origenes_mes)} de créditos cobrados que no son del mes anterior (de este mismo mes o de más de un mes atrás) — no está incluido en \"Total cobrado ese mes\" de arriba.")
+            if credito_otros_meses > 0:
+                st.caption(f"ℹ️ Además, este mes entraron {fmt(credito_otros_meses)} de créditos cobrados de otros orígenes (de este mismo mes, o de más de un mes atrás) — no aparece en \"Total cobrado ese mes\" (ese número es solo para el reporte de la contadora), pero sí es plata real y sí suma al Neto de abajo.")
 
             color_neto_mes = "metric-green" if neto_mes >= 0 else "metric-red"
             st.markdown(f"""
