@@ -4081,11 +4081,16 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
             prod_mes    = sum(r["cantidad"] for r in raw_prod_mes) if raw_prod_mes else 0
 
             facturas_mes = cobros_mes["facturas"]
-            cobrado_ventas_mes = sum(f["abono"] for f in facturas_mes.values())
-            cobrado_mes   = cobrado_ventas_mes + cobro_creditos_mes
+            ingresos_ventas_mes = sum(f["abono"] for f in facturas_mes.values())
             pendiente_mes = sum(f["saldo"] for f in facturas_mes.values()) + _pendiente_creditos_antiguos(primer_dia, ultimo_dia)
-            promedio_dia  = cobrado_mes / dias_mes if dias_mes > 0 else 0
             ingreso_credito_mes_ant = _ingreso_creditos_mes_anterior(primer_dia, ultimo_dia_mes)
+
+            # Reporte pedido por la contadora (2026-07-21): ventas y créditos del mes
+            # anterior NUNCA se mezclan — "Total cobrado" es solo la suma de esos dos,
+            # no de cualquier crédito viejo cobrado este mes (eso puede incluir crédito
+            # de este mismo mes o de hace 2+ meses, por eso se dejó aparte más abajo).
+            total_cobrado_mes = ingresos_ventas_mes + ingreso_credito_mes_ant
+            promedio_dia = total_cobrado_mes / dias_mes if dias_mes > 0 else 0
 
             # Egresos + ingresos manuales del mes, mismo criterio que Caja→Resumen,
             # para que el neto de aquí coincida con el "Saldo caja" de allá.
@@ -4094,15 +4099,23 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
             raw_ing_man_mes = sb_get("caja_ingresos", f"select=valor&fecha=gte.{primer_dia}&fecha=lte.{ultimo_dia}") or []
             egresos_mes = sum(float(r["abono"]) for r in raw_mp_mes) + sum(float(r["valor"]) for r in raw_eg_mes)
             ingresos_manuales_mes = sum(float(r["valor"]) for r in raw_ing_man_mes)
-            neto_mes = cobrado_mes + ingresos_manuales_mes - egresos_mes
+            neto_mes = total_cobrado_mes + ingresos_manuales_mes - egresos_mes
 
             st.markdown(f"""
             <div class="metric-row">
-                <div class="metric-box metric-green"><div class="val">{fmt(cobrado_ventas_mes)}</div><div class="lbl">Cobrado por ventas</div></div>
-                <div class="metric-box metric-blue"><div class="val">{fmt(cobro_creditos_mes)}</div><div class="lbl">Cobrado por créditos viejos</div></div>
-                <div class="metric-box metric-yellow"><div class="val">{fmt(cobrado_mes)}</div><div class="lbl">Total cobrado</div></div>
+                <div class="metric-box metric-green"><div class="val">{fmt(ingresos_ventas_mes)}</div><div class="lbl">Ingresos por ventas</div></div>
+                <div class="metric-box metric-blue"><div class="val">{fmt(ingreso_credito_mes_ant)}</div><div class="lbl">Créditos cobrados del mes anterior</div></div>
+                <div class="metric-box metric-yellow"><div class="val">{fmt(total_cobrado_mes)}</div><div class="lbl">Total cobrado ese mes</div></div>
+                <div class="metric-box metric-red"><div class="val">{fmt(pendiente_mes)}</div><div class="lbl">Créditos pendientes por cobrar</div></div>
             </div>""", unsafe_allow_html=True)
-            st.caption("💰 \"Cobrado por ventas\" es solo lo abonado en ventas hechas este mes. \"Cobrado por créditos viejos\" es dinero de deudas de meses anteriores (de cualquier mes) que entró en este mes — no se mezclan.")
+            st.caption("💰 \"Total cobrado ese mes\" = Ingresos por ventas + Créditos cobrados del mes anterior — sin mezclar con crédito de otros meses. \"Créditos pendientes por cobrar\" es lo que sigue debiendo, a hoy, de lo vendido a crédito ese mes.")
+
+            # Crédito cobrado este mes que no es ni de ventas de este mes ni del mes
+            # justo anterior (de este mismo mes cobrado el mismo mes, o de 2+ meses
+            # atrás) — se muestra aparte para que no desaparezca sin explicación.
+            credito_otros_origenes_mes = max(0.0, cobro_creditos_mes - ingreso_credito_mes_ant)
+            if credito_otros_origenes_mes > 0:
+                st.caption(f"ℹ️ Aparte de lo anterior, este mes también entraron {fmt(credito_otros_origenes_mes)} de créditos cobrados que no son del mes anterior (de este mismo mes o de más de un mes atrás) — no está incluido en \"Total cobrado ese mes\" de arriba.")
 
             color_neto_mes = "metric-green" if neto_mes >= 0 else "metric-red"
             st.markdown(f"""
@@ -4110,21 +4123,13 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
                 <div class="metric-box metric-yellow"><div class="val">{fmt(egresos_mes)}</div><div class="lbl">Egresos del mes</div></div>
                 <div class="metric-box {color_neto_mes}"><div class="val">{fmt(neto_mes)}</div><div class="lbl">Neto (debe coincidir con Caja)</div></div>
             </div>""", unsafe_allow_html=True)
-            st.caption("📊 Neto = Total cobrado + ingresos manuales − egresos del mes — mismo cálculo que \"Saldo caja\" en Caja → Resumen, para que ambos coincidan.")
+            st.caption("📊 Neto = Total cobrado ese mes + ingresos manuales − egresos del mes — mismo cálculo que \"Saldo caja\" en Caja → Resumen, para que ambos coincidan.")
 
             st.markdown(f"""
             <div class="metric-row">
                 <div class="metric-box metric-blue"><div class="val">{bolsas_mes}</div><div class="lbl">Bolsas vendidas</div></div>
                 <div class="metric-box metric-yellow"><div class="val">{fmt(promedio_dia)}</div><div class="lbl">Promedio diario</div></div>
-                <div class="metric-box metric-red"><div class="val">{fmt(pendiente_mes)}</div><div class="lbl">Créditos que quedaron ese mes</div></div>
             </div>""", unsafe_allow_html=True)
-            st.caption("\"Créditos que quedaron ese mes\" es lo que sigue debiendo, a hoy, de lo vendido a crédito en ese mes.")
-
-            st.markdown(f"""
-            <div class="metric-row">
-                <div class="metric-box metric-blue"><div class="val">{fmt(ingreso_credito_mes_ant)}</div><div class="lbl">Ingreso este mes de créditos del mes anterior</div></div>
-            </div>""", unsafe_allow_html=True)
-            st.caption("📥 De lo que quedó debiendo el mes anterior, cuánto entró en efectivo durante este mes (según la fecha real del pago, no la fecha de la venta).")
 
             # Bolsas regaladas en el mes, valoradas al precio normal — no mueven caja.
             reg_mes = [r for r in raw_mes if r.get("canal") in ("Regalo", "Regalo Fábrica")]
