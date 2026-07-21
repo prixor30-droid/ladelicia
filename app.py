@@ -4123,7 +4123,12 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
                 <div class="metric-row">
                     <div class="metric-box metric-blue"><div class="val">{fmt(credito_otros_meses)}</div><div class="lbl">Créditos cobrados este mes</div></div>
                 </div>""", unsafe_allow_html=True)
-                st.caption("ℹ️ Crédito cobrado este mes que NO es del mes anterior (de este mismo mes, o de 2+ meses atrás) — no cuenta en \"Total cobrado ese mes\" de arriba (ese es solo para el reporte de la contadora), pero sí es plata real y sí suma al Neto de abajo.")
+
+            ingresos_totales_mes = ingresos_ventas_mes + cobro_creditos_mes
+            st.markdown(f"""
+            <div class="metric-row">
+                <div class="metric-box metric-green"><div class="val">{fmt(ingresos_totales_mes)}</div><div class="lbl">Ingresos totales (ventas + todo lo cobrado en créditos)</div></div>
+            </div>""", unsafe_allow_html=True)
 
             color_neto_mes = "metric-green" if neto_mes >= 0 else "metric-red"
             st.markdown(f"""
@@ -4131,7 +4136,6 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
                 <div class="metric-box metric-yellow"><div class="val">{fmt(egresos_mes)}</div><div class="lbl">Egresos del mes</div></div>
                 <div class="metric-box {color_neto_mes}"><div class="val">{fmt(neto_mes)}</div><div class="lbl">Neto (debe coincidir con Caja)</div></div>
             </div>""", unsafe_allow_html=True)
-            st.caption("📊 Neto = Total cobrado ese mes + ingresos manuales − egresos del mes — mismo cálculo que \"Saldo caja\" en Caja → Resumen, para que ambos coincidan.")
 
             st.markdown(f"""
             <div class="metric-row">
