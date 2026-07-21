@@ -4119,7 +4119,11 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
             st.caption("💰 \"Total cobrado ese mes\" = Ingresos por ventas + Créditos cobrados del mes anterior — sin mezclar con crédito de otros meses. \"Créditos pendientes por cobrar\" es lo que sigue debiendo, a hoy, de lo vendido a crédito ese mes.")
 
             if credito_otros_meses > 0:
-                st.caption(f"ℹ️ Además, este mes entraron {fmt(credito_otros_meses)} de créditos cobrados de otros orígenes (de este mismo mes, o de más de un mes atrás) — no aparece en \"Total cobrado ese mes\" (ese número es solo para el reporte de la contadora), pero sí es plata real y sí suma al Neto de abajo.")
+                st.markdown(f"""
+                <div class="metric-row">
+                    <div class="metric-box metric-blue"><div class="val">{fmt(credito_otros_meses)}</div><div class="lbl">Créditos de otros meses cobrados este mes</div></div>
+                </div>""", unsafe_allow_html=True)
+                st.caption("ℹ️ Crédito cobrado este mes que NO es del mes anterior (de este mismo mes, o de 2+ meses atrás) — no cuenta en \"Total cobrado ese mes\" de arriba (ese es solo para el reporte de la contadora), pero sí es plata real y sí suma al Neto de abajo.")
 
             color_neto_mes = "metric-green" if neto_mes >= 0 else "metric-red"
             st.markdown(f"""
