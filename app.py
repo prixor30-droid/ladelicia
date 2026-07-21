@@ -1308,7 +1308,7 @@ label,.stSelectbox label,.stNumberInput label,.stDateInput label,.stTextInput la
 .stButton>button{width:100%;background:#1565C0 !important;color:white !important;-webkit-text-fill-color:white !important;border:none !important;border-radius:12px !important;padding:14px !important;font-size:1rem !important;font-weight:700 !important;cursor:pointer;margin-top:4px;box-shadow:0 4px 16px rgba(21,101,192,0.25);white-space:pre-line !important;line-height:1.4 !important;transition:transform 0.3s ease,box-shadow 0.3s ease,opacity 0.3s ease !important;-webkit-tap-highlight-color:transparent;touch-action:manipulation;}
 .stButton>button:hover{opacity:0.88;box-shadow:0 6px 20px rgba(21,101,192,0.35);transform:translateY(-1px);}
 .stButton>button:active{transform:scale(0.97) translateY(0);box-shadow:0 2px 8px rgba(21,101,192,0.25);opacity:1;animation:btnPress 0.45s ease-out;}
-.st-key-btn_resumen button,.st-key-btn_contador button{
+.st-key-btn_resumen button,.st-key-btn_contador button,.st-key-btn_nomina button{
   background:linear-gradient(135deg,#FFFFFF,#EEF4FF) !important;
   color:#0D1B2A !important;
   -webkit-text-fill-color:#0D1B2A !important;
@@ -1326,12 +1326,12 @@ label,.stSelectbox label,.stNumberInput label,.stDateInput label,.stTextInput la
   -webkit-tap-highlight-color:transparent;
   touch-action:manipulation;
 }
-.st-key-btn_resumen button:hover,.st-key-btn_contador button:hover{
+.st-key-btn_resumen button:hover,.st-key-btn_contador button:hover,.st-key-btn_nomina button:hover{
   box-shadow:0 5px 16px rgba(21,101,192,0.25) !important;
   opacity:1 !important;
   transform:translateY(-2px) !important;
 }
-.st-key-btn_resumen button:active,.st-key-btn_contador button:active{
+.st-key-btn_resumen button:active,.st-key-btn_contador button:active,.st-key-btn_nomina button:active{
   transform:scale(0.98) !important;
   box-shadow:0 2px 8px rgba(21,101,192,0.15) !important;
   animation:cardPress 0.45s ease-out !important;
@@ -1468,6 +1468,7 @@ _imagenes_menu = {
     "caja":          "Caja.jpg",
     "resumen":       "Resumen.jpg",
     "contador":      "Contador.jpg",
+    "nomina":        "Nomina.jpg",
 }
 
 # Iconos vectoriales (reemplazan los emojis, que no siempre se ven igual en todos los dispositivos)
@@ -1479,6 +1480,7 @@ _iconos_svg = {
     "caja":          '<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>',
     "resumen":       '<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>',
     "contador":      '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>',
+    "nomina":        '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
 }
 
 _css_botones_menu = ""
@@ -4783,13 +4785,14 @@ elif st.session_state.vista == "nomina" and st.session_state.es_admin:
     with sub_n5:
         st.markdown('<div class="section-label">📤 Registrar liquidación (sin cálculo)</div>', unsafe_allow_html=True)
         st.caption("Para cuando un empleado se va en cualquier momento — el monto te lo da la contadora, aquí solo lo registras. Sí descuenta de caja.")
-        raw_emp_liq = sb_get("nomina_empleados", "select=id,nombre,tipo,activo&order=nombre.asc") or []
+        raw_emp_liq = sb_get("nomina_empleados", "select=id,nombre,tipo,activo,fecha_ingreso&order=nombre.asc") or []
         if not raw_emp_liq:
             st.info("No hay empleados registrados todavía.")
         else:
             etiquetas_liq = [f'{r["nombre"]}{"" if r["activo"] else " (inactivo)"}' for r in raw_emp_liq]
             etiqueta_sel_liq = st.radio("Empleado", etiquetas_liq, key="liq_emp_sel")
             emp_liq_obj = raw_emp_liq[etiquetas_liq.index(etiqueta_sel_liq)]
+            st.markdown(f'<div class="info-box">{ICO_CALENDAR} Fecha de ingreso: <b>{emp_liq_obj["fecha_ingreso"]}</b></div>', unsafe_allow_html=True)
             monto_liq = st.number_input("Monto de la liquidación ($)", min_value=0, value=0, step=50000, key="monto_liq")
             fecha_liq = st.date_input("Fecha de pago", value=datetime.now(COL_TZ).date(), key="fecha_liq")
             nota_liq = st.text_input("Nota (opcional)", key="nota_liq", placeholder="Ej: incluye cesantías y vacaciones")
