@@ -4681,32 +4681,6 @@ elif st.session_state.vista == "nomina" and st.session_state.es_admin:
     with sub_n4:
         st.markdown('<div class="section-label">Historial de pagos</div>', unsafe_allow_html=True)
 
-        with st.expander("🔧 Registrar bono ya pagado antes (no descuenta de caja)"):
-            st.caption("Úsalo solo para bonos semestrales que ya pagaste con plata que salió de caja en un mes anterior, antes de tener este sistema — así queda registrado el semestre como pagado (para que no se lo vuelva a sugerir en Calcular quincena) pero sin volver a descontarlo de caja hoy.")
-            raw_emp_bono_retro = sb_get("nomina_empleados", "select=id,nombre,salario_mensual&activo=eq.true&tipo=eq.fijo&order=nombre.asc") or []
-            if not raw_emp_bono_retro:
-                st.info("No hay empleados fijos registrados todavía.")
-            else:
-                emp_retro_sel = st.selectbox("Empleado", [r["nombre"] for r in raw_emp_bono_retro], key="emp_retro_sel")
-                emp_retro_obj = next(r for r in raw_emp_bono_retro if r["nombre"] == emp_retro_sel)
-                semestre_retro = st.number_input("N° de semestre que cumple con este bono", min_value=1, value=1, step=1, key="semestre_retro")
-                monto_retro = st.number_input(
-                    "Monto que se le pagó ($)", min_value=0,
-                    value=round(emp_retro_obj["salario_mensual"] / 2), step=50000, key="monto_retro"
-                )
-                fecha_retro = st.date_input("Fecha en que se le pagó", value=datetime.now(COL_TZ).date(), key="fecha_retro")
-                if st.button("💾 Registrar (sin afectar caja)", key="btn_bono_retro"):
-                    sb_post("nomina_pagos", {
-                        "empleado_id": emp_retro_obj["id"],
-                        "periodo_inicio": str(fecha_retro), "periodo_fin": str(fecha_retro),
-                        "dias_trabajados": None, "salario_diario": None, "monto_base": 0,
-                        "bono_semestral": float(monto_retro), "semestre_num": int(semestre_retro),
-                        "total_pagado": float(monto_retro), "fecha_pago": str(fecha_retro),
-                        "pagado_por": st.session_state.admin_actual
-                    })
-                    st.markdown(f'<div class="success-toast">{ICO_CHECK} Bono registrado como pagado — no se tocó caja.</div>', unsafe_allow_html=True)
-                    time.sleep(0.3); st.rerun()
-
         raw_emp_n4 = sb_get("nomina_empleados", "select=id,nombre&order=nombre.asc") or []
         nombre_por_id_n4 = {r["id"]: r["nombre"] for r in raw_emp_n4}
         nombres_hist_n4 = ["Todos"] + sorted(nombre_por_id_n4.values())
@@ -4808,7 +4782,7 @@ elif st.session_state.vista == "nomina" and st.session_state.es_admin:
     # ── Liquidación ──
     with sub_n5:
         st.markdown('<div class="section-label">📤 Registrar liquidación (sin cálculo)</div>', unsafe_allow_html=True)
-        st.caption("Para cuando un empleado se va en cualquier momento — el monto te lo da la contadora, aquí solo lo registras. A diferencia del bono retroactivo de Historial, esto sí descuenta de caja.")
+        st.caption("Para cuando un empleado se va en cualquier momento — el monto te lo da la contadora, aquí solo lo registras. Sí descuenta de caja.")
         raw_emp_liq = sb_get("nomina_empleados", "select=id,nombre,tipo,activo&order=nombre.asc") or []
         if not raw_emp_liq:
             st.info("No hay empleados registrados todavía.")
