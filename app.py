@@ -2651,11 +2651,6 @@ elif st.session_state.vista == "recibo":
                 # Obtener todos los registros de la factura
                 regs = sb_get("ventas", f"select=sabor,cantidad,canal,abono&factura_id=eq.{fid_recibo}")
                 if regs:
-                    # Si la factura ya tenía un abono cobrado, esa plata ya está físicamente
-                    # en caja — hay que preservarla como ingreso manual antes de borrar la
-                    # venta, si no Arqueo deja de contarla para siempre (encontrado 2026-07-21:
-                    # $40.000 de diferencia en Arqueo por una factura eliminada con abono).
-                    abono_previo_elim = float(regs[0].get("abono", 0) or 0)
                     for r in regs:
                         cant = int(r.get("cantidad", 0))
                         sabor = r.get("sabor", "")
@@ -2667,12 +2662,6 @@ elif st.session_state.vista == "recibo":
                                 agregar_stock(sabor, cant)
                     # Eliminar todos los registros de la factura
                     sb_delete("ventas", f"factura_id=eq.{fid_recibo}")
-                    if abono_previo_elim > 0:
-                        sb_post("caja_ingresos", {
-                            "fecha": fecha_hoy(), "hora": ahora(),
-                            "concepto": f"Abono ya cobrado de factura eliminada — {cliente_recibo}",
-                            "valor": abono_previo_elim, "categoria": "Otro ingreso"
-                        })
                 _registrar_auditoria_factura(
                     fid_recibo, "Eliminar factura",
                     f"{cliente_recibo} · {fmt(sum(totales_recibo.values()))}",
