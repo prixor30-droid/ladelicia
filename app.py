@@ -1885,9 +1885,9 @@ if st.session_state.vista != "menu":
 # ══════════════════════════════════════════════════════════════════════════════
 if st.session_state.vista == "menu":
     opciones = [
-        ("produccion",    "Producción",      "Registrar bolsas fabricadas"),
-        ("carro",         "Edison & Javier", "Cargues y ventas del carro"),
-        ("fabrica",       "Fábrica",          "Ventas de Sofía y Andrea"),
+        ("produccion",    "Producción",       "Registrar bolsas fabricadas"),
+        ("carro",         "Ventas del Carro", ""),
+        ("fabrica",       "Ventas Fábrica",   ""),
         ("materia_prima", "Materia Prima",    "Insumos y proveedores"),
     ]
     if st.session_state.es_admin:
@@ -1898,7 +1898,8 @@ if st.session_state.vista == "menu":
 
     for vista, titulo, sub in opciones:
         with st.container():
-            if st.button(f"{titulo}\n{sub}", key=f"btn_{vista}", use_container_width=True):
+            texto_btn = f"{titulo}\n{sub}" if sub else titulo
+            if st.button(texto_btn, key=f"btn_{vista}", use_container_width=True):
                 st.session_state.vista = vista
                 st.rerun()
 
