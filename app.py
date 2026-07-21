@@ -4394,7 +4394,7 @@ elif st.session_state.vista == "nomina" and st.session_state.es_admin:
             "motivo": motivo.strip() or None, "caja_egreso_id": caja_egreso_id
         })
 
-    sub_n1, sub_n2, sub_n3, sub_n4 = st.tabs(["👥 Empleados", "🚫 Ausencias", "🧮 Calcular quincena", "📋 Historial"])
+    sub_n1, sub_n2, sub_n3, sub_n4, sub_n5 = st.tabs(["👥 Empleados", "🚫 Ausencias", "🧮 Calcular quincena", "📋 Historial", "📤 Liquidación"])
 
     if st.session_state.get("ok_nomina"):
         st.markdown(f'<div class="success-toast">{ICO_CHECK} Pago registrado.</div>', unsafe_allow_html=True)
@@ -4707,31 +4707,6 @@ elif st.session_state.vista == "nomina" and st.session_state.es_admin:
                     st.markdown(f'<div class="success-toast">{ICO_CHECK} Bono registrado como pagado — no se tocó caja.</div>', unsafe_allow_html=True)
                     time.sleep(0.3); st.rerun()
 
-        with st.expander("📋 Registrar liquidación (sin cálculo)"):
-            st.caption("Para cuando un empleado se va en cualquier momento — el monto te lo da la contadora, aquí solo lo registras. A diferencia del bono retroactivo de arriba, esto sí descuenta de caja.")
-            raw_emp_liq = sb_get("nomina_empleados", "select=id,nombre,tipo,activo&order=nombre.asc") or []
-            if not raw_emp_liq:
-                st.info("No hay empleados registrados todavía.")
-            else:
-                etiquetas_liq = [f'{r["nombre"]}{"" if r["activo"] else " (inactivo)"}' for r in raw_emp_liq]
-                etiqueta_sel_liq = st.radio("Empleado", etiquetas_liq, key="liq_emp_sel")
-                emp_liq_obj = raw_emp_liq[etiquetas_liq.index(etiqueta_sel_liq)]
-                monto_liq = st.number_input("Monto de la liquidación ($)", min_value=0, value=0, step=50000, key="monto_liq")
-                fecha_liq = st.date_input("Fecha de pago", value=datetime.now(COL_TZ).date(), key="fecha_liq")
-                nota_liq = st.text_input("Nota (opcional)", key="nota_liq", placeholder="Ej: incluye cesantías y vacaciones")
-                opcion_baja_liq = st.radio(
-                    "¿Marcar también a este empleado como inactivo?",
-                    ["✅ Sí, marcarlo inactivo", "❌ No, dejarlo activo"], horizontal=True, key="baja_liq"
-                )
-                if st.button("💾 Registrar liquidación", key="btn_liq"):
-                    if monto_liq <= 0:
-                        st.markdown(f'<div class="alert-low">{ICO_WARN} Ingresa el monto de la liquidación.</div>', unsafe_allow_html=True)
-                    elif _registrar_liquidacion(emp_liq_obj, float(monto_liq), fecha_liq, nota_liq.strip()):
-                        if opcion_baja_liq.startswith("✅"):
-                            sb_patch("nomina_empleados", f"id=eq.{emp_liq_obj['id']}", {"activo": False})
-                        st.markdown(f'<div class="success-toast">{ICO_CHECK} Liquidación registrada.</div>', unsafe_allow_html=True)
-                        time.sleep(0.3); st.rerun()
-
         raw_emp_n4 = sb_get("nomina_empleados", "select=id,nombre&order=nombre.asc") or []
         nombre_por_id_n4 = {r["id"]: r["nombre"] for r in raw_emp_n4}
         nombres_hist_n4 = ["Todos"] + sorted(nombre_por_id_n4.values())
@@ -4828,6 +4803,33 @@ elif st.session_state.vista == "nomina" and st.session_state.es_admin:
                 if sel_adel_del != "— Selecciona —" and st.button("🗑️ Eliminar adelanto", key="btn_del_adel_n4"):
                     sb_delete("nomina_adelantos", f"id=eq.{ids_adel_del[sel_adel_del]['id']}")
                     st.markdown(f'<div class="success-toast">{ICO_CHECK} Adelanto eliminado.</div>', unsafe_allow_html=True)
+                    time.sleep(0.3); st.rerun()
+
+    # ── Liquidación ──
+    with sub_n5:
+        st.markdown('<div class="section-label">📤 Registrar liquidación (sin cálculo)</div>', unsafe_allow_html=True)
+        st.caption("Para cuando un empleado se va en cualquier momento — el monto te lo da la contadora, aquí solo lo registras. A diferencia del bono retroactivo de Historial, esto sí descuenta de caja.")
+        raw_emp_liq = sb_get("nomina_empleados", "select=id,nombre,tipo,activo&order=nombre.asc") or []
+        if not raw_emp_liq:
+            st.info("No hay empleados registrados todavía.")
+        else:
+            etiquetas_liq = [f'{r["nombre"]}{"" if r["activo"] else " (inactivo)"}' for r in raw_emp_liq]
+            etiqueta_sel_liq = st.radio("Empleado", etiquetas_liq, key="liq_emp_sel")
+            emp_liq_obj = raw_emp_liq[etiquetas_liq.index(etiqueta_sel_liq)]
+            monto_liq = st.number_input("Monto de la liquidación ($)", min_value=0, value=0, step=50000, key="monto_liq")
+            fecha_liq = st.date_input("Fecha de pago", value=datetime.now(COL_TZ).date(), key="fecha_liq")
+            nota_liq = st.text_input("Nota (opcional)", key="nota_liq", placeholder="Ej: incluye cesantías y vacaciones")
+            opcion_baja_liq = st.radio(
+                "¿Marcar también a este empleado como inactivo?",
+                ["✅ Sí, marcarlo inactivo", "❌ No, dejarlo activo"], horizontal=True, key="baja_liq"
+            )
+            if st.button("💾 Registrar liquidación", key="btn_liq"):
+                if monto_liq <= 0:
+                    st.markdown(f'<div class="alert-low">{ICO_WARN} Ingresa el monto de la liquidación.</div>', unsafe_allow_html=True)
+                elif _registrar_liquidacion(emp_liq_obj, float(monto_liq), fecha_liq, nota_liq.strip()):
+                    if opcion_baja_liq.startswith("✅"):
+                        sb_patch("nomina_empleados", f"id=eq.{emp_liq_obj['id']}", {"activo": False})
+                    st.markdown(f'<div class="success-toast">{ICO_CHECK} Liquidación registrada.</div>', unsafe_allow_html=True)
                     time.sleep(0.3); st.rerun()
 
 # ══════════════════════════════════════════════════════════════════════════════
