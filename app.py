@@ -1820,7 +1820,7 @@ st.markdown(f"""
 raw_inv_global = _inv
 if raw_inv_global:
     agotados = [r for r in raw_inv_global if r["stock"] == 0]
-    bajos_global = [r for r in raw_inv_global if 0 < r["stock"] < STOCK_MINIMO]
+    bajos_global = [r for r in raw_inv_global if 0 < r["stock"] < STOCK_MINIMO and r["sabor"] not in ("Surtidas", "Papa suelta")]
 
     if agotados:
         nombres_ag = ", ".join(r["sabor"] for r in agotados[:6])
