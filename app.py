@@ -4531,13 +4531,6 @@ elif st.session_state.vista == "nomina" and st.session_state.es_admin:
             for r in raw_aus_n3:
                 ausencias_por_emp[r["empleado_id"]] = ausencias_por_emp.get(r["empleado_id"], 0) + 1
 
-            raw_bonos_n3 = sb_get("nomina_pagos", "select=empleado_id,semestre_num&bono_semestral=gt.0") or []
-            semestres_pagados_por_emp = {}
-            for r in raw_bonos_n3:
-                eid, sn = r["empleado_id"], (r.get("semestre_num") or 0)
-                if sn > semestres_pagados_por_emp.get(eid, 0):
-                    semestres_pagados_por_emp[eid] = sn
-
             raw_pagos_periodo_n3 = sb_get("nomina_pagos", f"select=empleado_id&periodo_inicio=eq.{periodo_ini_n}") or []
             ids_ya_pagados = {r["empleado_id"] for r in raw_pagos_periodo_n3}
 
@@ -4600,34 +4593,9 @@ elif st.session_state.vista == "nomina" and st.session_state.es_admin:
                     salario_diario = emp["salario_mensual"] / 30
                     monto_base = round(salario_diario * dias_trab)
 
-                    fecha_ingreso_emp = datetime.strptime(emp["fecha_ingreso"], "%Y-%m-%d").date()
-                    meses_antig = (periodo_calculo_n.year - fecha_ingreso_emp.year) * 12 + (periodo_calculo_n.month - fecha_ingreso_emp.month)
-                    if periodo_calculo_n.day < fecha_ingreso_emp.day:
-                        meses_antig -= 1
-                    meses_antig = max(0, meses_antig)
-                    semestres_cumplidos = meses_antig // 6
-                    semestres_pagados = semestres_pagados_por_emp.get(eid, 0)
-                    bono_pendiente = emp.get("bono_semestral", True) and semestres_cumplidos > semestres_pagados
-                    semestre_a_pagar = semestres_pagados + 1 if bono_pendiente else None
-
                     st.caption(f"{dias_trab} de {dias_base_n3} días trabajados" + (f" ({dias_ausencia} ausencia(s))" if dias_ausencia else "") + f" · Salario diario: {fmt(salario_diario)}")
 
-                    incluir_bono = False
-                    bono_monto = 0
-                    if bono_pendiente:
-                        opcion_bono = st.radio(
-                            f"🎉 Bono semestral #{semestre_a_pagar} (sugerido: medio sueldo = {fmt(round(emp['salario_mensual']/2))})",
-                            ["✅ Incluir en este pago", "❌ No incluir (ya se dio antes / omitir)"],
-                            horizontal=True, key=f"bono_chk_{eid}"
-                        )
-                        incluir_bono = opcion_bono.startswith("✅")
-                        if incluir_bono:
-                            bono_monto = st.number_input(
-                                "Monto del bono ($)", min_value=0,
-                                value=round(emp["salario_mensual"] / 2), step=10000, key=f"bono_monto_{eid}",
-                                help="Ajústalo si la contadora te da un valor distinto a medio sueldo."
-                            )
-                    total_n = monto_base + bono_monto
+                    total_n = monto_base
 
                     acumulado_adel_n = 0
                     adelantos_aplicables_n = []
@@ -4650,7 +4618,7 @@ elif st.session_state.vista == "nomina" and st.session_state.es_admin:
                     if st.button(f"💾 Registrar pago — {emp['nombre']}", key=f"btn_pago_{eid}", disabled=ya_pagado):
                         if _registrar_pago_nomina(
                             emp, periodo_ini_n, periodo_calculo_n, dias_trab, salario_diario,
-                            monto_base, bono_monto, semestre_a_pagar if incluir_bono else None,
+                            monto_base, 0, None,
                             acumulado_adel_n, adelantos_aplicables_n
                         ):
                             st.session_state.ok_nomina = True
