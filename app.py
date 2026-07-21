@@ -342,6 +342,34 @@ def _pendiente_creditos_antiguos(f_ini, f_fin, canal=None):
     raw = sb_get("creditos", filtro) or []
     return sum(max(0.0, float(r["total"]) - float(r.get("pagado", 0) or 0)) for r in raw)
 
+def _ingreso_creditos_mes_anterior(primer_dia_mes, ultimo_dia_mes):
+    """De los créditos originados en el mes ANTERIOR a [primer_dia_mes, ultimo_dia_mes],
+    cuánto se cobró (pagos_credito) durante este mes. Sirve para el reporte mensual:
+    'de lo que quedó debiendo el mes pasado, cuánto entró este mes'."""
+    if primer_dia_mes.month == 1:
+        anio_prev, mes_prev = primer_dia_mes.year - 1, 12
+    else:
+        anio_prev, mes_prev = primer_dia_mes.year, primer_dia_mes.month - 1
+    primer_dia_prev = date(anio_prev, mes_prev, 1)
+    ultimo_dia_prev = primer_dia_mes - timedelta(days=1)
+
+    raw_pg = sb_get("pagos_credito", f"select=monto,tipo,factura_id,credito_id&fecha=gte.{primer_dia_mes}&fecha=lte.{ultimo_dia_mes}") or []
+    if not raw_pg:
+        return 0.0
+
+    raw_v_prev = sb_get("ventas", f"select=factura_id&fecha=gte.{primer_dia_prev}&fecha=lte.{ultimo_dia_prev}") or []
+    fids_prev = {r["factura_id"] for r in raw_v_prev if r.get("factura_id")}
+    raw_c_prev = sb_get("creditos", f"select=id&fecha=gte.{primer_dia_prev}&fecha=lte.{ultimo_dia_prev}") or []
+    ids_prev = {r["id"] for r in raw_c_prev}
+
+    total = 0.0
+    for r in raw_pg:
+        if r.get("tipo") == "venta" and r.get("factura_id") in fids_prev:
+            total += float(r["monto"])
+        elif r.get("tipo") == "manual" and r.get("credito_id") in ids_prev:
+            total += float(r["monto"])
+    return total
+
 def calcular_cobros_periodo(f_ini, f_fin):
     """Dinero realmente cobrado entre f_ini y f_fin — ventas nuevas del período
     MÁS créditos viejos (de cualquier fecha) que se cobraron dentro del período.
@@ -3989,11 +4017,17 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
                     mostrar_facturas_seleccionables(df_carro_r, "rango_carro")
 
     with sub_r3:
-        st.markdown('<div class="section-label">Reporte del mes actual</div>', unsafe_allow_html=True)
+        st.markdown('<div class="section-label">Reporte del mes</div>', unsafe_allow_html=True)
         hoy_dt = datetime.now(COL_TZ)
-        primer_dia = date(hoy_dt.year, hoy_dt.month, 1)
-        ultimo_dia = hoy_dt.date()
-        nombre_mes = hoy_dt.strftime("%B %Y").capitalize()
+        mes_sel = st.date_input("Mes a consultar", value=hoy_dt.date().replace(day=1), key="mes_reporte_sel")
+        primer_dia = date(mes_sel.year, mes_sel.month, 1)
+        if mes_sel.month == 12:
+            primer_dia_sig = date(mes_sel.year + 1, 1, 1)
+        else:
+            primer_dia_sig = date(mes_sel.year, mes_sel.month + 1, 1)
+        ultimo_dia_mes = primer_dia_sig - timedelta(days=1)
+        ultimo_dia = min(ultimo_dia_mes, hoy_dt.date())
+        nombre_mes = primer_dia.strftime("%B %Y").capitalize()
         st.caption(f"Resumen automático de {nombre_mes}")
 
         raw_prod_mes = sb_get("produccion", f"select=cantidad&fecha=gte.{primer_dia}&fecha=lte.{ultimo_dia}")
@@ -4003,7 +4037,7 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
         cobro_creditos_mes = cobros_mes["cobro_creditos_total"]
 
         if not raw_mes and cobro_creditos_mes == 0:
-            st.info("Aún no hay ventas este mes.")
+            st.info("Aún no hay ventas ese mes.")
         else:
             df_mes = pd.DataFrame(raw_mes) if raw_mes else pd.DataFrame()
             bolsas_mes  = int(df_mes["cantidad"].sum()) if not df_mes.empty else 0
@@ -4014,15 +4048,22 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
             cobrado_mes   = sum(f["abono"] for f in facturas_mes.values()) + cobro_creditos_mes
             pendiente_mes = sum(f["saldo"] for f in facturas_mes.values()) + _pendiente_creditos_antiguos(primer_dia, ultimo_dia)
             promedio_dia  = cobrado_mes / dias_mes if dias_mes > 0 else 0
+            ingreso_credito_mes_ant = _ingreso_creditos_mes_anterior(primer_dia, ultimo_dia_mes)
 
             st.markdown(f"""
             <div class="metric-row">
                 <div class="metric-box metric-green"><div class="val">{fmt(cobrado_mes)}</div><div class="lbl">Cobrado del mes</div></div>
                 <div class="metric-box metric-blue"><div class="val">{bolsas_mes}</div><div class="lbl">Bolsas vendidas</div></div>
                 <div class="metric-box metric-yellow"><div class="val">{fmt(promedio_dia)}</div><div class="lbl">Promedio diario</div></div>
-                <div class="metric-box metric-red"><div class="val">{fmt(pendiente_mes)}</div><div class="lbl">Pendiente en créditos</div></div>
+                <div class="metric-box metric-red"><div class="val">{fmt(pendiente_mes)}</div><div class="lbl">Créditos que quedaron ese mes</div></div>
             </div>""", unsafe_allow_html=True)
-            st.caption("💰 \"Cobrado\" incluye ventas del mes y créditos viejos cobrados este mes. Los créditos sin pagar se muestran aparte.")
+            st.caption("💰 \"Cobrado\" incluye ventas del mes y créditos viejos cobrados este mes. \"Créditos que quedaron ese mes\" es lo que sigue debiendo, a hoy, de lo vendido a crédito en ese mes.")
+
+            st.markdown(f"""
+            <div class="metric-row">
+                <div class="metric-box metric-blue"><div class="val">{fmt(ingreso_credito_mes_ant)}</div><div class="lbl">Ingreso este mes de créditos del mes anterior</div></div>
+            </div>""", unsafe_allow_html=True)
+            st.caption("📥 De lo que quedó debiendo el mes anterior, cuánto entró en efectivo durante este mes (según la fecha real del pago, no la fecha de la venta).")
 
             # Bolsas regaladas en el mes, valoradas al precio normal — no mueven caja.
             reg_mes = [r for r in raw_mes if r.get("canal") in ("Regalo", "Regalo Fábrica")]
