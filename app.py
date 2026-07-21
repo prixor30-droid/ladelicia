@@ -2606,8 +2606,13 @@ elif st.session_state.vista == "recibo":
             col_si, col_no = st.columns(2)
             if col_si.button("✅ Sí, eliminar", key="btn_confirmar_elim"):
                 # Obtener todos los registros de la factura
-                regs = sb_get("ventas", f"select=sabor,cantidad,canal&factura_id=eq.{fid_recibo}")
+                regs = sb_get("ventas", f"select=sabor,cantidad,canal,abono&factura_id=eq.{fid_recibo}")
                 if regs:
+                    # Si la factura ya tenía un abono cobrado, esa plata ya está físicamente
+                    # en caja — hay que preservarla como ingreso manual antes de borrar la
+                    # venta, si no Arqueo deja de contarla para siempre (encontrado 2026-07-21:
+                    # $40.000 de diferencia en Arqueo por una factura eliminada con abono).
+                    abono_previo_elim = float(regs[0].get("abono", 0) or 0)
                     for r in regs:
                         cant = int(r.get("cantidad", 0))
                         sabor = r.get("sabor", "")
@@ -2619,6 +2624,12 @@ elif st.session_state.vista == "recibo":
                                 agregar_stock(sabor, cant)
                     # Eliminar todos los registros de la factura
                     sb_delete("ventas", f"factura_id=eq.{fid_recibo}")
+                    if abono_previo_elim > 0:
+                        sb_post("caja_ingresos", {
+                            "fecha": fecha_hoy(), "hora": ahora(),
+                            "concepto": f"Abono ya cobrado de factura eliminada — {cliente_recibo}",
+                            "valor": abono_previo_elim, "categoria": "Otro ingreso"
+                        })
                 _registrar_auditoria_factura(
                     fid_recibo, "Eliminar factura",
                     f"{cliente_recibo} · {fmt(sum(totales_recibo.values()))}",
@@ -3678,6 +3689,29 @@ elif st.session_state.vista == "caja" and st.session_state.es_admin:
             if ok_arq:
                 st.markdown(f'<div class="success-toast">{ICO_CHECK} Arqueo guardado.</div>', unsafe_allow_html=True)
                 time.sleep(0.3); st.rerun()
+
+        st.markdown('<div class="section-label">📊 Resumen de diferencias (sobra/falta)</div>', unsafe_allow_html=True)
+        st.caption("Suma cuánto sobró y cuánto faltó en total durante el rango que elijas — por ejemplo, todo el mes o todo el año.")
+        col_ra1, col_ra2 = st.columns(2)
+        f_ini_ra = col_ra1.date_input("Desde", value=hoy_caja.replace(day=1), key="arq_resumen_ini")
+        f_fin_ra = col_ra2.date_input("Hasta", value=hoy_caja, key="arq_resumen_fin")
+
+        raw_arq_rango = sb_get("arqueos_caja", f"select=diferencia&fecha=gte.{f_ini_ra}&fecha=lte.{f_fin_ra}") or []
+        total_sobra_ra = sum(float(r["diferencia"]) for r in raw_arq_rango if float(r["diferencia"]) > 0)
+        total_falta_ra = sum(-float(r["diferencia"]) for r in raw_arq_rango if float(r["diferencia"]) < 0)
+        neto_ra = total_sobra_ra - total_falta_ra
+        color_neto_ra = "metric-green" if neto_ra >= 0 else "metric-red"
+
+        st.markdown(f"""
+        <div class="metric-row">
+            <div class="metric-box metric-green"><div class="val">{fmt(total_sobra_ra)}</div><div class="lbl">Total sobrante</div></div>
+            <div class="metric-box metric-red"><div class="val">{fmt(total_falta_ra)}</div><div class="lbl">Total faltante</div></div>
+            <div class="metric-box {color_neto_ra}"><div class="val">{fmt(neto_ra)}</div><div class="lbl">Neto del período</div></div>
+            <div class="metric-box metric-blue"><div class="val">{len(raw_arq_rango)}</div><div class="lbl">Arqueos en el rango</div></div>
+        </div>
+        """, unsafe_allow_html=True)
+        if not raw_arq_rango:
+            st.caption("No hay arqueos guardados en ese rango.")
 
         st.markdown('<div class="section-label">Últimos arqueos</div>', unsafe_allow_html=True)
         raw_hist_arq = sb_get("arqueos_caja", "select=fecha,empleado,efectivo_esperado,efectivo_contado,diferencia&order=fecha.desc&limit=30") or []
