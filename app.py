@@ -1884,9 +1884,13 @@ elif st.session_state.vista == "produccion":
         })
         agregar_stock(sabor, cantidad)
         st.session_state.ok_prod = True
-        st.session_state.confirmar_prod = False
+        st.session_state.confirmar_prod = "❌ No confirmado"
 
-    confirmar_prod = st.checkbox(f"Confirmo: {cantidad_p} bolsas de {sabor_p}", key="confirmar_prod")
+    opcion_confirmar_prod = st.radio(
+        f"Confirmo: {cantidad_p} bolsas de {sabor_p}",
+        ["❌ No confirmado", "✅ Sí, confirmo"], horizontal=True, key="confirmar_prod"
+    )
+    confirmar_prod = opcion_confirmar_prod.startswith("✅")
     if st.button("✅ Registrar producción", key="btn_prod", disabled=not confirmar_prod,
                  on_click=_registrar_produccion, args=(empleado, sabor_p, cantidad_p)):
         time.sleep(0.3)
