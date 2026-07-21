@@ -3875,7 +3875,7 @@ elif st.session_state.vista == "caja" and st.session_state.es_admin:
             st.caption(f"⏳ Todavía no contado aquí: {', '.join(pendientes_msg)} — pero sí cuenta en \"Efectivo esperado\" de Arqueo de caja, que asume que ya se recibió todo el día.")
 
 elif st.session_state.vista == "resumen" and st.session_state.es_admin:
-    sub_r1, sub_r2, sub_r3, sub_r5, sub_r4 = st.tabs(["Hoy", "Por fechas", "📅 Mes", "💳 Créditos pagados", "💾 Exportar"])
+    sub_r1, sub_r2, sub_r3, sub_r5, sub_r4, sub_r6 = st.tabs(["Hoy", "Por fechas", "📅 Mes", "💳 Créditos pagados", "💾 Exportar", "📋 Créditos pendientes"])
 
     with sub_r1:
         st.markdown('<div class="section-label">Resumen del día</div>', unsafe_allow_html=True)
@@ -4242,6 +4242,16 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
                 st.download_button("⬇️ Descargar inventario PDF", pdf_bytes, f"inventario_{fecha_hoy()}.pdf", "application/pdf", key="dl_pdf_i")
 
         st.markdown(f'<div class="warn-box">{ICO_BULB} Guarda estos archivos semanalmente como respaldo.</div>', unsafe_allow_html=True)
+
+    with sub_r6:
+        st.markdown('<div class="section-label">📋 Créditos pendientes de cobro</div>', unsafe_allow_html=True)
+        st.caption("Vista consolidada — lo mismo que aparece en Registrar venta → Créditos, pero de los dos canales en un solo lugar.")
+
+        st.markdown(f'<div class="section-label">{ICO_FACTORY} Fábrica</div>', unsafe_allow_html=True)
+        mostrar_creditos_pendientes("Fábrica")
+
+        st.markdown(f'<div class="section-label">{ICO_TRUCK} Carro (Edison y Javier)</div>', unsafe_allow_html=True)
+        mostrar_creditos_pendientes("Carro")
 
 # ══════════════════════════════════════════════════════════════════════════════
 # VISTA: NÓMINA (solo admin) — empleados, ausencias, cálculo de quincena y
