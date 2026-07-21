@@ -4045,19 +4045,27 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
             prod_mes    = sum(r["cantidad"] for r in raw_prod_mes) if raw_prod_mes else 0
 
             facturas_mes = cobros_mes["facturas"]
-            cobrado_mes   = sum(f["abono"] for f in facturas_mes.values()) + cobro_creditos_mes
+            cobrado_ventas_mes = sum(f["abono"] for f in facturas_mes.values())
+            cobrado_mes   = cobrado_ventas_mes + cobro_creditos_mes
             pendiente_mes = sum(f["saldo"] for f in facturas_mes.values()) + _pendiente_creditos_antiguos(primer_dia, ultimo_dia)
             promedio_dia  = cobrado_mes / dias_mes if dias_mes > 0 else 0
             ingreso_credito_mes_ant = _ingreso_creditos_mes_anterior(primer_dia, ultimo_dia_mes)
 
             st.markdown(f"""
             <div class="metric-row">
-                <div class="metric-box metric-green"><div class="val">{fmt(cobrado_mes)}</div><div class="lbl">Cobrado del mes</div></div>
+                <div class="metric-box metric-green"><div class="val">{fmt(cobrado_ventas_mes)}</div><div class="lbl">Cobrado por ventas</div></div>
+                <div class="metric-box metric-blue"><div class="val">{fmt(cobro_creditos_mes)}</div><div class="lbl">Cobrado por créditos viejos</div></div>
+                <div class="metric-box metric-yellow"><div class="val">{fmt(cobrado_mes)}</div><div class="lbl">Total cobrado</div></div>
+            </div>""", unsafe_allow_html=True)
+            st.caption("💰 \"Cobrado por ventas\" es solo lo abonado en ventas hechas este mes. \"Cobrado por créditos viejos\" es dinero de deudas de meses anteriores (de cualquier mes) que entró en este mes — no se mezclan.")
+
+            st.markdown(f"""
+            <div class="metric-row">
                 <div class="metric-box metric-blue"><div class="val">{bolsas_mes}</div><div class="lbl">Bolsas vendidas</div></div>
                 <div class="metric-box metric-yellow"><div class="val">{fmt(promedio_dia)}</div><div class="lbl">Promedio diario</div></div>
                 <div class="metric-box metric-red"><div class="val">{fmt(pendiente_mes)}</div><div class="lbl">Créditos que quedaron ese mes</div></div>
             </div>""", unsafe_allow_html=True)
-            st.caption("💰 \"Cobrado\" incluye ventas del mes y créditos viejos cobrados este mes. \"Créditos que quedaron ese mes\" es lo que sigue debiendo, a hoy, de lo vendido a crédito en ese mes.")
+            st.caption("\"Créditos que quedaron ese mes\" es lo que sigue debiendo, a hoy, de lo vendido a crédito en ese mes.")
 
             st.markdown(f"""
             <div class="metric-row">
