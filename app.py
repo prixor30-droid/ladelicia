@@ -1218,12 +1218,12 @@ logo_recibo_html = (
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-html,body,[class*="css"],.stApp{font-family:'Inter',sans-serif !important;background-color:#F0F4FF !important;color:#0D1B2A !important;font-size:18px;}
+html,body,[class*="css"],.stApp{font-family:'Inter',sans-serif !important;background-color:#F0F4FF !important;color:#0D1B2A !important;font-size:20px;}
 #MainMenu,footer,header{visibility:hidden;}
 .block-container{padding-top:1rem;padding-bottom:3rem;max-width:500px;margin:0 auto;}
 @media (min-width: 768px){
   .block-container{max-width:900px;}
-  html,body{font-size:19px;}
+  html,body{font-size:21px;}
   .brand-header p{font-size:0.95rem;}
   .metric-box .val{font-size:1.6rem;}
   .metric-box .lbl{font-size:0.8rem;}
@@ -1233,7 +1233,7 @@ html,body,[class*="css"],.stApp{font-family:'Inter',sans-serif !important;backgr
 }
 @media (min-width: 1200px){
   .block-container{max-width:1100px;}
-  html,body{font-size:20px;}
+  html,body{font-size:22px;}
   .metric-box .val{font-size:1.9rem;}
   .stButton>button{font-size:1.25rem !important;padding:20px !important;}
 }
