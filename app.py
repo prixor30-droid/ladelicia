@@ -3890,6 +3890,16 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
             cobrado_fab   = sum(f["abono"] for f in facturas_hoy.values() if f["canal"] == "Fábrica") + cobro_creditos_hoy_por_canal.get("Fábrica", 0.0)
             cobrado_carro = sum(f["abono"] for f in facturas_hoy.values() if f["canal"] == "Carro")   + cobro_creditos_hoy_por_canal.get("Carro", 0.0)
             pendiente_hoy = sum(f["saldo"] for f in facturas_hoy.values()) + _pendiente_creditos_antiguos(fecha_hoy(), fecha_hoy())
+            total_cobrado_hoy = cobrado_fab + cobrado_carro
+
+            # Egresos + ingresos manuales de hoy, mismo criterio que Caja→Resumen,
+            # para que el neto de aquí coincida con el "Saldo caja" de allá.
+            raw_mp_hoy = sb_get("materia_prima", f"select=abono&fecha=eq.{fecha_hoy()}") or []
+            raw_eg_hoy = sb_get("caja_egresos", f"select=valor&fecha=eq.{fecha_hoy()}") or []
+            raw_ing_man_hoy = sb_get("caja_ingresos", f"select=valor&fecha=eq.{fecha_hoy()}") or []
+            egresos_hoy = sum(float(r["abono"]) for r in raw_mp_hoy) + sum(float(r["valor"]) for r in raw_eg_hoy)
+            ingresos_manuales_hoy = sum(float(r["valor"]) for r in raw_ing_man_hoy)
+            neto_hoy = total_cobrado_hoy + ingresos_manuales_hoy - egresos_hoy
 
             # Bolsas regaladas hoy, valoradas al precio normal — no mueven caja (total=0
             # en la venta), así que sin esto el costo de lo regalado no se veía en ninguna parte.
@@ -3901,10 +3911,18 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
             <div class="metric-row">
                 <div class="metric-box metric-blue"><div class="val">{fmt(cobrado_fab)}</div><div class="lbl">Fábrica</div></div>
                 <div class="metric-box metric-yellow"><div class="val">{fmt(cobrado_carro)}</div><div class="lbl">Carro</div></div>
-                <div class="metric-box metric-green"><div class="val">{fmt(cobrado_fab+cobrado_carro)}</div><div class="lbl">Total cobrado</div></div>
+                <div class="metric-box metric-green"><div class="val">{fmt(total_cobrado_hoy)}</div><div class="lbl">Total cobrado</div></div>
                 <div class="metric-box metric-red"><div class="val">{fmt(pendiente_hoy)}</div><div class="lbl">Pendiente en créditos</div></div>
             </div>""", unsafe_allow_html=True)
             st.caption("💰 \"Total cobrado\" incluye ventas de hoy y créditos viejos cobrados hoy. Los créditos sin pagar aparecen aparte, en \"Pendiente en créditos\".")
+
+            color_neto_hoy = "metric-green" if neto_hoy >= 0 else "metric-red"
+            st.markdown(f"""
+            <div class="metric-row">
+                <div class="metric-box metric-yellow"><div class="val">{fmt(egresos_hoy)}</div><div class="lbl">Egresos de hoy</div></div>
+                <div class="metric-box {color_neto_hoy}"><div class="val">{fmt(neto_hoy)}</div><div class="lbl">Neto (debe coincidir con Caja)</div></div>
+            </div>""", unsafe_allow_html=True)
+            st.caption("📊 Neto = Total cobrado + ingresos manuales − egresos de hoy — mismo cálculo que \"Saldo caja\" en Caja → Resumen, para que ambos coincidan.")
 
             if bolsas_reg_hoy > 0:
                 st.markdown(
@@ -3960,12 +3978,22 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
             pendiente_fab_r = sum(f["saldo"] for f in facturas_rango.values() if f["canal"] == "Fábrica") + _pendiente_creditos_antiguos(f_ini, f_fin, "Fábrica")
             pendiente_carro_r = sum(f["saldo"] for f in facturas_rango.values() if f["canal"] == "Carro") + _pendiente_creditos_antiguos(f_ini, f_fin, "Carro")
             pendiente_r = pendiente_fab_r + pendiente_carro_r
+            total_cobrado_r = cobrado_fab_r + cobrado_carro_r
+
+            # Egresos + ingresos manuales del rango, mismo criterio que Caja→Resumen,
+            # para que el neto de aquí coincida con el "Saldo caja" de allá.
+            raw_mp_r = sb_get("materia_prima", f"select=abono&fecha=gte.{f_ini}&fecha=lte.{f_fin}") or []
+            raw_eg_r = sb_get("caja_egresos", f"select=valor&fecha=gte.{f_ini}&fecha=lte.{f_fin}") or []
+            raw_ing_man_r = sb_get("caja_ingresos", f"select=valor&fecha=gte.{f_ini}&fecha=lte.{f_fin}") or []
+            egresos_r = sum(float(r["abono"]) for r in raw_mp_r) + sum(float(r["valor"]) for r in raw_eg_r)
+            ingresos_manuales_r = sum(float(r["valor"]) for r in raw_ing_man_r)
+            neto_r = total_cobrado_r + ingresos_manuales_r - egresos_r
 
             st.markdown(f"""
             <div class="metric-row">
                 <div class="metric-box metric-blue"><div class="val">{fmt(cobrado_fab_r)}</div><div class="lbl">Fábrica</div></div>
                 <div class="metric-box metric-yellow"><div class="val">{fmt(cobrado_carro_r)}</div><div class="lbl">Carro</div></div>
-                <div class="metric-box metric-green"><div class="val">{fmt(cobrado_fab_r+cobrado_carro_r)}</div><div class="lbl">Total cobrado</div></div>
+                <div class="metric-box metric-green"><div class="val">{fmt(total_cobrado_r)}</div><div class="lbl">Total cobrado</div></div>
                 <div class="metric-box metric-red"><div class="val">{fmt(pendiente_r)}</div><div class="lbl">Pendiente en créditos</div></div>
             </div>""", unsafe_allow_html=True)
             st.markdown(f"""
@@ -3974,6 +4002,14 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
                 <div class="metric-box metric-yellow"><div class="val">{dias_r}</div><div class="lbl">Días</div></div>
             </div>""", unsafe_allow_html=True)
             st.caption("💰 \"Cobrado\" es el dinero que efectivamente entró. Los créditos sin pagar se muestran aparte.")
+
+            color_neto_r = "metric-green" if neto_r >= 0 else "metric-red"
+            st.markdown(f"""
+            <div class="metric-row">
+                <div class="metric-box metric-yellow"><div class="val">{fmt(egresos_r)}</div><div class="lbl">Egresos del rango</div></div>
+                <div class="metric-box {color_neto_r}"><div class="val">{fmt(neto_r)}</div><div class="lbl">Neto (debe coincidir con Caja)</div></div>
+            </div>""", unsafe_allow_html=True)
+            st.caption("📊 Neto = Total cobrado + ingresos manuales − egresos del rango — mismo cálculo que \"Saldo caja\" en Caja → Resumen, para que ambos coincidan.")
 
             # Bolsas regaladas en el rango, valoradas al precio normal — no mueven caja.
             reg_r = [r for r in raw_rango if r.get("canal") in ("Regalo", "Regalo Fábrica")]
@@ -4051,6 +4087,15 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
             promedio_dia  = cobrado_mes / dias_mes if dias_mes > 0 else 0
             ingreso_credito_mes_ant = _ingreso_creditos_mes_anterior(primer_dia, ultimo_dia_mes)
 
+            # Egresos + ingresos manuales del mes, mismo criterio que Caja→Resumen,
+            # para que el neto de aquí coincida con el "Saldo caja" de allá.
+            raw_mp_mes = sb_get("materia_prima", f"select=abono&fecha=gte.{primer_dia}&fecha=lte.{ultimo_dia}") or []
+            raw_eg_mes = sb_get("caja_egresos", f"select=valor&fecha=gte.{primer_dia}&fecha=lte.{ultimo_dia}") or []
+            raw_ing_man_mes = sb_get("caja_ingresos", f"select=valor&fecha=gte.{primer_dia}&fecha=lte.{ultimo_dia}") or []
+            egresos_mes = sum(float(r["abono"]) for r in raw_mp_mes) + sum(float(r["valor"]) for r in raw_eg_mes)
+            ingresos_manuales_mes = sum(float(r["valor"]) for r in raw_ing_man_mes)
+            neto_mes = cobrado_mes + ingresos_manuales_mes - egresos_mes
+
             st.markdown(f"""
             <div class="metric-row">
                 <div class="metric-box metric-green"><div class="val">{fmt(cobrado_ventas_mes)}</div><div class="lbl">Cobrado por ventas</div></div>
@@ -4058,6 +4103,14 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
                 <div class="metric-box metric-yellow"><div class="val">{fmt(cobrado_mes)}</div><div class="lbl">Total cobrado</div></div>
             </div>""", unsafe_allow_html=True)
             st.caption("💰 \"Cobrado por ventas\" es solo lo abonado en ventas hechas este mes. \"Cobrado por créditos viejos\" es dinero de deudas de meses anteriores (de cualquier mes) que entró en este mes — no se mezclan.")
+
+            color_neto_mes = "metric-green" if neto_mes >= 0 else "metric-red"
+            st.markdown(f"""
+            <div class="metric-row">
+                <div class="metric-box metric-yellow"><div class="val">{fmt(egresos_mes)}</div><div class="lbl">Egresos del mes</div></div>
+                <div class="metric-box {color_neto_mes}"><div class="val">{fmt(neto_mes)}</div><div class="lbl">Neto (debe coincidir con Caja)</div></div>
+            </div>""", unsafe_allow_html=True)
+            st.caption("📊 Neto = Total cobrado + ingresos manuales − egresos del mes — mismo cálculo que \"Saldo caja\" en Caja → Resumen, para que ambos coincidan.")
 
             st.markdown(f"""
             <div class="metric-row">
