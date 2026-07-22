@@ -5078,9 +5078,10 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
     pendiente_manual_inv = _pendiente_creditos_antiguos(primer_dia_inv, ultimo_dia_inv)
     if pendiente_manual_inv > 0:
         filas_inv.append({
-            "Referencia": "", "Inventario inicial": "", "Producción": "", "Salidas": "", "Ajustes manuales": "", "Saldo": "",
+            "Referencia": "Créditos manuales antiguos (sin sabor)",
+            "Inventario inicial": "", "Producción": "", "Salidas": "", "Ajustes manuales": "", "Saldo": "",
             "Valor en inventario": "", "Ingresos cobrados": "",
-            "Créditos pendientes (sin recibir)": fmt(round(pendiente_manual_inv)) + " — créditos manuales antiguos, sin sabor (cargados con \"➕ Cargar crédito antiguo\")",
+            "Créditos pendientes (sin recibir)": fmt(round(pendiente_manual_inv)),
             "Total ingresos": "",
         })
 
@@ -5092,9 +5093,10 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
     cobro_creditos_mes_inv = cobros_inv_mes["cobro_creditos_total"]
     if cobro_creditos_mes_inv > 0:
         filas_inv.append({
-            "Referencia": "", "Inventario inicial": "", "Producción": "", "Salidas": "", "Ajustes manuales": "", "Saldo": "",
+            "Referencia": "Cobro de créditos este mes (sin sabor)",
+            "Inventario inicial": "", "Producción": "", "Salidas": "", "Ajustes manuales": "", "Saldo": "",
             "Valor en inventario": "",
-            "Ingresos cobrados": fmt(round(cobro_creditos_mes_inv)) + " — cobro de créditos este mes (de cualquier origen, sin sabor asociado)",
+            "Ingresos cobrados": fmt(round(cobro_creditos_mes_inv)),
             "Créditos pendientes (sin recibir)": "",
             "Total ingresos": "",
         })
