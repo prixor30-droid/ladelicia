@@ -5078,7 +5078,13 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
     pendiente_manual_inv = _pendiente_creditos_antiguos(primer_dia_inv, ultimo_dia_inv)
     if pendiente_manual_inv > 0:
         filas_inv.append({
-            "Referencia": "Créditos manuales antiguos (sin sabor)",
+            "Referencia": "Créditos manuales antiguos (sin sabor):",
+            "Inventario inicial": "", "Producción": "", "Salidas": "", "Ajustes manuales": "", "Saldo": "",
+            "Valor en inventario": "", "Ingresos cobrados": "", "Créditos pendientes (sin recibir)": "",
+            "Total ingresos": "",
+        })
+        filas_inv.append({
+            "Referencia": "",
             "Inventario inicial": "", "Producción": "", "Salidas": "", "Ajustes manuales": "", "Saldo": "",
             "Valor en inventario": "", "Ingresos cobrados": "",
             "Créditos pendientes (sin recibir)": fmt(round(pendiente_manual_inv)),
@@ -5093,7 +5099,13 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
     cobro_creditos_mes_inv = cobros_inv_mes["cobro_creditos_total"]
     if cobro_creditos_mes_inv > 0:
         filas_inv.append({
-            "Referencia": "Cobro de créditos este mes (sin sabor)",
+            "Referencia": "Cobro de créditos este mes (sin sabor):",
+            "Inventario inicial": "", "Producción": "", "Salidas": "", "Ajustes manuales": "", "Saldo": "",
+            "Valor en inventario": "", "Ingresos cobrados": "",
+            "Créditos pendientes (sin recibir)": "", "Total ingresos": "",
+        })
+        filas_inv.append({
+            "Referencia": "",
             "Inventario inicial": "", "Producción": "", "Salidas": "", "Ajustes manuales": "", "Saldo": "",
             "Valor en inventario": "",
             "Ingresos cobrados": fmt(round(cobro_creditos_mes_inv)),
@@ -5169,10 +5181,11 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
             Spacer(1, 0.4*cm),
         ]
         cols = list(df.columns)
-        data = [cols] + df.astype(str).values.tolist()
+        filas_str = df.astype(str).replace("nan", "").values.tolist()
+        data = [cols] + filas_str
         col_width = (landscape(A4)[0] - 2*cm) / len(cols)
         tabla_pdf = Table(data, colWidths=[col_width]*len(cols), repeatRows=1)
-        tabla_pdf.setStyle(TableStyle([
+        estilo_cmds = [
             ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#1565C0")),
             ("TEXTCOLOR",  (0,0), (-1,0), colors.white),
             ("FONTNAME",   (0,0), (-1,0), "Helvetica-Bold"),
@@ -5181,7 +5194,14 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
             ("GRID",       (0,0), (-1,-1), 0.3, colors.HexColor("#BBDEFB")),
             ("VALIGN",     (0,0), (-1,-1), "MIDDLE"),
             ("PADDING",    (0,0), (-1,-1), 4),
-        ]))
+        ]
+        # Filas-etiqueta (solo texto en la primera columna, el resto vacío) — se
+        # les da el ancho de 2 columnas para que el texto no se salga del recuadro.
+        for i, fila_r in enumerate(filas_str, start=1):
+            if fila_r[0] and all(v == "" for v in fila_r[1:]):
+                estilo_cmds.append(("SPAN", (0, i), (1, i)))
+                estilo_cmds.append(("FONTNAME", (0, i), (0, i), "Helvetica-Bold"))
+        tabla_pdf.setStyle(TableStyle(estilo_cmds))
         elements.append(tabla_pdf)
         doc.build(elements)
         buf.seek(0)
