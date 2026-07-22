@@ -5002,6 +5002,7 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
         pendiente_map_inv[s] = pendiente_map_inv.get(s, 0) + fac_r["saldo"] * share_r
 
     filas_inv = []
+    saldo_calc_map_inv = {}
     tot_inicial_inv = tot_prod_inv = tot_salidas_inv = tot_saldo_inv = tot_costo_inv = 0.0
     for sabor_r in SABORES_LISTA:
         inicial_r = inicial_map_inv.get(sabor_r, 0)
@@ -5011,6 +5012,7 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
         pendiente_r = pendiente_map_inv.get(sabor_r, 0)
         ingreso_total_r = cobrado_r + pendiente_r
         saldo_r = inicial_r + prod_r - salidas_r
+        saldo_calc_map_inv[sabor_r] = saldo_r
         precio_pond_r = (ingreso_total_r / salidas_r) if salidas_r > 0 else PRODUCTOS.get(sabor_r, 0)
         costo_inv_r = saldo_r * precio_pond_r
 
@@ -5059,15 +5061,32 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
             "Total ingresos": "",
         })
 
+    # Plata que SÍ entró este mes por cobro de créditos (de cualquier origen — de
+    # una venta con sabor, o de un crédito manual antiguo, sin importar de qué mes
+    # era la deuda) — "Ingresos cobrados" de arriba solo cuenta lo que se pagó AL
+    # MOMENTO de la venta, así que esto es plata real que faltaría si no se muestra
+    # aparte. Mismo dato que "cobro_creditos_total" usado en Resumen → Mes.
+    cobro_creditos_mes_inv = cobros_inv_mes["cobro_creditos_total"]
+    if cobro_creditos_mes_inv > 0:
+        filas_inv.append({
+            "Referencia": "", "Inventario inicial": "", "Producción": "", "Salidas": "", "Saldo": "",
+            "Valor en inventario": "",
+            "Ingresos cobrados": fmt(round(cobro_creditos_mes_inv)) + " — cobro de créditos este mes (de cualquier origen, sin sabor asociado)",
+            "Créditos pendientes (sin recibir)": "",
+            "Total ingresos": "",
+        })
+
     df_inv_mes = pd.DataFrame(filas_inv)
     st.caption(
-        "💡 \"Ingresos cobrados\" es la plata real que entró de esas ventas (mismo cálculo que \"Ingresos "
-        "por ventas\" en Resumen → Mes, coincide exacto). \"Créditos pendientes (sin recibir)\" es lo que "
-        "aún deben de lo vendido ese mes — sumadas, dan el valor total facturado. La fila \"Total\" + la fila "
-        "de créditos manuales antiguos (si aparece) sí coincide exacto con \"Créditos pendientes por cobrar\" "
-        "de Resumen → Mes. \"Salidas\" solo cuenta ventas reales (Fábrica, Carro, Cambio), no regalos. "
-        "\"Valor en inventario\" usa el precio promedio real ponderado de lo vendido ese mes (Total ingresos "
-        "÷ Salidas). \"Saldo\" = Inventario inicial (del último cierre guardado) + Producción − Salidas."
+        "💡 \"Ingresos cobrados\" (por sabor) es solo lo que pagaron AL MOMENTO de esa venta — si después "
+        "alguien abona un crédito viejo, esa plata aparece aparte, abajo del todo, sin sabor asociado (no hay "
+        "forma de saber a cuál venta específica corresponde ese abono). Sumando: fila \"Total\" (Ingresos "
+        "cobrados) + fila \"cobro de créditos este mes\" (si aparece) = toda la plata real que entró ese mes, "
+        "coincide con Resumen → Mes. Igual para pendientes: fila \"Total\" (Créditos pendientes) + fila de "
+        "\"créditos manuales antiguos\" (si aparece) = \"Créditos pendientes por cobrar\" de Resumen. "
+        "\"Salidas\" solo cuenta ventas reales (Fábrica, Carro, Cambio), no regalos. \"Valor en inventario\" "
+        "usa el precio promedio real ponderado de lo vendido ese mes (Total ingresos ÷ Salidas). \"Saldo\" = "
+        "Inventario inicial (del último cierre guardado) + Producción − Salidas."
     )
     if not raw_inicial_inv:
         st.markdown(
@@ -5075,6 +5094,32 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
             f'{primer_dia_inv.strftime("%B %Y")} — el "Inventario inicial" está en 0 para todos los sabores.</div>',
             unsafe_allow_html=True
         )
+
+    # --- Diferencia vs. stock real (solo tiene sentido comparar contra el mes en
+    # curso — para un mes ya cerrado, el stock actual acumula meses de más). ---
+    hoy_inv = datetime.now(COL_TZ).date()
+    if mes_inv_sel.year == hoy_inv.year and mes_inv_sel.month == hoy_inv.month:
+        raw_stock_actual_inv = sb_get("inventario", "select=sabor,stock") or []
+        stock_actual_map_inv = {r["sabor"]: r["stock"] for r in raw_stock_actual_inv}
+        filas_diff_inv = []
+        for sabor_r in SABORES_LISTA:
+            saldo_calc_r = saldo_calc_map_inv.get(sabor_r, 0)
+            stock_real_r = stock_actual_map_inv.get(sabor_r, 0)
+            diff_r = stock_real_r - saldo_calc_r
+            if diff_r != 0:
+                filas_diff_inv.append({
+                    "Sabor": sabor_r, "Saldo calculado": saldo_calc_r,
+                    "Stock real actual": stock_real_r, "Diferencia": diff_r
+                })
+        if filas_diff_inv:
+            st.markdown('<div class="section-label">🔍 Diferencia vs. stock real</div>', unsafe_allow_html=True)
+            st.caption(
+                "Solo se compara contra el mes en curso. Si hay diferencia, normalmente es por devoluciones "
+                "o un \"Ajustar stock manualmente\" — ninguno de los dos pasa por Producción ni Salidas, así "
+                "que no los ve la fórmula del Saldo. Se corrige solo la próxima vez que uses \"Cerrar "
+                "inventario del mes\" (usa el stock real, no la fórmula)."
+            )
+            tabla_view(pd.DataFrame(filas_diff_inv))
 
     def _pdf_inv_mes(df, nombre_mes_pdf):
         from reportlab.lib.pagesizes import A4, landscape
