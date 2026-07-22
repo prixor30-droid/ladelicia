@@ -1746,6 +1746,7 @@ defaults = {
     "insumo_sel": None,
     "categoria_mp": None,
     "ok_stock": False,
+    "ok_dan": False,
     "mostrar_calc": False,
 }
 for k, v in defaults.items():
@@ -2060,6 +2061,26 @@ elif st.session_state.vista == "produccion":
     if st.session_state.ok_stock:
         st.markdown(f'<div class="success-toast">{ICO_CHECK} Stock ajustado.</div>', unsafe_allow_html=True)
         st.session_state.ok_stock = False
+
+    # Producto dañado / merma
+    st.markdown('<div class="section-label">🗑️ Registrar producto dañado</div>', unsafe_allow_html=True)
+    st.caption("Para cuando algo se daña o se pierde después de producido — solo dices cuánto, la app resta el stock sola (no hay que calcular el número final a mano).")
+    sabor_dan = st.selectbox("Sabor", SABORES_LISTA, key="sabor_dan")
+    stock_dan_disp = get_stock(sabor_dan)
+    cant_dan = st.number_input("Cantidad dañada", min_value=1, max_value=max(1, stock_dan_disp), value=1, step=1, key="cant_dan")
+    motivo_dan = st.text_input("Motivo (opcional)", key="motivo_dan", placeholder="Ej: se rompió el empaque, quedó rancio")
+    if st.button("🗑️ Registrar daño", key="btn_dan"):
+        sb_post("mermas_stock", {
+            "fecha": fecha_hoy(), "hora": ahora(), "sabor": sabor_dan,
+            "cantidad": cant_dan, "motivo": motivo_dan.strip(), "usuario": st.session_state.admin_actual
+        })
+        restar_stock(sabor_dan, cant_dan)
+        st.session_state.ok_dan = True
+        time.sleep(0.3)
+        st.rerun()
+    if st.session_state.ok_dan:
+        st.markdown(f'<div class="success-toast">{ICO_CHECK} Registrado — se descontó del stock.</div>', unsafe_allow_html=True)
+        st.session_state.ok_dan = False
 
 # ══════════════════════════════════════════════════════════════════════════════
 # VISTA: CARRO (Edison & Javier)
@@ -4966,11 +4987,13 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
         f_vent_inv = ex.submit(sb_get, "ventas", f"select=sabor,cantidad,total,canal,factura_id&fecha=gte.{primer_dia_inv}&fecha=lte.{ultimo_dia_inv}")
         f_dev_inv = ex.submit(sb_get, "devoluciones", f"select=sabor,cantidad&fecha=gte.{primer_dia_inv}&fecha=lte.{ultimo_dia_inv}")
         f_ajs_inv = ex.submit(sb_get, "ajustes_stock_manual", f"select=sabor,delta&fecha=gte.{primer_dia_inv}&fecha=lte.{ultimo_dia_inv}")
+        f_dan_inv = ex.submit(sb_get, "mermas_stock", f"select=sabor,cantidad&fecha=gte.{primer_dia_inv}&fecha=lte.{ultimo_dia_inv}")
     raw_inicial_inv = f_inicial_inv.result() or []
     raw_prod_inv = f_prod_inv.result() or []
     raw_vent_inv = f_vent_inv.result() or []
     raw_dev_inv = f_dev_inv.result() or []
     raw_ajs_inv = f_ajs_inv.result() or []
+    raw_dan_inv = f_dan_inv.result() or []
 
     # Mismo cálculo que Resumen → Mes, para que "Ingresos cobrados" y "Créditos
     # pendientes" coincidan exacto con esa pestaña.
@@ -4998,6 +5021,12 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
     for r in raw_ajs_inv:
         ajustes_map_inv[r["sabor"]] = ajustes_map_inv.get(r["sabor"], 0) + float(r["delta"])
 
+    # Producto dañado/merma — se resta aparte, no se mete en Salidas (no es venta,
+    # no genera ingreso, mezclarlo ahí distorsionaría el precio promedio ponderado).
+    mermas_map_inv = {}
+    for r in raw_dan_inv:
+        mermas_map_inv[r["sabor"]] = mermas_map_inv.get(r["sabor"], 0) + float(r["cantidad"])
+
     # El abono/saldo se guarda por FACTURA, no por sabor — para repartirlo por
     # referencia se reparte proporcional al peso de cada línea dentro del total
     # de su factura (una factura con varios sabores reparte su abono entre ellos
@@ -5023,16 +5052,17 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
 
     filas_inv = []
     saldo_calc_map_inv = {}
-    tot_inicial_inv = tot_prod_inv = tot_salidas_inv = tot_ajuste_inv = tot_saldo_inv = tot_costo_inv = 0.0
+    tot_inicial_inv = tot_prod_inv = tot_salidas_inv = tot_ajuste_inv = tot_merma_inv = tot_saldo_inv = tot_costo_inv = 0.0
     for sabor_r in SABORES_LISTA:
         inicial_r = inicial_map_inv.get(sabor_r, 0)
         prod_r = prod_map_inv.get(sabor_r, 0)
         salidas_r = salidas_map_inv.get(sabor_r, 0)
         ajuste_r = ajustes_map_inv.get(sabor_r, 0)
+        merma_r = mermas_map_inv.get(sabor_r, 0)
         cobrado_r = cobrado_map_inv.get(sabor_r, 0)
         pendiente_r = pendiente_map_inv.get(sabor_r, 0)
         ingreso_total_r = cobrado_r + pendiente_r
-        saldo_r = inicial_r + prod_r - salidas_r + ajuste_r
+        saldo_r = inicial_r + prod_r - salidas_r + ajuste_r - merma_r
         saldo_calc_map_inv[sabor_r] = saldo_r
         precio_pond_r = (ingreso_total_r / salidas_r) if salidas_r > 0 else PRODUCTOS.get(sabor_r, 0)
         costo_inv_r = saldo_r * precio_pond_r
@@ -5043,6 +5073,7 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
             "Producción": prod_r,
             "Salidas": salidas_r,
             "Ajustes manuales": ajuste_r,
+            "Mermas": merma_r,
             "Saldo": saldo_r,
             "Valor en inventario": fmt(round(costo_inv_r)),
             "Ingresos cobrados": fmt(round(cobrado_r)),
@@ -5050,7 +5081,7 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
             "Total ingresos": fmt(round(ingreso_total_r)),
         })
         tot_inicial_inv += inicial_r; tot_prod_inv += prod_r; tot_salidas_inv += salidas_r
-        tot_ajuste_inv += ajuste_r; tot_saldo_inv += saldo_r; tot_costo_inv += costo_inv_r
+        tot_ajuste_inv += ajuste_r; tot_merma_inv += merma_r; tot_saldo_inv += saldo_r; tot_costo_inv += costo_inv_r
 
     # El total de Ingresos cobrados / Créditos pendientes se saca directo de
     # calcular_cobros_periodo (no de la suma por sabor) para garantizar que
@@ -5064,6 +5095,7 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
         "Producción": tot_prod_inv,
         "Salidas": tot_salidas_inv,
         "Ajustes manuales": tot_ajuste_inv,
+        "Mermas": tot_merma_inv,
         "Saldo": tot_saldo_inv,
         "Valor en inventario": fmt(round(tot_costo_inv)),
         "Ingresos cobrados": fmt(round(tot_cobrado_inv)),
@@ -5079,13 +5111,13 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
     if pendiente_manual_inv > 0:
         filas_inv.append({
             "Referencia": "Créditos manuales antiguos (sin sabor):",
-            "Inventario inicial": "", "Producción": "", "Salidas": "", "Ajustes manuales": "", "Saldo": "",
+            "Inventario inicial": "", "Producción": "", "Salidas": "", "Ajustes manuales": "", "Mermas": "", "Saldo": "",
             "Valor en inventario": "", "Ingresos cobrados": "", "Créditos pendientes (sin recibir)": "",
             "Total ingresos": "",
         })
         filas_inv.append({
             "Referencia": "",
-            "Inventario inicial": "", "Producción": "", "Salidas": "", "Ajustes manuales": "", "Saldo": "",
+            "Inventario inicial": "", "Producción": "", "Salidas": "", "Ajustes manuales": "", "Mermas": "", "Saldo": "",
             "Valor en inventario": "", "Ingresos cobrados": "",
             "Créditos pendientes (sin recibir)": fmt(round(pendiente_manual_inv)),
             "Total ingresos": "",
@@ -5100,13 +5132,13 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
     if cobro_creditos_mes_inv > 0:
         filas_inv.append({
             "Referencia": "Cobro de créditos este mes (sin sabor):",
-            "Inventario inicial": "", "Producción": "", "Salidas": "", "Ajustes manuales": "", "Saldo": "",
+            "Inventario inicial": "", "Producción": "", "Salidas": "", "Ajustes manuales": "", "Mermas": "", "Saldo": "",
             "Valor en inventario": "", "Ingresos cobrados": "",
             "Créditos pendientes (sin recibir)": "", "Total ingresos": "",
         })
         filas_inv.append({
             "Referencia": "",
-            "Inventario inicial": "", "Producción": "", "Salidas": "", "Ajustes manuales": "", "Saldo": "",
+            "Inventario inicial": "", "Producción": "", "Salidas": "", "Ajustes manuales": "", "Mermas": "", "Saldo": "",
             "Valor en inventario": "",
             "Ingresos cobrados": fmt(round(cobro_creditos_mes_inv)),
             "Créditos pendientes (sin recibir)": "",
@@ -5123,10 +5155,11 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
         "\"créditos manuales antiguos\" (si aparece) = \"Créditos pendientes por cobrar\" de Resumen. "
         "\"Salidas\" solo cuenta ventas reales (Fábrica, Carro, Cambio), no regalos — sí resta las "
         "devoluciones del mes, para que no infle el Saldo. \"Ajustes manuales\" son correcciones de stock "
-        "(no son producción ni venta, por eso van aparte) — solo cuenta ajustes hechos DESPUÉS del "
-        "2026-07-22, los de antes no quedaron guardados. \"Valor en inventario\" "
+        "y \"Mermas\" es producto dañado/perdido — ninguno de los dos es producción ni venta, por eso van "
+        "aparte y no afectan el precio promedio. Ambos solo cuentan lo registrado DESPUÉS del 2026-07-22, "
+        "lo de antes no quedó guardado. \"Valor en inventario\" "
         "usa el precio promedio real ponderado de lo vendido ese mes (Total ingresos ÷ Salidas). \"Saldo\" = "
-        "Inventario inicial (del último cierre guardado) + Producción − Salidas + Ajustes manuales."
+        "Inventario inicial (del último cierre guardado) + Producción − Salidas + Ajustes manuales − Mermas."
     )
     if not raw_inicial_inv:
         st.markdown(
@@ -5154,11 +5187,11 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
         if filas_diff_inv:
             st.markdown('<div class="section-label">🔍 Diferencia vs. stock real</div>', unsafe_allow_html=True)
             st.caption(
-                "Solo se compara contra el mes en curso. Las devoluciones y los ajustes manuales (hechos "
+                "Solo se compara contra el mes en curso. Las devoluciones, ajustes manuales y mermas (hechos "
                 "después del 2026-07-22) ya se ven reflejados en el Saldo — si aun así hay diferencia, "
-                "probablemente es un ajuste manual hecho ANTES de esa fecha (no quedó guardado) o algún otro "
-                "movimiento de stock fuera de Producción/Ventas/Devoluciones/Ajustes. Se corrige solo la "
-                "próxima vez que uses \"Cerrar inventario del mes\" (usa el stock real, no la fórmula)."
+                "probablemente es un ajuste o merma hecho ANTES de esa fecha (no quedó guardado) o algún otro "
+                "movimiento de stock fuera de Producción/Ventas/Devoluciones/Ajustes/Mermas. Se corrige solo "
+                "la próxima vez que uses \"Cerrar inventario del mes\" (usa el stock real, no la fórmula)."
             )
             tabla_view(pd.DataFrame(filas_diff_inv))
 
