@@ -5022,7 +5022,6 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
     })
 
     df_inv_mes = pd.DataFrame(filas_inv)
-    tabla_view(df_inv_mes)
     st.caption(
         "💡 \"Salidas\" y \"Total venta\" solo cuentan ventas reales (Fábrica, Carro, Cambio) — no incluyen "
         "regalos. \"Precio de Venta\" es el promedio ponderado real de lo vendido ese mes (Total venta ÷ "
