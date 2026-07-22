@@ -5002,7 +5002,7 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
         pendiente_map_inv[s] = pendiente_map_inv.get(s, 0) + fac_r["saldo"] * share_r
 
     filas_inv = []
-    tot_prod_inv = tot_salidas_inv = tot_saldo_inv = tot_costo_inv = 0.0
+    tot_inicial_inv = tot_prod_inv = tot_salidas_inv = tot_saldo_inv = tot_costo_inv = 0.0
     for sabor_r in SABORES_LISTA:
         inicial_r = inicial_map_inv.get(sabor_r, 0)
         prod_r = prod_map_inv.get(sabor_r, 0)
@@ -5016,6 +5016,7 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
 
         filas_inv.append({
             "Referencia": sabor_r,
+            "Inventario inicial": inicial_r,
             "Producción": prod_r,
             "Salidas": salidas_r,
             "Saldo": saldo_r,
@@ -5024,7 +5025,7 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
             "Créditos pendientes (sin recibir)": fmt(round(pendiente_r)),
             "Total ingresos": fmt(round(ingreso_total_r)),
         })
-        tot_prod_inv += prod_r; tot_salidas_inv += salidas_r
+        tot_inicial_inv += inicial_r; tot_prod_inv += prod_r; tot_salidas_inv += salidas_r
         tot_saldo_inv += saldo_r; tot_costo_inv += costo_inv_r
 
     # El total de Ingresos cobrados / Créditos pendientes se saca directo de
@@ -5035,6 +5036,7 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
     tot_pendiente_inv = sum(f["saldo"] for f in facturas_inv_mes.values())
     filas_inv.append({
         "Referencia": "Total",
+        "Inventario inicial": tot_inicial_inv,
         "Producción": tot_prod_inv,
         "Salidas": tot_salidas_inv,
         "Saldo": tot_saldo_inv,
@@ -5044,16 +5046,28 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
         "Total ingresos": fmt(round(tot_cobrado_inv + tot_pendiente_inv)),
     })
 
+    # Créditos manuales antiguos (tabla "creditos", cargados con "➕ Cargar crédito
+    # antiguo") no tienen sabor asociado, así que no entran en el reparto por
+    # referencia de arriba — se muestran aparte para que el total sí coincida con
+    # "Créditos pendientes por cobrar" de Resumen → Mes.
+    pendiente_manual_inv = _pendiente_creditos_antiguos(primer_dia_inv, ultimo_dia_inv)
+    if pendiente_manual_inv > 0:
+        filas_inv.append({
+            "Referencia": "", "Inventario inicial": "", "Producción": "", "Salidas": "", "Saldo": "",
+            "Valor en inventario": "", "Ingresos cobrados": "",
+            "Créditos pendientes (sin recibir)": fmt(round(pendiente_manual_inv)) + " — créditos manuales antiguos, sin sabor (cargados con \"➕ Cargar crédito antiguo\")",
+            "Total ingresos": "",
+        })
+
     df_inv_mes = pd.DataFrame(filas_inv)
     st.caption(
         "💡 \"Ingresos cobrados\" es la plata real que entró de esas ventas (mismo cálculo que \"Ingresos "
         "por ventas\" en Resumen → Mes, coincide exacto). \"Créditos pendientes (sin recibir)\" es lo que "
-        "aún deben de lo vendido ese mes — sumadas, dan el valor total facturado. Si esa fila \"Total\" no "
-        "coincide con \"Créditos pendientes por cobrar\" de Resumen, es porque ahí también se suman créditos "
-        "manuales antiguos que no tienen un sabor asociado. \"Salidas\" solo cuenta ventas reales (Fábrica, "
-        "Carro, Cambio), no regalos. \"Valor en inventario\" usa el precio promedio real ponderado de lo "
-        "vendido ese mes (Total ingresos ÷ Salidas). \"Saldo\" = Inventario inicial (del último cierre "
-        "guardado) + Producción − Salidas."
+        "aún deben de lo vendido ese mes — sumadas, dan el valor total facturado. La fila \"Total\" + la fila "
+        "de créditos manuales antiguos (si aparece) sí coincide exacto con \"Créditos pendientes por cobrar\" "
+        "de Resumen → Mes. \"Salidas\" solo cuenta ventas reales (Fábrica, Carro, Cambio), no regalos. "
+        "\"Valor en inventario\" usa el precio promedio real ponderado de lo vendido ese mes (Total ingresos "
+        "÷ Salidas). \"Saldo\" = Inventario inicial (del último cierre guardado) + Producción − Salidas."
     )
     if not raw_inicial_inv:
         st.markdown(
