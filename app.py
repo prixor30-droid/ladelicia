@@ -5034,11 +5034,55 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
             unsafe_allow_html=True
         )
 
+    def _pdf_inv_mes(df, nombre_mes_pdf):
+        from reportlab.lib.pagesizes import A4, landscape
+        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+        from reportlab.lib.styles import getSampleStyleSheet
+        from reportlab.lib import colors
+        from reportlab.lib.units import cm
+        import io
+
+        buf = io.BytesIO()
+        doc = SimpleDocTemplate(buf, pagesize=landscape(A4),
+                                leftMargin=1*cm, rightMargin=1*cm,
+                                topMargin=1.5*cm, bottomMargin=1*cm)
+        styles = getSampleStyleSheet()
+        elements = [
+            Paragraph("Inventario Inicial a Fábrica de Papas Productos La Delicia — Producto Terminado", styles["Title"]),
+            Paragraph(f"Mes: {nombre_mes_pdf}  |  Generado: {fecha_hoy()}", styles["Normal"]),
+            Spacer(1, 0.4*cm),
+        ]
+        cols = list(df.columns)
+        data = [cols] + df.astype(str).values.tolist()
+        col_width = (landscape(A4)[0] - 2*cm) / len(cols)
+        tabla_pdf = Table(data, colWidths=[col_width]*len(cols), repeatRows=1)
+        tabla_pdf.setStyle(TableStyle([
+            ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#1565C0")),
+            ("TEXTCOLOR",  (0,0), (-1,0), colors.white),
+            ("FONTNAME",   (0,0), (-1,0), "Helvetica-Bold"),
+            ("FONTSIZE",   (0,0), (-1,-1), 7),
+            ("ROWBACKGROUNDS", (0,1), (-1,-1), [colors.white, colors.HexColor("#EEF4FF")]),
+            ("GRID",       (0,0), (-1,-1), 0.3, colors.HexColor("#BBDEFB")),
+            ("VALIGN",     (0,0), (-1,-1), "MIDDLE"),
+            ("PADDING",    (0,0), (-1,-1), 4),
+        ]))
+        elements.append(tabla_pdf)
+        doc.build(elements)
+        buf.seek(0)
+        return buf.read()
+
+    col_dl1, col_dl2 = st.columns(2)
     csv_inv = df_inv_mes.to_csv(index=False).encode("utf-8")
-    st.download_button(
-        "📥 Descargar tabla (CSV)", data=csv_inv,
+    col_dl1.download_button(
+        "📥 Descargar CSV", data=csv_inv,
         file_name=f"inventario_inicial_{primer_dia_inv.strftime('%Y_%m')}.csv",
         mime="text/csv", key="btn_desc_inv_inicial"
+    )
+    pdf_inv = _pdf_inv_mes(df_inv_mes, primer_dia_inv.strftime("%B %Y").capitalize())
+    col_dl2.download_button(
+        "📄 Descargar PDF", data=pdf_inv,
+        file_name=f"inventario_inicial_{primer_dia_inv.strftime('%Y_%m')}.pdf",
+        mime="application/pdf", key="btn_desc_inv_inicial_pdf"
     )
 
     with st.expander("🔒 Cerrar inventario del mes"):
