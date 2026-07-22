@@ -5072,8 +5072,6 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
             "Inventario inicial": inicial_r,
             "Producción": prod_r,
             "Salidas": salidas_r,
-            "Ajustes manuales": ajuste_r,
-            "Mermas": merma_r,
             "Saldo": saldo_r,
             "Valor en inventario": fmt(round(costo_inv_r)),
             "Ingresos cobrados": fmt(round(cobrado_r)),
@@ -5094,8 +5092,6 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
         "Inventario inicial": tot_inicial_inv,
         "Producción": tot_prod_inv,
         "Salidas": tot_salidas_inv,
-        "Ajustes manuales": tot_ajuste_inv,
-        "Mermas": tot_merma_inv,
         "Saldo": tot_saldo_inv,
         "Valor en inventario": fmt(round(tot_costo_inv)),
         "Ingresos cobrados": fmt(round(tot_cobrado_inv)),
@@ -5111,13 +5107,13 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
     if pendiente_manual_inv > 0:
         filas_inv.append({
             "Referencia": "Créditos manuales antiguos (sin sabor):",
-            "Inventario inicial": "", "Producción": "", "Salidas": "", "Ajustes manuales": "", "Mermas": "", "Saldo": "",
+            "Inventario inicial": "", "Producción": "", "Salidas": "", "Saldo": "",
             "Valor en inventario": "", "Ingresos cobrados": "", "Créditos pendientes (sin recibir)": "",
             "Total ingresos": "",
         })
         filas_inv.append({
             "Referencia": "",
-            "Inventario inicial": "", "Producción": "", "Salidas": "", "Ajustes manuales": "", "Mermas": "", "Saldo": "",
+            "Inventario inicial": "", "Producción": "", "Salidas": "", "Saldo": "",
             "Valor en inventario": "", "Ingresos cobrados": "",
             "Créditos pendientes (sin recibir)": fmt(round(pendiente_manual_inv)),
             "Total ingresos": "",
@@ -5132,13 +5128,13 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
     if cobro_creditos_mes_inv > 0:
         filas_inv.append({
             "Referencia": "Cobro de créditos este mes (sin sabor):",
-            "Inventario inicial": "", "Producción": "", "Salidas": "", "Ajustes manuales": "", "Mermas": "", "Saldo": "",
+            "Inventario inicial": "", "Producción": "", "Salidas": "", "Saldo": "",
             "Valor en inventario": "", "Ingresos cobrados": "",
             "Créditos pendientes (sin recibir)": "", "Total ingresos": "",
         })
         filas_inv.append({
             "Referencia": "",
-            "Inventario inicial": "", "Producción": "", "Salidas": "", "Ajustes manuales": "", "Mermas": "", "Saldo": "",
+            "Inventario inicial": "", "Producción": "", "Salidas": "", "Saldo": "",
             "Valor en inventario": "",
             "Ingresos cobrados": fmt(round(cobro_creditos_mes_inv)),
             "Créditos pendientes (sin recibir)": "",
@@ -5154,10 +5150,10 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
         "coincide con Resumen → Mes. Igual para pendientes: fila \"Total\" (Créditos pendientes) + fila de "
         "\"créditos manuales antiguos\" (si aparece) = \"Créditos pendientes por cobrar\" de Resumen. "
         "\"Salidas\" solo cuenta ventas reales (Fábrica, Carro, Cambio), no regalos — sí resta las "
-        "devoluciones del mes, para que no infle el Saldo. \"Ajustes manuales\" son correcciones de stock "
-        "y \"Mermas\" es producto dañado/perdido — ninguno de los dos es producción ni venta, por eso van "
-        "aparte y no afectan el precio promedio. Ambos solo cuentan lo registrado DESPUÉS del 2026-07-22, "
-        "lo de antes no quedó guardado. \"Valor en inventario\" "
+        "devoluciones del mes, para que no infle el Saldo. El Saldo también descuenta ajustes manuales de "
+        "stock y mermas (producto dañado/perdido) — no se muestran como columna aparte, solo actúan por "
+        "dentro, y solo cuentan lo registrado DESPUÉS del 2026-07-22 (lo de antes no quedó guardado). "
+        "\"Valor en inventario\" "
         "usa el precio promedio real ponderado de lo vendido ese mes (Total ingresos ÷ Salidas). \"Saldo\" = "
         "Inventario inicial (del último cierre guardado) + Producción − Salidas + Ajustes manuales − Mermas."
     )
