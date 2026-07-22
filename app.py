@@ -5027,6 +5027,15 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
     for r in raw_dan_inv:
         mermas_map_inv[r["sabor"]] = mermas_map_inv.get(r["sabor"], 0) + float(r["cantidad"])
 
+    # Stock real (en vivo) — solo tiene sentido comparar contra el mes en curso;
+    # para un mes ya cerrado el stock actual acumula la deriva de meses posteriores.
+    hoy_inv = datetime.now(COL_TZ).date()
+    es_mes_actual_inv = (mes_inv_sel.year == hoy_inv.year and mes_inv_sel.month == hoy_inv.month)
+    stock_actual_map_inv = {}
+    if es_mes_actual_inv:
+        raw_stock_actual_inv = sb_get("inventario", "select=sabor,stock") or []
+        stock_actual_map_inv = {r["sabor"]: r["stock"] for r in raw_stock_actual_inv}
+
     # El abono/saldo se guarda por FACTURA, no por sabor — para repartirlo por
     # referencia se reparte proporcional al peso de cada línea dentro del total
     # de su factura (una factura con varios sabores reparte su abono entre ellos
@@ -5051,8 +5060,8 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
         pendiente_map_inv[s] = pendiente_map_inv.get(s, 0) + fac_r["saldo"] * share_r
 
     filas_inv = []
-    saldo_calc_map_inv = {}
     tot_inicial_inv = tot_prod_inv = tot_salidas_inv = tot_ajuste_inv = tot_merma_inv = tot_saldo_inv = tot_costo_inv = 0.0
+    tot_stock_real_inv = tot_diff_inv = 0.0
     for sabor_r in SABORES_LISTA:
         inicial_r = inicial_map_inv.get(sabor_r, 0)
         prod_r = prod_map_inv.get(sabor_r, 0)
@@ -5063,11 +5072,10 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
         pendiente_r = pendiente_map_inv.get(sabor_r, 0)
         ingreso_total_r = cobrado_r + pendiente_r
         saldo_r = inicial_r + prod_r - salidas_r + ajuste_r - merma_r
-        saldo_calc_map_inv[sabor_r] = saldo_r
         precio_pond_r = (ingreso_total_r / salidas_r) if salidas_r > 0 else PRODUCTOS.get(sabor_r, 0)
         costo_inv_r = saldo_r * precio_pond_r
 
-        filas_inv.append({
+        fila_r = {
             "Referencia": sabor_r,
             "Inventario inicial": inicial_r,
             "Producción": prod_r,
@@ -5077,7 +5085,14 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
             "Ingresos cobrados": fmt(round(cobrado_r)),
             "Créditos pendientes (sin recibir)": fmt(round(pendiente_r)),
             "Total ingresos": fmt(round(ingreso_total_r)),
-        })
+        }
+        if es_mes_actual_inv:
+            stock_real_r = stock_actual_map_inv.get(sabor_r, 0)
+            diff_r = stock_real_r - saldo_r
+            fila_r["Stock real actual"] = stock_real_r
+            fila_r["Diferencia"] = diff_r
+            tot_stock_real_inv += stock_real_r; tot_diff_inv += diff_r
+        filas_inv.append(fila_r)
         tot_inicial_inv += inicial_r; tot_prod_inv += prod_r; tot_salidas_inv += salidas_r
         tot_ajuste_inv += ajuste_r; tot_merma_inv += merma_r; tot_saldo_inv += saldo_r; tot_costo_inv += costo_inv_r
 
@@ -5087,7 +5102,7 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
     # queda aproximado.
     tot_cobrado_inv = sum(f["abono"] for f in facturas_inv_mes.values())
     tot_pendiente_inv = sum(f["saldo"] for f in facturas_inv_mes.values())
-    filas_inv.append({
+    fila_total_inv = {
         "Referencia": "Total",
         "Inventario inicial": tot_inicial_inv,
         "Producción": tot_prod_inv,
@@ -5097,7 +5112,11 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
         "Ingresos cobrados": fmt(round(tot_cobrado_inv)),
         "Créditos pendientes (sin recibir)": fmt(round(tot_pendiente_inv)),
         "Total ingresos": fmt(round(tot_cobrado_inv + tot_pendiente_inv)),
-    })
+    }
+    if es_mes_actual_inv:
+        fila_total_inv["Stock real actual"] = tot_stock_real_inv
+        fila_total_inv["Diferencia"] = tot_diff_inv
+    filas_inv.append(fila_total_inv)
 
     # Créditos manuales antiguos (tabla "creditos", cargados con "➕ Cargar crédito
     # antiguo") no tienen sabor asociado, así que no entran en el reparto por
@@ -5155,7 +5174,12 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
         "dentro, y solo cuentan lo registrado DESPUÉS del 2026-07-22 (lo de antes no quedó guardado). "
         "\"Valor en inventario\" "
         "usa el precio promedio real ponderado de lo vendido ese mes (Total ingresos ÷ Salidas). \"Saldo\" = "
-        "Inventario inicial (del último cierre guardado) + Producción − Salidas + Ajustes manuales − Mermas."
+        "Inventario inicial (del último cierre guardado) + Producción − Salidas + Ajustes manuales − Mermas. "
+        "\"Stock real actual\" y \"Diferencia\" solo aparecen si estás consultando el mes en curso (para un "
+        "mes ya cerrado el stock actual acumula la deriva de meses posteriores, dejaría de servir). Si hay "
+        "diferencia, normalmente es un ajuste o merma hecho ANTES del 2026-07-22 (no quedó guardado) o algún "
+        "otro movimiento fuera de Producción/Ventas/Devoluciones/Ajustes/Mermas — se corrige solo la próxima "
+        "vez que uses \"Cerrar inventario del mes\"."
     )
     if not raw_inicial_inv:
         st.markdown(
@@ -5163,33 +5187,6 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
             f'{primer_dia_inv.strftime("%B %Y")} — el "Inventario inicial" está en 0 para todos los sabores.</div>',
             unsafe_allow_html=True
         )
-
-    # --- Diferencia vs. stock real (solo tiene sentido comparar contra el mes en
-    # curso — para un mes ya cerrado, el stock actual acumula meses de más). ---
-    hoy_inv = datetime.now(COL_TZ).date()
-    if mes_inv_sel.year == hoy_inv.year and mes_inv_sel.month == hoy_inv.month:
-        raw_stock_actual_inv = sb_get("inventario", "select=sabor,stock") or []
-        stock_actual_map_inv = {r["sabor"]: r["stock"] for r in raw_stock_actual_inv}
-        filas_diff_inv = []
-        for sabor_r in SABORES_LISTA:
-            saldo_calc_r = saldo_calc_map_inv.get(sabor_r, 0)
-            stock_real_r = stock_actual_map_inv.get(sabor_r, 0)
-            diff_r = stock_real_r - saldo_calc_r
-            if diff_r != 0:
-                filas_diff_inv.append({
-                    "Sabor": sabor_r, "Saldo calculado": saldo_calc_r,
-                    "Stock real actual": stock_real_r, "Diferencia": diff_r
-                })
-        if filas_diff_inv:
-            st.markdown('<div class="section-label">🔍 Diferencia vs. stock real</div>', unsafe_allow_html=True)
-            st.caption(
-                "Solo se compara contra el mes en curso. Las devoluciones, ajustes manuales y mermas (hechos "
-                "después del 2026-07-22) ya se ven reflejados en el Saldo — si aun así hay diferencia, "
-                "probablemente es un ajuste o merma hecho ANTES de esa fecha (no quedó guardado) o algún otro "
-                "movimiento de stock fuera de Producción/Ventas/Devoluciones/Ajustes/Mermas. Se corrige solo "
-                "la próxima vez que uses \"Cerrar inventario del mes\" (usa el stock real, no la fórmula)."
-            )
-            tabla_view(pd.DataFrame(filas_diff_inv))
 
     def _pdf_inv_mes(df, nombre_mes_pdf):
         from reportlab.lib.pagesizes import A4, landscape
@@ -5222,7 +5219,10 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
             ("ROWBACKGROUNDS", (0,1), (-1,-1), [colors.white, colors.HexColor("#EEF4FF")]),
             ("GRID",       (0,0), (-1,-1), 0.3, colors.HexColor("#BBDEFB")),
             ("VALIGN",     (0,0), (-1,-1), "MIDDLE"),
-            ("PADDING",    (0,0), (-1,-1), 4),
+            ("TOPPADDING",    (0,0), (-1,-1), 2),
+            ("BOTTOMPADDING", (0,0), (-1,-1), 2),
+            ("LEFTPADDING",   (0,0), (-1,-1), 2),
+            ("RIGHTPADDING",  (0,0), (-1,-1), 2),
         ]
         # Filas-etiqueta (solo texto en la primera columna, el resto vacío) — se
         # les da el ancho de 2 columnas para que el texto no se salga del recuadro.
