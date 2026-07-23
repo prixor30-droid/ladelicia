@@ -4984,6 +4984,31 @@ elif st.session_state.vista == "nomina" and st.session_state.es_admin:
 # visibles para cualquiera; se consolidaron aquí porque son datos financieros.
 # ══════════════════════════════════════════════════════════════════════════════
 elif st.session_state.vista == "contador" and st.session_state.es_admin:
+    # Tema verde pastel — solo para esta vista. El <style> se inyecta únicamente
+    # cuando se está renderizando Contador, así que no afecta a ninguna otra sección.
+    st.markdown("""
+    <style>
+    .stApp{background-color:#EAF7EE !important;}
+    .brand-header{background:linear-gradient(135deg,#2E7D32,#66BB6A) !important;}
+    .section-label{color:#1B7A43 !important;}
+    label,.stSelectbox label,.stNumberInput label,.stDateInput label,.stTextInput label{color:#1B7A43 !important;}
+    .stButton>button{background:#43A047 !important;box-shadow:0 4px 16px rgba(67,160,71,0.25) !important;}
+    .stButton>button:hover{box-shadow:0 6px 20px rgba(67,160,71,0.35) !important;}
+    .stButton>button:active{box-shadow:0 2px 8px rgba(67,160,71,0.25) !important;}
+    [data-testid="stNumberInputStepDown"],[data-testid="stNumberInputStepUp"]{color:#2E7D32 !important;}
+    [data-testid="stNumberInputStepDown"]:hover,[data-testid="stNumberInputStepUp"]:hover{background-color:#43A047 !important;}
+    [data-baseweb="select"]>div:focus-within,[data-baseweb="base-input"]:focus-within{border-color:#43A047 !important;box-shadow:0 0 0 3px rgba(67,160,71,0.15) !important;}
+    [data-baseweb="calendar"] [aria-selected="true"]{background-color:#43A047 !important;}
+    .metric-box{box-shadow:0 2px 8px rgba(67,160,71,0.15) !important;}
+    .metric-box .lbl,.metric-blue .val{color:#2E7D32 !important;}
+    .calc-box{box-shadow:0 2px 10px rgba(67,160,71,0.15) !important;}
+    .tabla-reporte-wrap{box-shadow:0 2px 10px rgba(67,160,71,0.15) !important;}
+    .tabla-reporte thead th{background:#43A047 !important;}
+    .tabla-reporte tbody tr:nth-child(even){background:#E8F5E9 !important;}
+    .tabla-reporte tbody tr.fila-total td{background:#C8E6C9 !important;}
+    .tabla-reporte tbody td{border-color:#A5D6A7 !important;}
+    </style>
+    """, unsafe_allow_html=True)
     st.markdown(f'<div class="section-label">{ICO_RECEIPT} Contador</div>', unsafe_allow_html=True)
 
     # --- Inventario total invertido (materia prima + saborizantes + empaque) ---
