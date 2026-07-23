@@ -5138,6 +5138,7 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
             "Producción": prod_r,
             "Salidas": salidas_r,
             "Saldo": saldo_r,
+            "Precio de venta": fmt(round(precio_pond_r)),
             "Valor en inventario": fmt(round(costo_inv_r)),
             "Ingresos cobrados": fmt(round(cobrado_r)),
             "Créditos pendientes (sin recibir)": fmt(round(pendiente_r)),
@@ -5153,12 +5154,14 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
     # queda aproximado.
     tot_cobrado_inv = sum(f["abono"] for f in facturas_inv_mes.values())
     tot_pendiente_inv = sum(f["saldo"] for f in facturas_inv_mes.values())
+    precio_pond_total_inv = ((tot_cobrado_inv + tot_pendiente_inv) / tot_salidas_inv) if tot_salidas_inv > 0 else 0
     fila_total_inv = {
         "Referencia": "Total",
         "Inventario inicial": tot_inicial_inv,
         "Producción": tot_prod_inv,
         "Salidas": tot_salidas_inv,
         "Saldo": tot_saldo_inv,
+        "Precio de venta": fmt(round(precio_pond_total_inv)),
         "Valor en inventario": fmt(round(tot_costo_inv)),
         "Ingresos cobrados": fmt(round(tot_cobrado_inv)),
         "Créditos pendientes (sin recibir)": fmt(round(tot_pendiente_inv)),
@@ -5174,13 +5177,13 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
     if pendiente_manual_inv > 0:
         filas_inv.append({
             "Referencia": "Créditos manuales antiguos (sin sabor):",
-            "Inventario inicial": "", "Producción": "", "Salidas": "", "Saldo": "",
+            "Inventario inicial": "", "Producción": "", "Salidas": "", "Saldo": "", "Precio de venta": "",
             "Valor en inventario": "", "Ingresos cobrados": "", "Créditos pendientes (sin recibir)": "",
             "Total ingresos": "",
         })
         filas_inv.append({
             "Referencia": "",
-            "Inventario inicial": "", "Producción": "", "Salidas": "", "Saldo": "",
+            "Inventario inicial": "", "Producción": "", "Salidas": "", "Saldo": "", "Precio de venta": "",
             "Valor en inventario": "", "Ingresos cobrados": "",
             "Créditos pendientes (sin recibir)": fmt(round(pendiente_manual_inv)),
             "Total ingresos": "",
@@ -5195,13 +5198,13 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
     if cobro_creditos_mes_inv > 0:
         filas_inv.append({
             "Referencia": "Cobro de créditos este mes (sin sabor):",
-            "Inventario inicial": "", "Producción": "", "Salidas": "", "Saldo": "",
+            "Inventario inicial": "", "Producción": "", "Salidas": "", "Saldo": "", "Precio de venta": "",
             "Valor en inventario": "", "Ingresos cobrados": "",
             "Créditos pendientes (sin recibir)": "", "Total ingresos": "",
         })
         filas_inv.append({
             "Referencia": "",
-            "Inventario inicial": "", "Producción": "", "Salidas": "", "Saldo": "",
+            "Inventario inicial": "", "Producción": "", "Salidas": "", "Saldo": "", "Precio de venta": "",
             "Valor en inventario": "",
             "Ingresos cobrados": fmt(round(cobro_creditos_mes_inv)),
             "Créditos pendientes (sin recibir)": "",
