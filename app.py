@@ -5042,6 +5042,83 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
     </div>
     """, unsafe_allow_html=True)
 
+    # --- Deudas con terceros (préstamos personales con garantía, no proveedores) ---
+    st.markdown('<div class="section-label">🏦 Deudas con terceros</div>', unsafe_allow_html=True)
+    raw_deudas = sb_get("deudas_terceros", "select=*&order=id.asc") or []
+    raw_mov_deudas = sb_get("deudas_terceros_movimientos", "select=deuda_id,tipo,valor") or []
+
+    if not raw_deudas:
+        st.caption("Todavía no hay deudas con terceros registradas.")
+    else:
+        filas_deudas = []
+        tot_acordado_d = tot_recibido_d = tot_abonado_d = tot_saldo_d = 0.0
+        for d in raw_deudas:
+            movs_d = [m for m in raw_mov_deudas if m["deuda_id"] == d["id"]]
+            recibido_d = sum(float(m["valor"]) for m in movs_d if m["tipo"] == "recibido")
+            abonado_d = sum(float(m["valor"]) for m in movs_d if m["tipo"] == "abono")
+            saldo_d = recibido_d - abonado_d
+            pendiente_recibir_d = max(0.0, float(d["monto_acordado"]) - recibido_d)
+            filas_deudas.append({
+                "Acreedor": d["acreedor"],
+                "Garantía": d.get("garantia") or "—",
+                "Monto acordado": fmt(round(float(d["monto_acordado"]))),
+                "Recibido": fmt(round(recibido_d)),
+                "Pendiente por recibir": fmt(round(pendiente_recibir_d)) if pendiente_recibir_d > 0 else "—",
+                "Abonado": fmt(round(abonado_d)),
+                "Saldo que se debe": fmt(round(saldo_d)),
+            })
+            tot_acordado_d += float(d["monto_acordado"]); tot_recibido_d += recibido_d
+            tot_abonado_d += abonado_d; tot_saldo_d += saldo_d
+        filas_deudas.append({
+            "Acreedor": "Total", "Garantía": "",
+            "Monto acordado": fmt(round(tot_acordado_d)), "Recibido": fmt(round(tot_recibido_d)),
+            "Pendiente por recibir": "", "Abonado": fmt(round(tot_abonado_d)),
+            "Saldo que se debe": fmt(round(tot_saldo_d)),
+        })
+        df_deudas = pd.DataFrame(filas_deudas)
+        st.markdown(tabla_reporte_html(df_deudas), unsafe_allow_html=True)
+
+        nombres_deudas = [d["acreedor"] for d in raw_deudas]
+        col_ab_d, col_re_d = st.columns(2)
+        with col_ab_d:
+            st.markdown('<div class="section-label">💸 Registrar abono</div>', unsafe_allow_html=True)
+            st.caption("Plata que la empresa paga de vuelta — se descuenta de Caja automáticamente.")
+            acreedor_ab = st.selectbox("Acreedor", nombres_deudas, key="acreedor_abono_deuda")
+            valor_ab = st.number_input("Valor del abono ($)", min_value=0, value=0, step=100000, key="valor_abono_deuda")
+            if st.button("✅ Registrar abono", key="btn_abono_deuda"):
+                if valor_ab <= 0:
+                    st.markdown(f'<div class="alert-low">{ICO_WARN} Ingresa un valor.</div>', unsafe_allow_html=True)
+                else:
+                    deuda_sel_ab = next(d for d in raw_deudas if d["acreedor"] == acreedor_ab)
+                    sb_post("deudas_terceros_movimientos", {
+                        "deuda_id": deuda_sel_ab["id"], "fecha": fecha_hoy(), "hora": ahora(),
+                        "tipo": "abono", "valor": float(valor_ab), "usuario": st.session_state.admin_actual
+                    })
+                    sb_post("caja_egresos", {
+                        "fecha": fecha_hoy(), "hora": ahora(), "concepto": f"Abono deuda — {acreedor_ab}",
+                        "valor": float(valor_ab), "categoria": "Deuda a terceros", "tipo": "gasto", "empleado": None
+                    })
+                    st.markdown(f'<div class="success-toast">{ICO_CHECK} Abono registrado y descontado de caja.</div>', unsafe_allow_html=True)
+                    time.sleep(0.3)
+                    st.rerun()
+        with col_re_d:
+            st.markdown('<div class="section-label">📥 Registrar desembolso recibido</div>', unsafe_allow_html=True)
+            st.caption("Para préstamos que llegan por cuotas (ej. Sandra, $500.000 mensuales).")
+            acreedor_re = st.selectbox("Acreedor", nombres_deudas, key="acreedor_recibido_deuda")
+            valor_re = st.number_input("Valor recibido ($)", min_value=0, value=0, step=100000, key="valor_recibido_deuda")
+            if st.button("✅ Registrar recibido", key="btn_recibido_deuda"):
+                if valor_re <= 0:
+                    st.markdown(f'<div class="alert-low">{ICO_WARN} Ingresa un valor.</div>', unsafe_allow_html=True)
+                else:
+                    deuda_sel_re = next(d for d in raw_deudas if d["acreedor"] == acreedor_re)
+                    sb_post("deudas_terceros_movimientos", {
+                        "deuda_id": deuda_sel_re["id"], "fecha": fecha_hoy(), "hora": ahora(),
+                        "tipo": "recibido", "valor": float(valor_re), "usuario": st.session_state.admin_actual
+                    })
+                    st.markdown(f'<div class="success-toast">{ICO_CHECK} Desembolso registrado.</div>', unsafe_allow_html=True)
+                    time.sleep(0.3)
+                    st.rerun()
+
     # --- Inventario Inicial a Fábrica de Papas Productos La Delicia — Producto Terminado ---
     st.markdown(
         '<div class="section-label">📦 Inventario Inicial a Fábrica de Papas Productos La Delicia — Producto Terminado</div>',
