@@ -229,6 +229,29 @@ def tabla_view(df):
     """Tabla de solo consulta, estática (sin ordenar/arrastrar columnas al tocar en tablet)."""
     st.table(df.style.hide(axis="index").format(_fmt_celda))
 
+def tabla_reporte_html(df):
+    """Tabla HTML de solo lectura para los reportes de Contador — mismo azul (#1565C0) y
+    cuadrícula visible que se usa en los PDF descargables, para que en pantalla se vea igual."""
+    cols = list(df.columns)
+    header_html = "".join(f"<th>{c}</th>" for c in cols)
+    filas_html = []
+    for _, row in df.iterrows():
+        vals = ["" if pd.isna(v) else v for v in row.tolist()]
+        primera = str(vals[0])
+        es_total = primera == "Total"
+        es_etiqueta = bool(primera) and not es_total and all(str(v) == "" for v in vals[1:])
+        clase = "fila-total" if es_total else ("fila-etiqueta" if es_etiqueta else "")
+        celdas = "".join(f"<td>{v}</td>" for v in vals)
+        filas_html.append(f'<tr class="{clase}">{celdas}</tr>')
+    return f"""
+    <div class="tabla-reporte-wrap">
+        <table class="tabla-reporte">
+            <thead><tr>{header_html}</tr></thead>
+            <tbody>{''.join(filas_html)}</tbody>
+        </table>
+    </div>
+    """
+
 def tabla_facturas_html(df_canal):
     """Genera tabla HTML estilo factura electrónica: Fecha, N° comprobante, Vendedor, Cliente, Total, Estado."""
     filas = []
@@ -1391,6 +1414,13 @@ label,.stSelectbox label,.stNumberInput label,.stDateInput label,.stTextInput la
 .tabla-fact .num-comp{color:#1565C0;font-weight:600;}
 .tabla-fact .estado-ok{color:#1B9E5A;font-weight:600;}
 .tabla-fact .total-col{text-align:right;font-weight:600;}
+.tabla-reporte-wrap{overflow-x:auto;border-radius:10px;box-shadow:0 2px 10px rgba(21,101,192,0.10);margin-bottom:14px;}
+.tabla-reporte{width:100%;border-collapse:collapse;font-size:0.76rem;background:#FFFFFF;}
+.tabla-reporte thead th{background:#1565C0;color:white;font-weight:600;padding:8px 6px;text-align:center;white-space:nowrap;border:1px solid #0D47A1;}
+.tabla-reporte tbody td{padding:7px 6px;border:1px solid #90CAF9;color:#0D1B2A;white-space:nowrap;text-align:center;}
+.tabla-reporte tbody tr:nth-child(even){background:#EEF4FF;}
+.tabla-reporte tbody tr.fila-total td{background:#DCEEFB;font-weight:700;}
+.tabla-reporte tbody tr.fila-etiqueta td{font-weight:600;text-align:left;}
 .recibo-wrap{display:flex;justify-content:center;padding:20px 0;}
 .recibo-ticket{background:#FFFFFF;width:100%;max-width:380px;padding:24px 20px;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,0.12);font-family:'Courier New',monospace;}
 .recibo-logo{text-align:center;margin-bottom:6px;}
@@ -5198,6 +5228,8 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
         })
 
     df_inv_mes = pd.DataFrame(filas_inv)
+    with st.expander("👁️ Ver tabla"):
+        st.markdown(tabla_reporte_html(df_inv_mes), unsafe_allow_html=True)
     st.caption(
         "💡 \"Ingresos cobrados\" (por sabor) es solo lo que pagaron AL MOMENTO de esa venta — si después "
         "alguien abona un crédito viejo, esa plata aparece aparte, abajo del todo, sin sabor asociado (no hay "
@@ -5425,7 +5457,8 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
     })
 
     df_sab_mes = pd.DataFrame(filas_sab)
-    tabla_view(df_sab_mes)
+    with st.expander("👁️ Ver tabla"):
+        st.markdown(tabla_reporte_html(df_sab_mes), unsafe_allow_html=True)
     st.caption(
         "💡 \"Salida\" no se registra directo — se calcula como Inventario inicial + Entradas − Inventario "
         "(lo que falta para llegar al stock que realmente hay ahora es lo que se usó ese mes). \"Inventario\" del "
