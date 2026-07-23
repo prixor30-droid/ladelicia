@@ -264,17 +264,18 @@ def _fmt_celda(v):
     return v
 
 def tabla_view(df):
-    """Tabla de solo consulta, estática (sin ordenar/arrastrar columnas al tocar en tablet)."""
-    st.table(df.style.hide(axis="index").format(_fmt_celda))
+    """Tabla de solo consulta, estática (sin ordenar/arrastrar columnas al tocar en tablet) —
+    mismo estilo azul/cuadrícula que los reportes descargables en PDF."""
+    st.markdown(tabla_reporte_html(df), unsafe_allow_html=True)
 
 def tabla_reporte_html(df):
-    """Tabla HTML de solo lectura para los reportes de Contador — mismo azul (#1565C0) y
-    cuadrícula visible que se usa en los PDF descargables, para que en pantalla se vea igual."""
+    """Tabla HTML de solo lectura — mismo azul (#1565C0) y cuadrícula visible que se usa en los
+    PDF descargables, para que en pantalla se vea igual."""
     cols = list(df.columns)
     header_html = "".join(f"<th>{c}</th>" for c in cols)
     filas_html = []
     for _, row in df.iterrows():
-        vals = ["" if pd.isna(v) else v for v in row.tolist()]
+        vals = ["" if pd.isna(v) else _fmt_celda(v) for v in row.tolist()]
         primera = str(vals[0])
         es_total = primera == "Total"
         es_etiqueta = bool(primera) and not es_total and all(str(v) == "" for v in vals[1:])
