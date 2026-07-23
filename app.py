@@ -5103,9 +5103,13 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
                     st.rerun()
         with col_re_d:
             st.markdown('<div class="section-label">📥 Registrar desembolso recibido</div>', unsafe_allow_html=True)
-            st.caption("Para préstamos que llegan por cuotas (ej. Sandra, $500.000 mensuales).")
+            st.caption("Para préstamos que llegan por cuotas, o un crédito nuevo que ya te aprobaron.")
             acreedor_re = st.selectbox("Acreedor", nombres_deudas, key="acreedor_recibido_deuda")
             valor_re = st.number_input("Valor recibido ($)", min_value=0, value=0, step=100000, key="valor_recibido_deuda")
+            entra_caja_re = st.checkbox(
+                "Esta plata entra directamente a Caja (ej. crédito para infraestructura)",
+                value=False, key="entra_caja_recibido_deuda"
+            )
             if st.button("✅ Registrar recibido", key="btn_recibido_deuda"):
                 if valor_re <= 0:
                     st.markdown(f'<div class="alert-low">{ICO_WARN} Ingresa un valor.</div>', unsafe_allow_html=True)
@@ -5115,9 +5119,44 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
                         "deuda_id": deuda_sel_re["id"], "fecha": fecha_hoy(), "hora": ahora(),
                         "tipo": "recibido", "valor": float(valor_re), "usuario": st.session_state.admin_actual
                     })
-                    st.markdown(f'<div class="success-toast">{ICO_CHECK} Desembolso registrado.</div>', unsafe_allow_html=True)
+                    if entra_caja_re:
+                        sb_post("caja_ingresos", {
+                            "fecha": fecha_hoy(), "hora": ahora(),
+                            "concepto": f"Préstamo recibido — {acreedor_re}",
+                            "valor": float(valor_re), "categoria": "Préstamo / crédito recibido"
+                        })
+                    st.markdown(
+                        f'<div class="success-toast">{ICO_CHECK} Desembolso registrado'
+                        f'{" y sumado a caja." if entra_caja_re else "."}</div>',
+                        unsafe_allow_html=True
+                    )
                     time.sleep(0.3)
                     st.rerun()
+
+    with st.expander("➕ Registrar nuevo préstamo/deuda"):
+        st.caption("Para créditos o préstamos futuros con un nuevo acreedor (ej. un crédito bancario aprobado).")
+        acreedor_nuevo = st.text_input("Acreedor", placeholder="Ej: Banco XYZ", key="acreedor_nueva_deuda")
+        garantia_nueva = st.text_input("Garantía (opcional)", placeholder="Ej: Hipoteca, sin garantía...", key="garantia_nueva_deuda")
+        monto_nuevo = st.number_input("Monto acordado ($)", min_value=0, value=0, step=100000, key="monto_nueva_deuda")
+        notas_nuevas = st.text_input("Notas (opcional)", placeholder="Ej: Crédito para infraestructura de la fábrica", key="notas_nueva_deuda")
+        if st.button("✅ Registrar préstamo", key="btn_nueva_deuda"):
+            if not acreedor_nuevo.strip():
+                st.markdown(f'<div class="alert-low">{ICO_WARN} Escribe el nombre del acreedor.</div>', unsafe_allow_html=True)
+            elif monto_nuevo <= 0:
+                st.markdown(f'<div class="alert-low">{ICO_WARN} Ingresa el monto acordado.</div>', unsafe_allow_html=True)
+            else:
+                sb_post("deudas_terceros", {
+                    "acreedor": acreedor_nuevo.strip(), "garantia": garantia_nueva.strip() or None,
+                    "monto_acordado": float(monto_nuevo), "fecha_registro": fecha_hoy(),
+                    "notas": notas_nuevas.strip() or None
+                })
+                st.markdown(
+                    f'<div class="success-toast">{ICO_CHECK} Préstamo registrado — usa "Registrar desembolso recibido" '
+                    f'arriba cuando te llegue la plata.</div>',
+                    unsafe_allow_html=True
+                )
+                time.sleep(0.3)
+                st.rerun()
 
     # --- Inventario Inicial a Fábrica de Papas Productos La Delicia — Producto Terminado ---
     st.markdown(
