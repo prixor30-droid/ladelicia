@@ -5072,11 +5072,19 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
     for r in raw_prod_inv:
         prod_map_inv[r["sabor"]] = prod_map_inv.get(r["sabor"], 0) + float(r["cantidad"])
 
+    # "venta_cantidad/total_map_inv" son la cantidad y plata REAL de las ventas tal
+    # cual quedaron registradas (sin descontar devoluciones) — se usan aparte de
+    # "salidas_map_inv" para que "Precio de venta" sea un promedio limpio (venta ÷
+    # cantidad vendida), no mezclado con el neteo de devoluciones que sí necesita Saldo.
     salidas_map_inv = {}
+    venta_cantidad_map_inv = {}
+    venta_total_map_inv = {}
     for r in raw_vent_inv:
         if r.get("canal") not in CANALES_VENTA_REAL:
             continue
         salidas_map_inv[r["sabor"]] = salidas_map_inv.get(r["sabor"], 0) + float(r["cantidad"])
+        venta_cantidad_map_inv[r["sabor"]] = venta_cantidad_map_inv.get(r["sabor"], 0) + float(r["cantidad"])
+        venta_total_map_inv[r["sabor"]] = venta_total_map_inv.get(r["sabor"], 0) + float(r.get("total", 0) or 0)
     # Las devoluciones vuelven al inventario sin pasar por Producción — se restan
     # de Salidas para que el Saldo calculado sí las refleje.
     for r in raw_dev_inv:
@@ -5094,29 +5102,6 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
     for r in raw_dan_inv:
         mermas_map_inv[r["sabor"]] = mermas_map_inv.get(r["sabor"], 0) + float(r["cantidad"])
 
-    # El abono/saldo se guarda por FACTURA, no por sabor — para repartirlo por
-    # referencia se reparte proporcional al peso de cada línea dentro del total
-    # de su factura (una factura con varios sabores reparte su abono entre ellos
-    # según cuánto valía cada uno).
-    factura_total_lineas_inv = {}
-    for r in raw_vent_inv:
-        fid_r = r.get("factura_id", "")
-        if fid_r:
-            factura_total_lineas_inv[fid_r] = factura_total_lineas_inv.get(fid_r, 0) + float(r.get("total", 0) or 0)
-
-    cobrado_map_inv = {}
-    pendiente_map_inv = {}
-    for r in raw_vent_inv:
-        fid_r = r.get("factura_id", "")
-        fac_r = facturas_inv_mes.get(fid_r)
-        total_fact_r = factura_total_lineas_inv.get(fid_r, 0)
-        if not fac_r or total_fact_r == 0:
-            continue
-        share_r = float(r.get("total", 0) or 0) / total_fact_r
-        s = r["sabor"]
-        cobrado_map_inv[s] = cobrado_map_inv.get(s, 0) + fac_r["abono"] * share_r
-        pendiente_map_inv[s] = pendiente_map_inv.get(s, 0) + fac_r["saldo"] * share_r
-
     filas_inv = []
     tot_inicial_inv = tot_prod_inv = tot_salidas_inv = tot_ajuste_inv = tot_merma_inv = tot_saldo_inv = tot_costo_inv = 0.0
     for sabor_r in SABORES_LISTA:
@@ -5125,11 +5110,10 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
         salidas_r = salidas_map_inv.get(sabor_r, 0)
         ajuste_r = ajustes_map_inv.get(sabor_r, 0)
         merma_r = mermas_map_inv.get(sabor_r, 0)
-        cobrado_r = cobrado_map_inv.get(sabor_r, 0)
-        pendiente_r = pendiente_map_inv.get(sabor_r, 0)
-        ingreso_total_r = cobrado_r + pendiente_r
         saldo_r = inicial_r + prod_r - salidas_r + ajuste_r - merma_r
-        precio_pond_r = (ingreso_total_r / salidas_r) if salidas_r > 0 else PRODUCTOS.get(sabor_r, 0)
+        venta_cant_r = venta_cantidad_map_inv.get(sabor_r, 0)
+        venta_tot_r = venta_total_map_inv.get(sabor_r, 0)
+        precio_pond_r = (venta_tot_r / venta_cant_r) if venta_cant_r > 0 else PRODUCTOS.get(sabor_r, 0)
         costo_inv_r = saldo_r * precio_pond_r
 
         fila_r = {
@@ -5140,21 +5124,14 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
             "Saldo": saldo_r,
             "Precio de venta": fmt(round(precio_pond_r)),
             "Valor en inventario": fmt(round(costo_inv_r)),
-            "Ingresos cobrados": fmt(round(cobrado_r)),
-            "Créditos pendientes (sin recibir)": fmt(round(pendiente_r)),
-            "Total ingresos": fmt(round(ingreso_total_r)),
         }
         filas_inv.append(fila_r)
         tot_inicial_inv += inicial_r; tot_prod_inv += prod_r; tot_salidas_inv += salidas_r
         tot_ajuste_inv += ajuste_r; tot_merma_inv += merma_r; tot_saldo_inv += saldo_r; tot_costo_inv += costo_inv_r
 
-    # El total de Ingresos cobrados / Créditos pendientes se saca directo de
-    # calcular_cobros_periodo (no de la suma por sabor) para garantizar que
-    # coincida exacto con Resumen → Mes, incluso si algún reparto por sabor
-    # queda aproximado.
-    tot_cobrado_inv = sum(f["abono"] for f in facturas_inv_mes.values())
-    tot_pendiente_inv = sum(f["saldo"] for f in facturas_inv_mes.values())
-    precio_pond_total_inv = ((tot_cobrado_inv + tot_pendiente_inv) / tot_salidas_inv) if tot_salidas_inv > 0 else 0
+    tot_venta_cant_inv = sum(venta_cantidad_map_inv.values())
+    tot_venta_tot_inv = sum(venta_total_map_inv.values())
+    precio_pond_total_inv = (tot_venta_tot_inv / tot_venta_cant_inv) if tot_venta_cant_inv > 0 else 0
     fila_total_inv = {
         "Referencia": "Total",
         "Inventario inicial": tot_inicial_inv,
@@ -5163,53 +5140,8 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
         "Saldo": tot_saldo_inv,
         "Precio de venta": fmt(round(precio_pond_total_inv)),
         "Valor en inventario": fmt(round(tot_costo_inv)),
-        "Ingresos cobrados": fmt(round(tot_cobrado_inv)),
-        "Créditos pendientes (sin recibir)": fmt(round(tot_pendiente_inv)),
-        "Total ingresos": fmt(round(tot_cobrado_inv + tot_pendiente_inv)),
     }
     filas_inv.append(fila_total_inv)
-
-    # Créditos manuales antiguos (tabla "creditos", cargados con "➕ Cargar crédito
-    # antiguo") no tienen sabor asociado, así que no entran en el reparto por
-    # referencia de arriba — se muestran aparte para que el total sí coincida con
-    # "Créditos pendientes por cobrar" de Resumen → Mes.
-    pendiente_manual_inv = _pendiente_creditos_antiguos(primer_dia_inv, ultimo_dia_inv)
-    if pendiente_manual_inv > 0:
-        filas_inv.append({
-            "Referencia": "Créditos manuales antiguos (sin sabor):",
-            "Inventario inicial": "", "Producción": "", "Salidas": "", "Saldo": "", "Precio de venta": "",
-            "Valor en inventario": "", "Ingresos cobrados": "", "Créditos pendientes (sin recibir)": "",
-            "Total ingresos": "",
-        })
-        filas_inv.append({
-            "Referencia": "",
-            "Inventario inicial": "", "Producción": "", "Salidas": "", "Saldo": "", "Precio de venta": "",
-            "Valor en inventario": "", "Ingresos cobrados": "",
-            "Créditos pendientes (sin recibir)": fmt(round(pendiente_manual_inv)),
-            "Total ingresos": "",
-        })
-
-    # Plata que SÍ entró este mes por cobro de créditos (de cualquier origen — de
-    # una venta con sabor, o de un crédito manual antiguo, sin importar de qué mes
-    # era la deuda) — "Ingresos cobrados" de arriba solo cuenta lo que se pagó AL
-    # MOMENTO de la venta, así que esto es plata real que faltaría si no se muestra
-    # aparte. Mismo dato que "cobro_creditos_total" usado en Resumen → Mes.
-    cobro_creditos_mes_inv = cobros_inv_mes["cobro_creditos_total"]
-    if cobro_creditos_mes_inv > 0:
-        filas_inv.append({
-            "Referencia": "Cobro de créditos este mes (sin sabor):",
-            "Inventario inicial": "", "Producción": "", "Salidas": "", "Saldo": "", "Precio de venta": "",
-            "Valor en inventario": "", "Ingresos cobrados": "",
-            "Créditos pendientes (sin recibir)": "", "Total ingresos": "",
-        })
-        filas_inv.append({
-            "Referencia": "",
-            "Inventario inicial": "", "Producción": "", "Salidas": "", "Saldo": "", "Precio de venta": "",
-            "Valor en inventario": "",
-            "Ingresos cobrados": fmt(round(cobro_creditos_mes_inv)),
-            "Créditos pendientes (sin recibir)": "",
-            "Total ingresos": "",
-        })
 
     df_inv_mes = pd.DataFrame(filas_inv)
     with st.expander("👁️ Ver tabla"):
@@ -5221,7 +5153,25 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
             unsafe_allow_html=True
         )
 
-    def _pdf_inv_mes(df, nombre_mes_pdf):
+    # Cartera del mes — aparte del kardex de inventario a propósito: un crédito se le
+    # debe a un CLIENTE, no a un "sabor", así que repartirlo por referencia (como se
+    # hacía antes) se distorsionaba con facturas de "Cambio" o de varios sabores.
+    # Estos totales salen directo de calcular_cobros_periodo / _pendiente_creditos_
+    # antiguos — los mismos que usa Resumen → Mes, así que siempre cuadran exacto.
+    tot_cobrado_inv = sum(f["abono"] for f in facturas_inv_mes.values())
+    tot_pendiente_inv = sum(f["saldo"] for f in facturas_inv_mes.values())
+    cobro_creditos_mes_inv = cobros_inv_mes["cobro_creditos_total"]
+    pendiente_manual_inv = _pendiente_creditos_antiguos(primer_dia_inv, ultimo_dia_inv)
+    cobrado_total_mes_inv = tot_cobrado_inv + cobro_creditos_mes_inv
+    pendiente_total_mes_inv = tot_pendiente_inv + pendiente_manual_inv
+    st.markdown(
+        f'<div class="calc-box">💰 Cartera del mes — Ingresos cobrados: '
+        f'<b>{fmt(round(cobrado_total_mes_inv))}</b> · Créditos pendientes por cobrar: '
+        f'<b>{fmt(round(pendiente_total_mes_inv))}</b></div>',
+        unsafe_allow_html=True
+    )
+
+    def _pdf_inv_mes(df, nombre_mes_pdf, cobrado_total, pendiente_total):
         from reportlab.lib.pagesizes import A4, landscape
         from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
         from reportlab.lib.styles import getSampleStyleSheet
@@ -5265,6 +5215,12 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
                 estilo_cmds.append(("FONTNAME", (0, i), (0, i), "Helvetica-Bold"))
         tabla_pdf.setStyle(TableStyle(estilo_cmds))
         elements.append(tabla_pdf)
+        elements.append(Spacer(1, 0.4*cm))
+        elements.append(Paragraph(
+            f"<b>Cartera del mes</b> — Ingresos cobrados: <b>{fmt(round(cobrado_total))}</b> · "
+            f"Créditos pendientes por cobrar: <b>{fmt(round(pendiente_total))}</b>",
+            styles["Normal"]
+        ))
         doc.build(elements)
         buf.seek(0)
         return buf.read()
@@ -5276,7 +5232,7 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
         file_name=f"inventario_inicial_{primer_dia_inv.strftime('%Y_%m')}.csv",
         mime="text/csv", key="btn_desc_inv_inicial"
     )
-    pdf_inv = _pdf_inv_mes(df_inv_mes, primer_dia_inv.strftime("%B %Y").capitalize())
+    pdf_inv = _pdf_inv_mes(df_inv_mes, primer_dia_inv.strftime("%B %Y").capitalize(), cobrado_total_mes_inv, pendiente_total_mes_inv)
     col_dl2.download_button(
         "📄 Descargar PDF", data=pdf_inv,
         file_name=f"inventario_inicial_{primer_dia_inv.strftime('%Y_%m')}.pdf",
