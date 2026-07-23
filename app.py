@@ -210,6 +210,20 @@ SABORIZANTES_INFO = [
 ]
 SABORIZANTES_NOMBRES = [n for n, _, _, _ in SABORIZANTES_INFO]
 
+# Materia prima base (papa, aceite, etc.) — a nivel módulo por el mismo motivo que
+# SABORIZANTES_INFO: la vista de Materia Prima y el reporte de Contador la necesitan.
+INSUMOS_INFO = [
+    ("Papa (bulto)",           "🥔", "bulto",   "mp"),
+    ("Aceite (caneca)",        "🛢️", "caneca", "mp"),
+    ("ACPM (caneca)",          "⛽", "caneca",  "mp"),
+    ("Plátano (bolsa/caja)",   "🍌", "caja",    "mp"),
+    ("Salsa de tomate (unidad)", "🍅", "unidad", "mp"),
+    ("Chicharrón (bulto)",     "🥩", "bulto",   "mp"),
+    ("Tocineta (bulto)",       "🥓", "bulto",   "mp"),
+]
+INSUMOS_NOMBRES = [n for n, _, _, _ in INSUMOS_INFO]
+INSUMOS_UNIDAD = {n: u for n, _, u, _ in INSUMOS_INFO}
+
 EMPLEADOS = ["Andrea", "Sofía", "Javier", "Edison", "Otro"]
 RESERVA_META = {"Papa": 50_000_000, "Empaque": 50_000_000}
 VENDEDORES_FABRICA = ["Sofía", "Andrea"]
@@ -2798,15 +2812,6 @@ elif st.session_state.vista == "recibo":
 
 elif st.session_state.vista == "materia_prima":
 
-    INSUMOS_INFO = [
-        ("Papa (bulto)",           "🥔", "bulto",   "mp"),
-        ("Aceite (caneca)",        "🛢️", "caneca", "mp"),
-        ("ACPM (caneca)",          "⛽", "caneca",  "mp"),
-        ("Plátano (bolsa/caja)",   "🍌", "caja",    "mp"),
-        ("Salsa de tomate (unidad)", "🍅", "unidad", "mp"),
-        ("Chicharrón (bulto)",     "🥩", "bulto",   "mp"),
-        ("Tocineta (bulto)",       "🥓", "bulto",   "mp"),
-    ]
     EMPAQUES_INFO = [
         ("Transparente",       "📦", "kg", "emp"),
         ("BBQ emp",            "📦", "kg", "emp"),
@@ -5474,6 +5479,205 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
             st.markdown(
                 f'<div class="success-toast">{ICO_CHECK} Inventario de saborizantes cerrado — quedó guardado '
                 f'como inicial de {primer_dia_sab_sig.strftime("%B %Y")}.</div>',
+                unsafe_allow_html=True
+            )
+            time.sleep(0.3)
+            st.rerun()
+
+    # --- Inventario a Corte — Materia Prima ---
+    st.markdown(
+        '<div class="section-label">🥔 Inventario a Corte — Fábrica de Papas Productos La Delicia — Materia Prima</div>',
+        unsafe_allow_html=True
+    )
+    mes_mp_sel = st.date_input(
+        "Mes a consultar", value=datetime.now(COL_TZ).date().replace(day=1), key="mes_mp_cont"
+    )
+    primer_dia_mp = date(mes_mp_sel.year, mes_mp_sel.month, 1)
+    if mes_mp_sel.month == 12:
+        primer_dia_mp_sig = date(mes_mp_sel.year + 1, 1, 1)
+    else:
+        primer_dia_mp_sig = date(mes_mp_sel.year, mes_mp_sel.month + 1, 1)
+    ultimo_dia_mp = primer_dia_mp_sig - timedelta(days=1)
+    hoy_mp = datetime.now(COL_TZ).date()
+    es_mes_actual_mp = (mes_mp_sel.year == hoy_mp.year and mes_mp_sel.month == hoy_mp.month)
+
+    with ThreadPoolExecutor(max_workers=4) as ex:
+        f_inicial_mp  = ex.submit(sb_get, "cierres_materia_prima", f"select=insumo,cantidad&mes=eq.{primer_dia_mp}")
+        f_final_mp    = ex.submit(sb_get, "cierres_materia_prima", f"select=insumo,cantidad&mes=eq.{primer_dia_mp_sig}")
+        f_ent_mes_mp  = ex.submit(sb_get, "materia_prima", f"select=insumo,cantidad&fecha=gte.{primer_dia_mp}&fecha=lte.{ultimo_dia_mp}")
+        f_ent_todo_mp = ex.submit(sb_get, "materia_prima", "select=insumo,cantidad,precio_unitario")
+        f_sal_todo_mp = ex.submit(sb_get, "salidas_mp", "select=insumo,cantidad")
+    raw_inicial_mp  = f_inicial_mp.result() or []
+    raw_final_mp    = f_final_mp.result() or []
+    raw_ent_mes_mp  = f_ent_mes_mp.result() or []
+    raw_ent_todo_mp = f_ent_todo_mp.result() or []
+    raw_sal_todo_mp = f_sal_todo_mp.result() or []
+
+    inicial_map_mp    = {r["insumo"]: float(r["cantidad"]) for r in raw_inicial_mp}
+    cierre_sig_map_mp = {r["insumo"]: float(r["cantidad"]) for r in raw_final_mp}
+
+    entradas_mes_map_mp = {}
+    for r in raw_ent_mes_mp:
+        if r["insumo"] in INSUMOS_NOMBRES:
+            entradas_mes_map_mp[r["insumo"]] = entradas_mes_map_mp.get(r["insumo"], 0) + float(r["cantidad"])
+
+    # Stock en vivo (histórico completo) — misma lógica que saborizantes: todas las
+    # entradas de siempre menos todas las salidas de siempre.
+    stock_vivo_map_mp = {}
+    for r in raw_ent_todo_mp:
+        if r["insumo"] in INSUMOS_NOMBRES:
+            stock_vivo_map_mp[r["insumo"]] = stock_vivo_map_mp.get(r["insumo"], 0) + float(r["cantidad"])
+    for r in raw_sal_todo_mp:
+        if r["insumo"] in INSUMOS_NOMBRES:
+            stock_vivo_map_mp[r["insumo"]] = stock_vivo_map_mp.get(r["insumo"], 0) - float(r["cantidad"])
+
+    # Precio promedio ponderado histórico completo — cada insumo entra a precios
+    # distintos cada vez que se compra.
+    costo_pond_map_mp = {}
+    for r in raw_ent_todo_mp:
+        k = r["insumo"]
+        if k not in INSUMOS_NOMBRES:
+            continue
+        pu   = float(r.get("precio_unitario", 0) or 0)
+        cant = float(r.get("cantidad", 0) or 0)
+        if pu > 0 and cant > 0:
+            if k not in costo_pond_map_mp:
+                costo_pond_map_mp[k] = {"costo": 0.0, "cant": 0.0}
+            costo_pond_map_mp[k]["costo"] += pu * cant
+            costo_pond_map_mp[k]["cant"]  += cant
+
+    filas_mp = []
+    tot_valor_mp = tot_valsal_mp = 0.0
+    for nombre_mp in INSUMOS_NOMBRES:
+        inicial_r  = inicial_map_mp.get(nombre_mp, 0.0)
+        entradas_r = entradas_mes_map_mp.get(nombre_mp, 0.0)
+        final_r    = stock_vivo_map_mp.get(nombre_mp, 0.0) if es_mes_actual_mp else cierre_sig_map_mp.get(nombre_mp, 0.0)
+        salida_r   = inicial_r + entradas_r - final_r
+        d = costo_pond_map_mp.get(nombre_mp)
+        costo_r = (d["costo"] / d["cant"]) if d and d["cant"] > 0 else 0.0
+        valor_r = final_r * costo_r
+        valor_salida_r = costo_r * salida_r
+
+        filas_mp.append({
+            "Insumo": nombre_mp,
+            "Medida": INSUMOS_UNIDAD.get(nombre_mp, ""),
+            "Inventario inicial": round(inicial_r, 3),
+            "Entradas": round(entradas_r, 3),
+            "Salida": round(salida_r, 3),
+            "Inventario": round(final_r, 3),
+            "Costo": fmt(round(costo_r)),
+            "Total": fmt(round(valor_r)),
+            "Total Salida": fmt(round(valor_salida_r)),
+        })
+        tot_valor_mp += valor_r
+        tot_valsal_mp += valor_salida_r
+
+    filas_mp.append({
+        "Insumo": "Total", "Medida": "",
+        "Inventario inicial": "", "Entradas": "", "Salida": "", "Inventario": "", "Costo": "",
+        "Total": fmt(round(tot_valor_mp)),
+        "Total Salida": fmt(round(tot_valsal_mp)),
+    })
+
+    df_mp_mes = pd.DataFrame(filas_mp)
+    with st.expander("👁️ Ver tabla"):
+        st.markdown(tabla_reporte_html(df_mp_mes), unsafe_allow_html=True)
+    if not raw_inicial_mp:
+        st.markdown(
+            f'<div class="warn-box">{ICO_WARN} No hay un cierre de materia prima guardado para '
+            f'{primer_dia_mp.strftime("%B %Y")} — el "Inventario inicial" está en 0 para todos.</div>',
+            unsafe_allow_html=True
+        )
+
+    def _pdf_mp_mes(df, nombre_mes_pdf):
+        from reportlab.lib.pagesizes import A4, landscape
+        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+        from reportlab.lib.styles import getSampleStyleSheet
+        from reportlab.lib import colors
+        from reportlab.lib.units import cm
+        import io
+
+        buf = io.BytesIO()
+        doc = SimpleDocTemplate(buf, pagesize=landscape(A4),
+                                leftMargin=1*cm, rightMargin=1*cm,
+                                topMargin=1.5*cm, bottomMargin=1*cm)
+        styles = getSampleStyleSheet()
+        elements = [
+            Paragraph("INVENTARIO A CORTE — FÁBRICA DE PAPAS PRODUCTOS LA DELICIA — MATERIA PRIMA", styles["Title"]),
+            Paragraph(f"Mes: {nombre_mes_pdf}  |  Generado: {fecha_hoy()}", styles["Normal"]),
+            Spacer(1, 0.4*cm),
+        ]
+        cols = list(df.columns)
+        filas_str = df.astype(str).replace("nan", "").values.tolist()
+        data = [cols] + filas_str
+        col_width = (landscape(A4)[0] - 2*cm) / len(cols)
+        tabla_pdf = Table(data, colWidths=[col_width]*len(cols), repeatRows=1)
+        tabla_pdf.setStyle(TableStyle([
+            ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#1565C0")),
+            ("TEXTCOLOR",  (0,0), (-1,0), colors.white),
+            ("FONTNAME",   (0,0), (-1,0), "Helvetica-Bold"),
+            ("FONTSIZE",   (0,0), (-1,-1), 8),
+            ("ROWBACKGROUNDS", (0,1), (-1,-1), [colors.white, colors.HexColor("#EEF4FF")]),
+            ("GRID",       (0,0), (-1,-1), 0.3, colors.HexColor("#BBDEFB")),
+            ("VALIGN",     (0,0), (-1,-1), "MIDDLE"),
+            ("TOPPADDING",    (0,0), (-1,-1), 3),
+            ("BOTTOMPADDING", (0,0), (-1,-1), 3),
+            ("LEFTPADDING",   (0,0), (-1,-1), 3),
+            ("RIGHTPADDING",  (0,0), (-1,-1), 3),
+            ("FONTNAME", (0, len(filas_str)), (-1, len(filas_str)), "Helvetica-Bold"),
+        ]))
+        elements.append(tabla_pdf)
+        doc.build(elements)
+        buf.seek(0)
+        return buf.read()
+
+    col_dl1m, col_dl2m = st.columns(2)
+    csv_mp = df_mp_mes.to_csv(index=False).encode("utf-8")
+    col_dl1m.download_button(
+        "📥 Descargar CSV", data=csv_mp,
+        file_name=f"materia_prima_corte_{primer_dia_mp.strftime('%Y_%m')}.csv",
+        mime="text/csv", key="btn_desc_mp_csv"
+    )
+    pdf_mp = _pdf_mp_mes(df_mp_mes, primer_dia_mp.strftime("%B %Y").capitalize())
+    col_dl2m.download_button(
+        "📄 Descargar PDF", data=pdf_mp,
+        file_name=f"materia_prima_corte_{primer_dia_mp.strftime('%Y_%m')}.pdf",
+        mime="application/pdf", key="btn_desc_mp_pdf"
+    )
+
+    with st.expander("🔒 Cerrar inventario de materia prima del mes"):
+        st.caption(
+            "Guarda el stock EN VIVO (entradas de siempre − salidas de siempre) de cada insumo como el "
+            "\"Inventario inicial\" del mes siguiente. Hazlo cuando ya termines de registrar todo el mes actual."
+        )
+        ya_existe_cierre_mp = sb_get(
+            "cierres_materia_prima", f"select=insumo&mes=eq.{primer_dia_mp_sig}&limit=1"
+        )
+        if ya_existe_cierre_mp:
+            st.markdown(
+                f'<div class="warn-box">{ICO_WARN} Ya existe un cierre guardado para '
+                f'{primer_dia_mp_sig.strftime("%B %Y")}. Si confirmas, se sobrescribe.</div>',
+                unsafe_allow_html=True
+            )
+        df_preview_cierre_mp = pd.DataFrame([
+            {"Insumo": n, "Medida": INSUMOS_UNIDAD.get(n, ""), "Stock actual": round(stock_vivo_map_mp.get(n, 0.0), 3)}
+            for n in INSUMOS_NOMBRES
+        ])
+        tabla_view(df_preview_cierre_mp)
+        if st.button(
+            f"✅ Confirmar cierre → será el inicial de {primer_dia_mp_sig.strftime('%B %Y')}",
+            key="btn_cerrar_mp_mes"
+        ):
+            sb_delete("cierres_materia_prima", f"mes=eq.{primer_dia_mp_sig}")
+            filas_cierre_mp = [
+                {"mes": str(primer_dia_mp_sig), "insumo": n, "cantidad": round(stock_vivo_map_mp.get(n, 0.0), 3),
+                 "fecha_registro": fecha_hoy(), "hora": ahora(), "usuario": st.session_state.admin_actual}
+                for n in INSUMOS_NOMBRES
+            ]
+            sb_post("cierres_materia_prima", filas_cierre_mp)
+            st.markdown(
+                f'<div class="success-toast">{ICO_CHECK} Inventario de materia prima cerrado — quedó guardado '
+                f'como inicial de {primer_dia_mp_sig.strftime("%B %Y")}.</div>',
                 unsafe_allow_html=True
             )
             time.sleep(0.3)
