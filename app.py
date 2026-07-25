@@ -1001,6 +1001,9 @@ def render_recibo(registros):
 
     items_finales, totales_cons = _consolidar_items_recibo(registros)
     total_r = sum(totales_cons[s] for s in items_finales)
+    saldo_r = float(r0.get("saldo", 0) or 0)
+    abono_r = float(r0.get("abono", 0) or 0)
+    es_credito_r = saldo_r > 0
 
     items_partes = []
     for s, c in items_finales.items():
@@ -1022,6 +1025,10 @@ def render_recibo(registros):
         '<div class="recibo-titulo">Productos La Delicia</div>',
         '<div class="recibo-sub">Factura de venta</div>',
         f'<div class="recibo-sub">No. FV-{fid}</div>',
+    ]
+    if es_credito_r:
+        partes.append('<div class="recibo-credito-badge">VENTA A CREDITO</div>')
+    partes += [
         '<div class="recibo-linea-punteada"></div>',
         f'<div class="recibo-dato"><b>Fecha:</b> {fecha_r} · {hora_r}</div>',
         f'<div class="recibo-dato"><b>Cliente:</b> {cliente_r}</div>',
@@ -1030,6 +1037,13 @@ def render_recibo(registros):
         items_html,
         '<div class="recibo-linea-punteada"></div>',
         f'<div class="recibo-total-row"><span>TOTAL</span><span>{fmt(total_r)}</span></div>',
+    ]
+    if es_credito_r:
+        partes += [
+            f'<div class="recibo-credito-linea"><span>ABONADO</span><span>{fmt(abono_r)}</span></div>',
+            f'<div class="recibo-credito-linea"><span>SALDO PENDIENTE</span><span>{fmt(saldo_r)}</span></div>',
+        ]
+    partes += [
         '<div class="recibo-linea-punteada"></div>',
         '<div class="recibo-footer">¡Gracias por su compra!</div>',
         '</div></div>'
@@ -1473,6 +1487,8 @@ label,.stSelectbox label,.stNumberInput label,.stDateInput label,.stTextInput la
 .recibo-item-detalle{display:flex;justify-content:space-between;font-size:0.8rem;color:#1565C0;}
 .recibo-total-row{display:flex;justify-content:space-between;font-size:1.05rem;font-weight:700;color:#1B9E5A;}
 .recibo-footer{text-align:center;font-size:0.8rem;color:#1565C0;font-style:italic;}
+.recibo-credito-badge{background:#000000;color:#FFFFFF;text-align:center;font-weight:700;font-size:0.85rem;letter-spacing:1.5px;padding:6px 0;margin:10px 0;border-radius:3px;}
+.recibo-credito-linea{display:flex;justify-content:space-between;font-size:0.82rem;font-weight:700;color:#0D1B2A;border-top:1.5px solid #000000;border-bottom:1.5px solid #000000;padding:3px 0;margin-bottom:2px;}
 div[data-testid="stRadio"] > div{display:flex;flex-wrap:wrap;gap:8px;}
 div[data-testid="stRadio"] label[data-baseweb="radio"]{background:#1565C0 !important;border:2px solid #1565C0 !important;border-radius:8px !important;padding:8px 16px !important;cursor:pointer;}
 div[data-testid="stRadio"] label[data-baseweb="radio"] p, div[data-testid="stRadio"] label[data-baseweb="radio"] span{color:white !important;font-weight:600 !important;}
@@ -4373,7 +4389,7 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
         if col_v1.button("📥 CSV", key="btn_exp_v"):
             raw_e = sb_get("ventas", f"select=*&fecha=gte.{f_exp_ini}&fecha=lte.{f_exp_fin}&order=fecha.asc")
             if raw_e:
-                csv = pd.DataFrame(raw_e).to_csv(index=False).encode("utf-8")
+                csv = pd.DataFrame(raw_e).to_csv(index=False, sep=";").encode("utf-8-sig")
                 st.download_button("⬇️ Descargar ventas CSV", csv, f"ventas_{f_exp_ini}_{f_exp_fin}.csv", "text/csv", key="dl_v")
         if col_v2.button("📄 PDF", key="btn_pdf_v"):
             raw_e = sb_get("ventas", f"select=fecha,hora,canal,vendedor,cliente,factura_id,total&fecha=gte.{f_exp_ini}&fecha=lte.{f_exp_fin}&order=fecha.asc")
@@ -4395,7 +4411,7 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
         if col_p1.button("📥 CSV", key="btn_exp_p"):
             raw_e2 = sb_get("produccion", f"select=*&fecha=gte.{f_exp_ini}&fecha=lte.{f_exp_fin}&order=fecha.asc")
             if raw_e2:
-                csv2 = pd.DataFrame(raw_e2).to_csv(index=False).encode("utf-8")
+                csv2 = pd.DataFrame(raw_e2).to_csv(index=False, sep=";").encode("utf-8-sig")
                 st.download_button("⬇️ Descargar producción CSV", csv2, f"produccion_{f_exp_ini}_{f_exp_fin}.csv", "text/csv", key="dl_p")
         if col_p2.button("📄 PDF", key="btn_pdf_p"):
             raw_e2 = sb_get("produccion", f"select=fecha,hora,empleado,sabor,cantidad&fecha=gte.{f_exp_ini}&fecha=lte.{f_exp_fin}&order=fecha.asc")
@@ -4410,7 +4426,7 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
         if col_i1.button("📥 CSV", key="btn_exp_i"):
             raw_e3 = sb_get("inventario", "select=*&order=sabor.asc")
             if raw_e3:
-                csv3 = pd.DataFrame(raw_e3).to_csv(index=False).encode("utf-8")
+                csv3 = pd.DataFrame(raw_e3).to_csv(index=False, sep=";").encode("utf-8-sig")
                 st.download_button("⬇️ Descargar inventario CSV", csv3, f"inventario_{fecha_hoy()}.csv", "text/csv", key="dl_i")
         if col_i2.button("📄 PDF", key="btn_pdf_i"):
             raw_e3 = sb_get("inventario", "select=sabor,stock,precio&order=sabor.asc")
@@ -4986,10 +5002,17 @@ elif st.session_state.vista == "nomina" and st.session_state.es_admin:
 elif st.session_state.vista == "contador" and st.session_state.es_admin:
     # Tema verde pastel — solo para esta vista. El <style> se inyecta únicamente
     # cuando se está renderizando Contador, así que no afecta a ninguna otra sección.
+    if _fondo_logo_b64:
+        _brand_header_contador = (
+            'background:linear-gradient(135deg,rgba(46,125,50,0.55),rgba(102,187,106,0.55)),'
+            'url("data:image/jpeg;base64,' + _fondo_logo_b64 + '") center/cover no-repeat !important;'
+        )
+    else:
+        _brand_header_contador = 'background:linear-gradient(135deg,#2E7D32,#66BB6A) !important;'
     st.markdown("""
     <style>
     .stApp{background-color:#EAF7EE !important;}
-    .brand-header{background:linear-gradient(135deg,#2E7D32,#66BB6A) !important;}
+    .brand-header{""" + _brand_header_contador + """}
     .section-label{color:#1B7A43 !important;}
     label,.stSelectbox label,.stNumberInput label,.stDateInput label,.stTextInput label{color:#1B7A43 !important;}
     .stButton>button{background:#43A047 !important;box-shadow:0 4px 16px rgba(67,160,71,0.25) !important;}
@@ -5011,1037 +5034,1145 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
     """, unsafe_allow_html=True)
     st.markdown(f'<div class="section-label">{ICO_RECEIPT} Contador</div>', unsafe_allow_html=True)
 
-    # --- Inventario total invertido (materia prima + saborizantes + empaque) ---
-    raw_ent_todo_c = sb_get("materia_prima", "select=insumo,cantidad,precio_unitario,precio_total") or []
-    raw_sal_todo_c = sb_get("salidas_mp", "select=insumo,cantidad") or []
-    stock_actual_todo_c = {}
-    for r in raw_ent_todo_c:
-        stock_actual_todo_c[r["insumo"]] = stock_actual_todo_c.get(r["insumo"], 0) + float(r["cantidad"])
-    for r in raw_sal_todo_c:
-        stock_actual_todo_c[r["insumo"]] = stock_actual_todo_c.get(r["insumo"], 0) - float(r["cantidad"])
+    tab_resumen, tab_reportes, tab_nomina = st.tabs([
+        "💰 Resumen financiero", "📚 Reportes de inventario mensual", "👥 Nómina"
+    ])
 
-    prom_pond_todo_c = {}
-    for r in raw_ent_todo_c:
-        k = r["insumo"]
-        pu = float(r.get("precio_unitario", 0))
-        cant = float(r.get("cantidad", 0))
-        if pu > 0 and cant > 0:
-            if k not in prom_pond_todo_c:
-                prom_pond_todo_c[k] = {"total_costo": 0, "total_cant": 0}
-            prom_pond_todo_c[k]["total_costo"] += pu * cant
-            prom_pond_todo_c[k]["total_cant"]  += cant
+    with tab_resumen:
+        # --- Inventario total invertido (materia prima + saborizantes + empaque) ---
+        raw_ent_todo_c = sb_get("materia_prima", "select=insumo,cantidad,precio_unitario,precio_total") or []
+        raw_sal_todo_c = sb_get("salidas_mp", "select=insumo,cantidad") or []
+        stock_actual_todo_c = {}
+        for r in raw_ent_todo_c:
+            stock_actual_todo_c[r["insumo"]] = stock_actual_todo_c.get(r["insumo"], 0) + float(r["cantidad"])
+        for r in raw_sal_todo_c:
+            stock_actual_todo_c[r["insumo"]] = stock_actual_todo_c.get(r["insumo"], 0) - float(r["cantidad"])
 
-    total_invertido_c = 0
-    for k, cant_stock in stock_actual_todo_c.items():
-        d = prom_pond_todo_c.get(k)
-        if d and d["total_cant"] > 0 and cant_stock > 0:
-            total_invertido_c += cant_stock * (d["total_costo"] / d["total_cant"])
+        prom_pond_todo_c = {}
+        for r in raw_ent_todo_c:
+            k = r["insumo"]
+            pu = float(r.get("precio_unitario", 0))
+            cant = float(r.get("cantidad", 0))
+            if pu > 0 and cant > 0:
+                if k not in prom_pond_todo_c:
+                    prom_pond_todo_c[k] = {"total_costo": 0, "total_cant": 0}
+                prom_pond_todo_c[k]["total_costo"] += pu * cant
+                prom_pond_todo_c[k]["total_cant"]  += cant
 
-    st.markdown(
-        f'<div class="calc-box">💰 Inventario total invertido ahora mismo '
-        f'(materia prima + saborizantes + empaque): <b>{fmt(round(total_invertido_c))}</b></div>',
-        unsafe_allow_html=True
-    )
+        total_invertido_c = 0
+        for k, cant_stock in stock_actual_todo_c.items():
+            d = prom_pond_todo_c.get(k)
+            if d and d["total_cant"] > 0 and cant_stock > 0:
+                total_invertido_c += cant_stock * (d["total_costo"] / d["total_cant"])
 
-    # --- Cuentas por cobrar / pagar (vigentes, sin filtro de fecha) ---
-    with ThreadPoolExecutor(max_workers=3) as ex:
-        f_cxc_c = ex.submit(sb_get, "ventas", "select=factura_id,saldo&saldo=gt.0&order=fecha.desc")
-        f_cxp_c = ex.submit(sb_get, "materia_prima", "select=id,saldo&estado=eq.pendiente")
-        f_cxc_m_c = ex.submit(sb_get, "creditos", "select=id,total,pagado&estado=eq.pendiente")
-    raw_cxc_c = f_cxc_c.result() or []
-    raw_cxp_c = f_cxp_c.result() or []
-    raw_cxc_m_c = f_cxc_m_c.result() or []
+        st.markdown(
+            f'<div class="calc-box">💰 Inventario total invertido ahora mismo '
+            f'(materia prima + saborizantes + empaque): <b>{fmt(round(total_invertido_c))}</b></div>',
+            unsafe_allow_html=True
+        )
 
-    facturas_cxc_c = {}
-    for r in raw_cxc_c:
-        fid = r.get("factura_id", "")
-        if fid and fid not in facturas_cxc_c:
-            facturas_cxc_c[fid] = float(r.get("saldo", 0))
-    cuentas_por_cobrar_c = sum(facturas_cxc_c.values()) + sum(max(0.0, float(r["total"]) - float(r.get("pagado", 0) or 0)) for r in raw_cxc_m_c)
-    cuentas_por_pagar_c = sum(float(r.get("saldo", 0)) for r in raw_cxp_c)
+        # --- Cuentas por cobrar / pagar (vigentes, sin filtro de fecha) ---
+        with ThreadPoolExecutor(max_workers=3) as ex:
+            f_cxc_c = ex.submit(sb_get, "ventas", "select=factura_id,saldo&saldo=gt.0&order=fecha.desc")
+            f_cxp_c = ex.submit(sb_get, "materia_prima", "select=id,saldo&estado=eq.pendiente")
+            f_cxc_m_c = ex.submit(sb_get, "creditos", "select=id,total,pagado&estado=eq.pendiente")
+        raw_cxc_c = f_cxc_c.result() or []
+        raw_cxp_c = f_cxp_c.result() or []
+        raw_cxc_m_c = f_cxc_m_c.result() or []
 
-    st.markdown(f'<div class="section-label">{ICO_RECEIPT} Cuentas vigentes</div>', unsafe_allow_html=True)
-    st.markdown(f"""
-    <div class="metric-row">
-        <div class="metric-box metric-blue"><div class="val">{fmt(cuentas_por_cobrar_c)}</div><div class="lbl">Cuentas por cobrar (clientes)</div></div>
-        <div class="metric-box metric-red"><div class="val">{fmt(cuentas_por_pagar_c)}</div><div class="lbl">Cuentas por pagar (proveedores)</div></div>
-    </div>
-    """, unsafe_allow_html=True)
+        facturas_cxc_c = {}
+        for r in raw_cxc_c:
+            fid = r.get("factura_id", "")
+            if fid and fid not in facturas_cxc_c:
+                facturas_cxc_c[fid] = float(r.get("saldo", 0))
+        cuentas_por_cobrar_c = sum(facturas_cxc_c.values()) + sum(max(0.0, float(r["total"]) - float(r.get("pagado", 0) or 0)) for r in raw_cxc_m_c)
+        cuentas_por_pagar_c = sum(float(r.get("saldo", 0)) for r in raw_cxp_c)
 
-    # --- Deudas con terceros (préstamos personales con garantía, no proveedores) ---
-    st.markdown('<div class="section-label">🏦 Deudas con terceros</div>', unsafe_allow_html=True)
-    raw_deudas = sb_get("deudas_terceros", "select=*&order=id.asc") or []
-    raw_mov_deudas = sb_get("deudas_terceros_movimientos", "select=deuda_id,tipo,valor") or []
+        st.markdown(f'<div class="section-label">{ICO_RECEIPT} Cuentas vigentes</div>', unsafe_allow_html=True)
+        st.markdown(f"""
+        <div class="metric-row">
+            <div class="metric-box metric-blue"><div class="val">{fmt(cuentas_por_cobrar_c)}</div><div class="lbl">Cuentas por cobrar (clientes)</div></div>
+            <div class="metric-box metric-red"><div class="val">{fmt(cuentas_por_pagar_c)}</div><div class="lbl">Cuentas por pagar (proveedores)</div></div>
+        </div>
+        """, unsafe_allow_html=True)
 
-    if not raw_deudas:
-        st.caption("Todavía no hay deudas con terceros registradas.")
-    else:
-        filas_deudas = []
-        tot_acordado_d = tot_recibido_d = tot_abonado_d = tot_saldo_d = 0.0
-        for d in raw_deudas:
-            movs_d = [m for m in raw_mov_deudas if m["deuda_id"] == d["id"]]
-            recibido_d = sum(float(m["valor"]) for m in movs_d if m["tipo"] == "recibido")
-            abonado_d = sum(float(m["valor"]) for m in movs_d if m["tipo"] == "abono")
-            saldo_d = recibido_d - abonado_d
-            pendiente_recibir_d = max(0.0, float(d["monto_acordado"]) - recibido_d)
+        # --- Deudas con terceros (préstamos personales con garantía, no proveedores) ---
+        st.markdown('<div class="section-label">🏦 Deudas con terceros</div>', unsafe_allow_html=True)
+        raw_deudas = sb_get("deudas_terceros", "select=*&order=id.asc") or []
+        raw_mov_deudas = sb_get("deudas_terceros_movimientos", "select=deuda_id,tipo,valor") or []
+
+        if not raw_deudas:
+            st.caption("Todavía no hay deudas con terceros registradas.")
+        else:
+            filas_deudas = []
+            tot_acordado_d = tot_recibido_d = tot_abonado_d = tot_saldo_d = 0.0
+            for d in raw_deudas:
+                movs_d = [m for m in raw_mov_deudas if m["deuda_id"] == d["id"]]
+                recibido_d = sum(float(m["valor"]) for m in movs_d if m["tipo"] == "recibido")
+                abonado_d = sum(float(m["valor"]) for m in movs_d if m["tipo"] == "abono")
+                saldo_d = recibido_d - abonado_d
+                pendiente_recibir_d = max(0.0, float(d["monto_acordado"]) - recibido_d)
+                filas_deudas.append({
+                    "Acreedor": d["acreedor"],
+                    "Garantía": d.get("garantia") or "—",
+                    "Monto acordado": fmt(round(float(d["monto_acordado"]))),
+                    "Recibido": fmt(round(recibido_d)),
+                    "Pendiente por recibir": fmt(round(pendiente_recibir_d)) if pendiente_recibir_d > 0 else "—",
+                    "Abonado": fmt(round(abonado_d)),
+                    "Saldo que se debe": fmt(round(saldo_d)),
+                })
+                tot_acordado_d += float(d["monto_acordado"]); tot_recibido_d += recibido_d
+                tot_abonado_d += abonado_d; tot_saldo_d += saldo_d
             filas_deudas.append({
-                "Acreedor": d["acreedor"],
-                "Garantía": d.get("garantia") or "—",
-                "Monto acordado": fmt(round(float(d["monto_acordado"]))),
-                "Recibido": fmt(round(recibido_d)),
-                "Pendiente por recibir": fmt(round(pendiente_recibir_d)) if pendiente_recibir_d > 0 else "—",
-                "Abonado": fmt(round(abonado_d)),
-                "Saldo que se debe": fmt(round(saldo_d)),
+                "Acreedor": "Total", "Garantía": "",
+                "Monto acordado": fmt(round(tot_acordado_d)), "Recibido": fmt(round(tot_recibido_d)),
+                "Pendiente por recibir": "", "Abonado": fmt(round(tot_abonado_d)),
+                "Saldo que se debe": fmt(round(tot_saldo_d)),
             })
-            tot_acordado_d += float(d["monto_acordado"]); tot_recibido_d += recibido_d
-            tot_abonado_d += abonado_d; tot_saldo_d += saldo_d
-        filas_deudas.append({
-            "Acreedor": "Total", "Garantía": "",
-            "Monto acordado": fmt(round(tot_acordado_d)), "Recibido": fmt(round(tot_recibido_d)),
-            "Pendiente por recibir": "", "Abonado": fmt(round(tot_abonado_d)),
-            "Saldo que se debe": fmt(round(tot_saldo_d)),
-        })
-        df_deudas = pd.DataFrame(filas_deudas)
-        st.markdown(tabla_reporte_html(df_deudas), unsafe_allow_html=True)
+            df_deudas = pd.DataFrame(filas_deudas)
+            st.markdown(tabla_reporte_html(df_deudas), unsafe_allow_html=True)
 
-        nombres_deudas = [d["acreedor"] for d in raw_deudas]
-        col_ab_d, col_re_d = st.columns(2)
-        with col_ab_d:
-            st.markdown('<div class="section-label">💸 Registrar abono</div>', unsafe_allow_html=True)
-            st.caption("Plata que la empresa paga de vuelta — se descuenta de Caja automáticamente.")
-            acreedor_ab = st.selectbox("Acreedor", nombres_deudas, key="acreedor_abono_deuda")
-            valor_ab = st.number_input("Valor del abono ($)", min_value=0, value=0, step=100000, key="valor_abono_deuda")
-            if st.button("✅ Registrar abono", key="btn_abono_deuda"):
-                if valor_ab <= 0:
-                    st.markdown(f'<div class="alert-low">{ICO_WARN} Ingresa un valor.</div>', unsafe_allow_html=True)
-                else:
-                    deuda_sel_ab = next(d for d in raw_deudas if d["acreedor"] == acreedor_ab)
-                    sb_post("deudas_terceros_movimientos", {
-                        "deuda_id": deuda_sel_ab["id"], "fecha": fecha_hoy(), "hora": ahora(),
-                        "tipo": "abono", "valor": float(valor_ab), "usuario": st.session_state.admin_actual
-                    })
-                    sb_post("caja_egresos", {
-                        "fecha": fecha_hoy(), "hora": ahora(), "concepto": f"Abono deuda — {acreedor_ab}",
-                        "valor": float(valor_ab), "categoria": "Deuda a terceros", "tipo": "gasto", "empleado": None
-                    })
-                    st.markdown(f'<div class="success-toast">{ICO_CHECK} Abono registrado y descontado de caja.</div>', unsafe_allow_html=True)
-                    time.sleep(0.3)
-                    st.rerun()
-        with col_re_d:
-            st.markdown('<div class="section-label">📥 Registrar desembolso recibido</div>', unsafe_allow_html=True)
-            st.caption("Para préstamos que llegan por cuotas, o un crédito nuevo que ya te aprobaron.")
-            acreedor_re = st.selectbox("Acreedor", nombres_deudas, key="acreedor_recibido_deuda")
-            valor_re = st.number_input("Valor recibido ($)", min_value=0, value=0, step=100000, key="valor_recibido_deuda")
-            entra_caja_re = st.checkbox(
-                "Esta plata entra directamente a Caja (ej. crédito para infraestructura)",
-                value=False, key="entra_caja_recibido_deuda"
-            )
-            if st.button("✅ Registrar recibido", key="btn_recibido_deuda"):
-                if valor_re <= 0:
-                    st.markdown(f'<div class="alert-low">{ICO_WARN} Ingresa un valor.</div>', unsafe_allow_html=True)
-                else:
-                    deuda_sel_re = next(d for d in raw_deudas if d["acreedor"] == acreedor_re)
-                    sb_post("deudas_terceros_movimientos", {
-                        "deuda_id": deuda_sel_re["id"], "fecha": fecha_hoy(), "hora": ahora(),
-                        "tipo": "recibido", "valor": float(valor_re), "usuario": st.session_state.admin_actual
-                    })
-                    if entra_caja_re:
-                        sb_post("caja_ingresos", {
-                            "fecha": fecha_hoy(), "hora": ahora(),
-                            "concepto": f"Préstamo recibido — {acreedor_re}",
-                            "valor": float(valor_re), "categoria": "Préstamo / crédito recibido"
+            nombres_deudas = [d["acreedor"] for d in raw_deudas]
+            col_ab_d, col_re_d = st.columns(2)
+            with col_ab_d:
+                st.markdown('<div class="section-label">💸 Registrar abono</div>', unsafe_allow_html=True)
+                st.caption("Plata que la empresa paga de vuelta — se descuenta de Caja automáticamente.")
+                acreedor_ab = st.selectbox("Acreedor", nombres_deudas, key="acreedor_abono_deuda")
+                valor_ab = st.number_input("Valor del abono ($)", min_value=0, value=0, step=100000, key="valor_abono_deuda")
+                if st.button("✅ Registrar abono", key="btn_abono_deuda"):
+                    if valor_ab <= 0:
+                        st.markdown(f'<div class="alert-low">{ICO_WARN} Ingresa un valor.</div>', unsafe_allow_html=True)
+                    else:
+                        deuda_sel_ab = next(d for d in raw_deudas if d["acreedor"] == acreedor_ab)
+                        sb_post("deudas_terceros_movimientos", {
+                            "deuda_id": deuda_sel_ab["id"], "fecha": fecha_hoy(), "hora": ahora(),
+                            "tipo": "abono", "valor": float(valor_ab), "usuario": st.session_state.admin_actual
                         })
+                        sb_post("caja_egresos", {
+                            "fecha": fecha_hoy(), "hora": ahora(), "concepto": f"Abono deuda — {acreedor_ab}",
+                            "valor": float(valor_ab), "categoria": "Deuda a terceros", "tipo": "gasto", "empleado": None
+                        })
+                        st.markdown(f'<div class="success-toast">{ICO_CHECK} Abono registrado y descontado de caja.</div>', unsafe_allow_html=True)
+                        time.sleep(0.3)
+                        st.rerun()
+            with col_re_d:
+                st.markdown('<div class="section-label">📥 Registrar desembolso recibido</div>', unsafe_allow_html=True)
+                st.caption("Para préstamos que llegan por cuotas, o un crédito nuevo que ya te aprobaron.")
+                acreedor_re = st.selectbox("Acreedor", nombres_deudas, key="acreedor_recibido_deuda")
+                valor_re = st.number_input("Valor recibido ($)", min_value=0, value=0, step=100000, key="valor_recibido_deuda")
+                entra_caja_re = st.checkbox(
+                    "Esta plata entra directamente a Caja (ej. crédito para infraestructura)",
+                    value=False, key="entra_caja_recibido_deuda"
+                )
+                if st.button("✅ Registrar recibido", key="btn_recibido_deuda"):
+                    if valor_re <= 0:
+                        st.markdown(f'<div class="alert-low">{ICO_WARN} Ingresa un valor.</div>', unsafe_allow_html=True)
+                    else:
+                        deuda_sel_re = next(d for d in raw_deudas if d["acreedor"] == acreedor_re)
+                        sb_post("deudas_terceros_movimientos", {
+                            "deuda_id": deuda_sel_re["id"], "fecha": fecha_hoy(), "hora": ahora(),
+                            "tipo": "recibido", "valor": float(valor_re), "usuario": st.session_state.admin_actual
+                        })
+                        if entra_caja_re:
+                            sb_post("caja_ingresos", {
+                                "fecha": fecha_hoy(), "hora": ahora(),
+                                "concepto": f"Préstamo recibido — {acreedor_re}",
+                                "valor": float(valor_re), "categoria": "Préstamo / crédito recibido"
+                            })
+                        st.markdown(
+                            f'<div class="success-toast">{ICO_CHECK} Desembolso registrado'
+                            f'{" y sumado a caja." if entra_caja_re else "."}</div>',
+                            unsafe_allow_html=True
+                        )
+                        time.sleep(0.3)
+                        st.rerun()
+
+        with st.expander("➕ Registrar nuevo préstamo/deuda"):
+            st.caption("Para créditos o préstamos futuros con un nuevo acreedor (ej. un crédito bancario aprobado).")
+            acreedor_nuevo = st.text_input("Acreedor", placeholder="Ej: Banco XYZ", key="acreedor_nueva_deuda")
+            garantia_nueva = st.text_input("Garantía (opcional)", placeholder="Ej: Hipoteca, sin garantía...", key="garantia_nueva_deuda")
+            monto_nuevo = st.number_input("Monto acordado ($)", min_value=0, value=0, step=100000, key="monto_nueva_deuda")
+            notas_nuevas = st.text_input("Notas (opcional)", placeholder="Ej: Crédito para infraestructura de la fábrica", key="notas_nueva_deuda")
+            if st.button("✅ Registrar préstamo", key="btn_nueva_deuda"):
+                if not acreedor_nuevo.strip():
+                    st.markdown(f'<div class="alert-low">{ICO_WARN} Escribe el nombre del acreedor.</div>', unsafe_allow_html=True)
+                elif monto_nuevo <= 0:
+                    st.markdown(f'<div class="alert-low">{ICO_WARN} Ingresa el monto acordado.</div>', unsafe_allow_html=True)
+                else:
+                    sb_post("deudas_terceros", {
+                        "acreedor": acreedor_nuevo.strip(), "garantia": garantia_nueva.strip() or None,
+                        "monto_acordado": float(monto_nuevo), "fecha_registro": fecha_hoy(),
+                        "notas": notas_nuevas.strip() or None
+                    })
                     st.markdown(
-                        f'<div class="success-toast">{ICO_CHECK} Desembolso registrado'
-                        f'{" y sumado a caja." if entra_caja_re else "."}</div>',
+                        f'<div class="success-toast">{ICO_CHECK} Préstamo registrado — usa "Registrar desembolso recibido" '
+                        f'arriba cuando te llegue la plata.</div>',
                         unsafe_allow_html=True
                     )
                     time.sleep(0.3)
                     st.rerun()
 
-    with st.expander("➕ Registrar nuevo préstamo/deuda"):
-        st.caption("Para créditos o préstamos futuros con un nuevo acreedor (ej. un crédito bancario aprobado).")
-        acreedor_nuevo = st.text_input("Acreedor", placeholder="Ej: Banco XYZ", key="acreedor_nueva_deuda")
-        garantia_nueva = st.text_input("Garantía (opcional)", placeholder="Ej: Hipoteca, sin garantía...", key="garantia_nueva_deuda")
-        monto_nuevo = st.number_input("Monto acordado ($)", min_value=0, value=0, step=100000, key="monto_nueva_deuda")
-        notas_nuevas = st.text_input("Notas (opcional)", placeholder="Ej: Crédito para infraestructura de la fábrica", key="notas_nueva_deuda")
-        if st.button("✅ Registrar préstamo", key="btn_nueva_deuda"):
-            if not acreedor_nuevo.strip():
-                st.markdown(f'<div class="alert-low">{ICO_WARN} Escribe el nombre del acreedor.</div>', unsafe_allow_html=True)
-            elif monto_nuevo <= 0:
-                st.markdown(f'<div class="alert-low">{ICO_WARN} Ingresa el monto acordado.</div>', unsafe_allow_html=True)
-            else:
-                sb_post("deudas_terceros", {
-                    "acreedor": acreedor_nuevo.strip(), "garantia": garantia_nueva.strip() or None,
-                    "monto_acordado": float(monto_nuevo), "fecha_registro": fecha_hoy(),
-                    "notas": notas_nuevas.strip() or None
-                })
+
+    with tab_reportes:
+        # --- Control conjunto de los 4 reportes de inventario mensual (Producto Terminado,
+        # Saborizantes, Materia Prima, Empaque): un botón para abrir/cerrar sus 4 tablas a la
+        # vez, y más abajo (una vez las 4 ya están calculadas) un botón para descargarlas
+        # todas juntas en un solo PDF.
+        st.markdown('<div class="section-label">📚 Reportes de inventario mensual</div>', unsafe_allow_html=True)
+        if "contador_ver_todas" not in st.session_state:
+            st.session_state.contador_ver_todas = False
+        if st.button(
+            "🙈 Ocultar todas las tablas" if st.session_state.contador_ver_todas else "👁️ Ver todas las tablas",
+            key="btn_ver_todas_contador"
+        ):
+            st.session_state.contador_ver_todas = not st.session_state.contador_ver_todas
+            st.rerun()
+
+        # --- Inventario Inicial a Fábrica de Papas Productos La Delicia — Producto Terminado ---
+        st.markdown(
+            '<div class="section-label">📦 Inventario Inicial a Fábrica de Papas Productos La Delicia — Producto Terminado</div>',
+            unsafe_allow_html=True
+        )
+        mes_inv_sel = st.date_input(
+            "Mes a consultar", value=datetime.now(COL_TZ).date().replace(day=1), key="mes_inv_cont"
+        )
+        primer_dia_inv = date(mes_inv_sel.year, mes_inv_sel.month, 1)
+        if mes_inv_sel.month == 12:
+            primer_dia_inv_sig = date(mes_inv_sel.year + 1, 1, 1)
+        else:
+            primer_dia_inv_sig = date(mes_inv_sel.year, mes_inv_sel.month + 1, 1)
+        ultimo_dia_inv = primer_dia_inv_sig - timedelta(days=1)
+
+        with ThreadPoolExecutor(max_workers=3) as ex:
+            f_inicial_inv = ex.submit(sb_get, "cierres_inventario", f"select=sabor,cantidad&mes=eq.{primer_dia_inv}")
+            f_prod_inv = ex.submit(sb_get, "produccion", f"select=sabor,cantidad&fecha=gte.{primer_dia_inv}&fecha=lte.{ultimo_dia_inv}")
+            f_vent_inv = ex.submit(sb_get, "ventas", f"select=sabor,cantidad,total,canal,factura_id&fecha=gte.{primer_dia_inv}&fecha=lte.{ultimo_dia_inv}")
+            f_dev_inv = ex.submit(sb_get, "devoluciones", f"select=sabor,cantidad&fecha=gte.{primer_dia_inv}&fecha=lte.{ultimo_dia_inv}")
+            f_ajs_inv = ex.submit(sb_get, "ajustes_stock_manual", f"select=sabor,delta&fecha=gte.{primer_dia_inv}&fecha=lte.{ultimo_dia_inv}")
+            f_dan_inv = ex.submit(sb_get, "mermas_stock", f"select=sabor,cantidad&fecha=gte.{primer_dia_inv}&fecha=lte.{ultimo_dia_inv}")
+        raw_inicial_inv = f_inicial_inv.result() or []
+        raw_prod_inv = f_prod_inv.result() or []
+        raw_vent_inv = f_vent_inv.result() or []
+        raw_dev_inv = f_dev_inv.result() or []
+        raw_ajs_inv = f_ajs_inv.result() or []
+        raw_dan_inv = f_dan_inv.result() or []
+
+        # Mismo cálculo que Resumen → Mes, para que "Ingresos cobrados" y "Créditos
+        # pendientes" coincidan exacto con esa pestaña.
+        cobros_inv_mes = calcular_cobros_periodo(primer_dia_inv, ultimo_dia_inv)
+        facturas_inv_mes = cobros_inv_mes["facturas"]  # {factura_id: {"canal","abono","saldo"}}
+
+        inicial_map_inv = {r["sabor"]: float(r["cantidad"]) for r in raw_inicial_inv}
+        prod_map_inv = {}
+        for r in raw_prod_inv:
+            prod_map_inv[r["sabor"]] = prod_map_inv.get(r["sabor"], 0) + float(r["cantidad"])
+
+        # "venta_cantidad/total_map_inv" son la cantidad y plata REAL de las ventas tal
+        # cual quedaron registradas (sin descontar devoluciones) — se usan aparte de
+        # "salidas_map_inv" para que "Precio de venta" sea un promedio limpio (venta ÷
+        # cantidad vendida), no mezclado con el neteo de devoluciones que sí necesita Saldo.
+        salidas_map_inv = {}
+        venta_cantidad_map_inv = {}
+        venta_total_map_inv = {}
+        for r in raw_vent_inv:
+            if r.get("canal") not in CANALES_VENTA_REAL:
+                continue
+            salidas_map_inv[r["sabor"]] = salidas_map_inv.get(r["sabor"], 0) + float(r["cantidad"])
+            venta_cantidad_map_inv[r["sabor"]] = venta_cantidad_map_inv.get(r["sabor"], 0) + float(r["cantidad"])
+            venta_total_map_inv[r["sabor"]] = venta_total_map_inv.get(r["sabor"], 0) + float(r.get("total", 0) or 0)
+        # Las devoluciones vuelven al inventario sin pasar por Producción — se restan
+        # de Salidas para que el Saldo calculado sí las refleje.
+        for r in raw_dev_inv:
+            salidas_map_inv[r["sabor"]] = salidas_map_inv.get(r["sabor"], 0) - float(r["cantidad"])
+
+        # Ajustes manuales de stock (correcciones, no son ni producción ni venta) —
+        # se muestran aparte, en su propia columna, sin mezclarse con Producción/Salidas.
+        ajustes_map_inv = {}
+        for r in raw_ajs_inv:
+            ajustes_map_inv[r["sabor"]] = ajustes_map_inv.get(r["sabor"], 0) + float(r["delta"])
+
+        # Producto dañado/merma — se resta aparte, no se mete en Salidas (no es venta,
+        # no genera ingreso, mezclarlo ahí distorsionaría el precio promedio ponderado).
+        mermas_map_inv = {}
+        for r in raw_dan_inv:
+            mermas_map_inv[r["sabor"]] = mermas_map_inv.get(r["sabor"], 0) + float(r["cantidad"])
+
+        filas_inv = []
+        tot_inicial_inv = tot_prod_inv = tot_salidas_inv = tot_ajuste_inv = tot_merma_inv = tot_saldo_inv = tot_costo_inv = 0.0
+        for sabor_r in SABORES_LISTA:
+            inicial_r = inicial_map_inv.get(sabor_r, 0)
+            prod_r = prod_map_inv.get(sabor_r, 0)
+            salidas_r = salidas_map_inv.get(sabor_r, 0)
+            ajuste_r = ajustes_map_inv.get(sabor_r, 0)
+            merma_r = mermas_map_inv.get(sabor_r, 0)
+            saldo_r = inicial_r + prod_r - salidas_r + ajuste_r - merma_r
+            venta_cant_r = venta_cantidad_map_inv.get(sabor_r, 0)
+            venta_tot_r = venta_total_map_inv.get(sabor_r, 0)
+            precio_pond_r = (venta_tot_r / venta_cant_r) if venta_cant_r > 0 else PRODUCTOS.get(sabor_r, 0)
+            costo_inv_r = saldo_r * precio_pond_r
+
+            fila_r = {
+                "Referencia": sabor_r,
+                "Inventario inicial": inicial_r,
+                "Producción": prod_r,
+                "Salidas": salidas_r,
+                "Saldo": saldo_r,
+                "Precio de venta": fmt(round(precio_pond_r)),
+                "Valor en inventario": fmt(round(costo_inv_r)),
+            }
+            filas_inv.append(fila_r)
+            tot_inicial_inv += inicial_r; tot_prod_inv += prod_r; tot_salidas_inv += salidas_r
+            tot_ajuste_inv += ajuste_r; tot_merma_inv += merma_r; tot_saldo_inv += saldo_r; tot_costo_inv += costo_inv_r
+
+        tot_venta_cant_inv = sum(venta_cantidad_map_inv.values())
+        tot_venta_tot_inv = sum(venta_total_map_inv.values())
+        precio_pond_total_inv = (tot_venta_tot_inv / tot_venta_cant_inv) if tot_venta_cant_inv > 0 else 0
+        fila_total_inv = {
+            "Referencia": "Total",
+            "Inventario inicial": tot_inicial_inv,
+            "Producción": tot_prod_inv,
+            "Salidas": tot_salidas_inv,
+            "Saldo": tot_saldo_inv,
+            "Precio de venta": fmt(round(precio_pond_total_inv)),
+            "Valor en inventario": fmt(round(tot_costo_inv)),
+        }
+        filas_inv.append(fila_total_inv)
+
+        df_inv_mes = pd.DataFrame(filas_inv)
+        with st.expander("👁️ Ver tabla", expanded=st.session_state.get("contador_ver_todas", False)):
+            st.markdown(tabla_reporte_html(df_inv_mes), unsafe_allow_html=True)
+        if not raw_inicial_inv:
+            st.markdown(
+                f'<div class="warn-box">{ICO_WARN} No hay un cierre de inventario guardado para '
+                f'{primer_dia_inv.strftime("%B %Y")} — el "Inventario inicial" está en 0 para todos los sabores.</div>',
+                unsafe_allow_html=True
+            )
+
+        # Cartera del mes — aparte del kardex de inventario a propósito: un crédito se le
+        # debe a un CLIENTE, no a un "sabor", así que repartirlo por referencia (como se
+        # hacía antes) se distorsionaba con facturas de "Cambio" o de varios sabores.
+        # Estos totales salen directo de calcular_cobros_periodo / _pendiente_creditos_
+        # antiguos — los mismos que usa Resumen → Mes, así que siempre cuadran exacto.
+        tot_cobrado_inv = sum(f["abono"] for f in facturas_inv_mes.values())
+        tot_pendiente_inv = sum(f["saldo"] for f in facturas_inv_mes.values())
+        cobro_creditos_mes_inv = cobros_inv_mes["cobro_creditos_total"]
+        pendiente_manual_inv = _pendiente_creditos_antiguos(primer_dia_inv, ultimo_dia_inv)
+        cobrado_total_mes_inv = tot_cobrado_inv + cobro_creditos_mes_inv
+        pendiente_total_mes_inv = tot_pendiente_inv + pendiente_manual_inv
+        # Dato pedido por la contadora (mismo cálculo que Resumen → Mes, `_ingreso_creditos_
+        # mes_anterior`): de lo que quedó debiendo el mes ANTERIOR a este, cuánto entró este mes.
+        creditos_cobrados_mes_ant_inv = _ingreso_creditos_mes_anterior(primer_dia_inv, ultimo_dia_inv)
+        st.markdown(
+            f'<div class="calc-box">💰 Cartera del mes — Ingresos cobrados: '
+            f'<b>{fmt(round(cobrado_total_mes_inv))}</b> · Créditos pendientes por cobrar: '
+            f'<b>{fmt(round(pendiente_total_mes_inv))}</b> · Créditos cobrados del mes anterior: '
+            f'<b>{fmt(round(creditos_cobrados_mes_ant_inv))}</b></div>',
+            unsafe_allow_html=True
+        )
+
+        def _pdf_inv_mes(df, nombre_mes_pdf, cobrado_total, pendiente_total, creditos_mes_ant):
+            from reportlab.lib.pagesizes import A4, landscape
+            from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+            from reportlab.lib.styles import getSampleStyleSheet
+            from reportlab.lib import colors
+            from reportlab.lib.units import cm
+            import io
+
+            buf = io.BytesIO()
+            doc = SimpleDocTemplate(buf, pagesize=landscape(A4),
+                                    leftMargin=1*cm, rightMargin=1*cm,
+                                    topMargin=1.5*cm, bottomMargin=1*cm)
+            styles = getSampleStyleSheet()
+            elements = [
+                Paragraph("Inventario Inicial a Fábrica de Papas Productos La Delicia — Producto Terminado", styles["Title"]),
+                Paragraph(f"Mes: {nombre_mes_pdf}  |  Generado: {fecha_hoy()}", styles["Normal"]),
+                Spacer(1, 0.4*cm),
+            ]
+            cols = list(df.columns)
+            filas_str = df.astype(str).replace("nan", "").values.tolist()
+            data = [cols] + filas_str
+            col_width = (landscape(A4)[0] - 2*cm) / len(cols)
+            tabla_pdf = Table(data, colWidths=[col_width]*len(cols), repeatRows=1)
+            estilo_cmds = [
+                ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#1565C0")),
+                ("TEXTCOLOR",  (0,0), (-1,0), colors.white),
+                ("FONTNAME",   (0,0), (-1,0), "Helvetica-Bold"),
+                ("FONTSIZE",   (0,0), (-1,-1), 7),
+                ("ROWBACKGROUNDS", (0,1), (-1,-1), [colors.white, colors.HexColor("#EEF4FF")]),
+                ("GRID",       (0,0), (-1,-1), 0.3, colors.HexColor("#BBDEFB")),
+                ("VALIGN",     (0,0), (-1,-1), "MIDDLE"),
+                ("TOPPADDING",    (0,0), (-1,-1), 2),
+                ("BOTTOMPADDING", (0,0), (-1,-1), 2),
+                ("LEFTPADDING",   (0,0), (-1,-1), 2),
+                ("RIGHTPADDING",  (0,0), (-1,-1), 2),
+            ]
+            # Filas-etiqueta (solo texto en la primera columna, el resto vacío) — se
+            # les da el ancho de 2 columnas para que el texto no se salga del recuadro.
+            for i, fila_r in enumerate(filas_str, start=1):
+                if fila_r[0] and all(v == "" for v in fila_r[1:]):
+                    estilo_cmds.append(("SPAN", (0, i), (1, i)))
+                    estilo_cmds.append(("FONTNAME", (0, i), (0, i), "Helvetica-Bold"))
+            tabla_pdf.setStyle(TableStyle(estilo_cmds))
+            elements.append(tabla_pdf)
+            elements.append(Spacer(1, 0.4*cm))
+            elements.append(Paragraph(
+                f"<b>Cartera del mes</b> — Ingresos cobrados: <b>{fmt(round(cobrado_total))}</b> · "
+                f"Créditos pendientes por cobrar: <b>{fmt(round(pendiente_total))}</b> · "
+                f"Créditos cobrados del mes anterior: <b>{fmt(round(creditos_mes_ant))}</b>",
+                styles["Normal"]
+            ))
+            doc.build(elements)
+            buf.seek(0)
+            return buf.read()
+
+        col_dl1, col_dl2 = st.columns(2)
+        csv_inv = df_inv_mes.to_csv(index=False, sep=";").encode("utf-8-sig")
+        col_dl1.download_button(
+            "📥 Descargar CSV", data=csv_inv,
+            file_name=f"inventario_inicial_{primer_dia_inv.strftime('%Y_%m')}.csv",
+            mime="text/csv", key="btn_desc_inv_inicial"
+        )
+        pdf_inv = _pdf_inv_mes(df_inv_mes, primer_dia_inv.strftime("%B %Y").capitalize(), cobrado_total_mes_inv, pendiente_total_mes_inv, creditos_cobrados_mes_ant_inv)
+        col_dl2.download_button(
+            "📄 Descargar PDF", data=pdf_inv,
+            file_name=f"inventario_inicial_{primer_dia_inv.strftime('%Y_%m')}.pdf",
+            mime="application/pdf", key="btn_desc_inv_inicial_pdf"
+        )
+
+        with st.expander("🔒 Cerrar inventario del mes"):
+            st.caption(
+                "Guarda el stock ACTUAL (en vivo, de la tabla Inventario) de cada sabor como el "
+                "\"Inventario inicial\" del mes siguiente. Hazlo cuando ya termines de registrar todo "
+                "el mes actual — así el próximo reporte arranca automático, sin que tengas que escribir nada."
+            )
+            raw_stock_cierre = sb_get("inventario", "select=sabor,stock") or []
+            stock_cierre_map = {r["sabor"]: r["stock"] for r in raw_stock_cierre}
+            ya_existe_cierre = sb_get(
+                "cierres_inventario", f"select=sabor&mes=eq.{primer_dia_inv_sig}&limit=1"
+            )
+            if ya_existe_cierre:
                 st.markdown(
-                    f'<div class="success-toast">{ICO_CHECK} Préstamo registrado — usa "Registrar desembolso recibido" '
-                    f'arriba cuando te llegue la plata.</div>',
+                    f'<div class="warn-box">{ICO_WARN} Ya existe un cierre guardado para '
+                    f'{primer_dia_inv_sig.strftime("%B %Y")}. Si confirmas, se sobrescribe.</div>',
+                    unsafe_allow_html=True
+                )
+            df_preview_cierre = pd.DataFrame([
+                {"Sabor": s, "Stock actual": stock_cierre_map.get(s, 0)} for s in SABORES_LISTA
+            ])
+            tabla_view(df_preview_cierre)
+            if st.button(
+                f"✅ Confirmar cierre → será el inicial de {primer_dia_inv_sig.strftime('%B %Y')}",
+                key="btn_cerrar_inv_mes"
+            ):
+                sb_delete("cierres_inventario", f"mes=eq.{primer_dia_inv_sig}")
+                filas_cierre = [
+                    {"mes": str(primer_dia_inv_sig), "sabor": s, "cantidad": stock_cierre_map.get(s, 0),
+                     "fecha_registro": fecha_hoy(), "hora": ahora(), "usuario": st.session_state.admin_actual}
+                    for s in SABORES_LISTA
+                ]
+                sb_post("cierres_inventario", filas_cierre)
+                st.markdown(
+                    f'<div class="success-toast">{ICO_CHECK} Inventario cerrado — quedó guardado como '
+                    f'inicial de {primer_dia_inv_sig.strftime("%B %Y")}.</div>',
                     unsafe_allow_html=True
                 )
                 time.sleep(0.3)
                 st.rerun()
 
-    # --- Inventario Inicial a Fábrica de Papas Productos La Delicia — Producto Terminado ---
-    st.markdown(
-        '<div class="section-label">📦 Inventario Inicial a Fábrica de Papas Productos La Delicia — Producto Terminado</div>',
-        unsafe_allow_html=True
-    )
-    mes_inv_sel = st.date_input(
-        "Mes a consultar", value=datetime.now(COL_TZ).date().replace(day=1), key="mes_inv_cont"
-    )
-    primer_dia_inv = date(mes_inv_sel.year, mes_inv_sel.month, 1)
-    if mes_inv_sel.month == 12:
-        primer_dia_inv_sig = date(mes_inv_sel.year + 1, 1, 1)
-    else:
-        primer_dia_inv_sig = date(mes_inv_sel.year, mes_inv_sel.month + 1, 1)
-    ultimo_dia_inv = primer_dia_inv_sig - timedelta(days=1)
-
-    with ThreadPoolExecutor(max_workers=3) as ex:
-        f_inicial_inv = ex.submit(sb_get, "cierres_inventario", f"select=sabor,cantidad&mes=eq.{primer_dia_inv}")
-        f_prod_inv = ex.submit(sb_get, "produccion", f"select=sabor,cantidad&fecha=gte.{primer_dia_inv}&fecha=lte.{ultimo_dia_inv}")
-        f_vent_inv = ex.submit(sb_get, "ventas", f"select=sabor,cantidad,total,canal,factura_id&fecha=gte.{primer_dia_inv}&fecha=lte.{ultimo_dia_inv}")
-        f_dev_inv = ex.submit(sb_get, "devoluciones", f"select=sabor,cantidad&fecha=gte.{primer_dia_inv}&fecha=lte.{ultimo_dia_inv}")
-        f_ajs_inv = ex.submit(sb_get, "ajustes_stock_manual", f"select=sabor,delta&fecha=gte.{primer_dia_inv}&fecha=lte.{ultimo_dia_inv}")
-        f_dan_inv = ex.submit(sb_get, "mermas_stock", f"select=sabor,cantidad&fecha=gte.{primer_dia_inv}&fecha=lte.{ultimo_dia_inv}")
-    raw_inicial_inv = f_inicial_inv.result() or []
-    raw_prod_inv = f_prod_inv.result() or []
-    raw_vent_inv = f_vent_inv.result() or []
-    raw_dev_inv = f_dev_inv.result() or []
-    raw_ajs_inv = f_ajs_inv.result() or []
-    raw_dan_inv = f_dan_inv.result() or []
-
-    # Mismo cálculo que Resumen → Mes, para que "Ingresos cobrados" y "Créditos
-    # pendientes" coincidan exacto con esa pestaña.
-    cobros_inv_mes = calcular_cobros_periodo(primer_dia_inv, ultimo_dia_inv)
-    facturas_inv_mes = cobros_inv_mes["facturas"]  # {factura_id: {"canal","abono","saldo"}}
-
-    inicial_map_inv = {r["sabor"]: float(r["cantidad"]) for r in raw_inicial_inv}
-    prod_map_inv = {}
-    for r in raw_prod_inv:
-        prod_map_inv[r["sabor"]] = prod_map_inv.get(r["sabor"], 0) + float(r["cantidad"])
-
-    # "venta_cantidad/total_map_inv" son la cantidad y plata REAL de las ventas tal
-    # cual quedaron registradas (sin descontar devoluciones) — se usan aparte de
-    # "salidas_map_inv" para que "Precio de venta" sea un promedio limpio (venta ÷
-    # cantidad vendida), no mezclado con el neteo de devoluciones que sí necesita Saldo.
-    salidas_map_inv = {}
-    venta_cantidad_map_inv = {}
-    venta_total_map_inv = {}
-    for r in raw_vent_inv:
-        if r.get("canal") not in CANALES_VENTA_REAL:
-            continue
-        salidas_map_inv[r["sabor"]] = salidas_map_inv.get(r["sabor"], 0) + float(r["cantidad"])
-        venta_cantidad_map_inv[r["sabor"]] = venta_cantidad_map_inv.get(r["sabor"], 0) + float(r["cantidad"])
-        venta_total_map_inv[r["sabor"]] = venta_total_map_inv.get(r["sabor"], 0) + float(r.get("total", 0) or 0)
-    # Las devoluciones vuelven al inventario sin pasar por Producción — se restan
-    # de Salidas para que el Saldo calculado sí las refleje.
-    for r in raw_dev_inv:
-        salidas_map_inv[r["sabor"]] = salidas_map_inv.get(r["sabor"], 0) - float(r["cantidad"])
-
-    # Ajustes manuales de stock (correcciones, no son ni producción ni venta) —
-    # se muestran aparte, en su propia columna, sin mezclarse con Producción/Salidas.
-    ajustes_map_inv = {}
-    for r in raw_ajs_inv:
-        ajustes_map_inv[r["sabor"]] = ajustes_map_inv.get(r["sabor"], 0) + float(r["delta"])
-
-    # Producto dañado/merma — se resta aparte, no se mete en Salidas (no es venta,
-    # no genera ingreso, mezclarlo ahí distorsionaría el precio promedio ponderado).
-    mermas_map_inv = {}
-    for r in raw_dan_inv:
-        mermas_map_inv[r["sabor"]] = mermas_map_inv.get(r["sabor"], 0) + float(r["cantidad"])
-
-    filas_inv = []
-    tot_inicial_inv = tot_prod_inv = tot_salidas_inv = tot_ajuste_inv = tot_merma_inv = tot_saldo_inv = tot_costo_inv = 0.0
-    for sabor_r in SABORES_LISTA:
-        inicial_r = inicial_map_inv.get(sabor_r, 0)
-        prod_r = prod_map_inv.get(sabor_r, 0)
-        salidas_r = salidas_map_inv.get(sabor_r, 0)
-        ajuste_r = ajustes_map_inv.get(sabor_r, 0)
-        merma_r = mermas_map_inv.get(sabor_r, 0)
-        saldo_r = inicial_r + prod_r - salidas_r + ajuste_r - merma_r
-        venta_cant_r = venta_cantidad_map_inv.get(sabor_r, 0)
-        venta_tot_r = venta_total_map_inv.get(sabor_r, 0)
-        precio_pond_r = (venta_tot_r / venta_cant_r) if venta_cant_r > 0 else PRODUCTOS.get(sabor_r, 0)
-        costo_inv_r = saldo_r * precio_pond_r
-
-        fila_r = {
-            "Referencia": sabor_r,
-            "Inventario inicial": inicial_r,
-            "Producción": prod_r,
-            "Salidas": salidas_r,
-            "Saldo": saldo_r,
-            "Precio de venta": fmt(round(precio_pond_r)),
-            "Valor en inventario": fmt(round(costo_inv_r)),
-        }
-        filas_inv.append(fila_r)
-        tot_inicial_inv += inicial_r; tot_prod_inv += prod_r; tot_salidas_inv += salidas_r
-        tot_ajuste_inv += ajuste_r; tot_merma_inv += merma_r; tot_saldo_inv += saldo_r; tot_costo_inv += costo_inv_r
-
-    tot_venta_cant_inv = sum(venta_cantidad_map_inv.values())
-    tot_venta_tot_inv = sum(venta_total_map_inv.values())
-    precio_pond_total_inv = (tot_venta_tot_inv / tot_venta_cant_inv) if tot_venta_cant_inv > 0 else 0
-    fila_total_inv = {
-        "Referencia": "Total",
-        "Inventario inicial": tot_inicial_inv,
-        "Producción": tot_prod_inv,
-        "Salidas": tot_salidas_inv,
-        "Saldo": tot_saldo_inv,
-        "Precio de venta": fmt(round(precio_pond_total_inv)),
-        "Valor en inventario": fmt(round(tot_costo_inv)),
-    }
-    filas_inv.append(fila_total_inv)
-
-    df_inv_mes = pd.DataFrame(filas_inv)
-    with st.expander("👁️ Ver tabla"):
-        st.markdown(tabla_reporte_html(df_inv_mes), unsafe_allow_html=True)
-    if not raw_inicial_inv:
+        # --- Inventario a Corte — Saborizantes ---
         st.markdown(
-            f'<div class="warn-box">{ICO_WARN} No hay un cierre de inventario guardado para '
-            f'{primer_dia_inv.strftime("%B %Y")} — el "Inventario inicial" está en 0 para todos los sabores.</div>',
+            '<div class="section-label">🧂 Inventario a Corte — Fábrica de Papas Productos La Delicia — Saborizantes</div>',
             unsafe_allow_html=True
         )
-
-    # Cartera del mes — aparte del kardex de inventario a propósito: un crédito se le
-    # debe a un CLIENTE, no a un "sabor", así que repartirlo por referencia (como se
-    # hacía antes) se distorsionaba con facturas de "Cambio" o de varios sabores.
-    # Estos totales salen directo de calcular_cobros_periodo / _pendiente_creditos_
-    # antiguos — los mismos que usa Resumen → Mes, así que siempre cuadran exacto.
-    tot_cobrado_inv = sum(f["abono"] for f in facturas_inv_mes.values())
-    tot_pendiente_inv = sum(f["saldo"] for f in facturas_inv_mes.values())
-    cobro_creditos_mes_inv = cobros_inv_mes["cobro_creditos_total"]
-    pendiente_manual_inv = _pendiente_creditos_antiguos(primer_dia_inv, ultimo_dia_inv)
-    cobrado_total_mes_inv = tot_cobrado_inv + cobro_creditos_mes_inv
-    pendiente_total_mes_inv = tot_pendiente_inv + pendiente_manual_inv
-    st.markdown(
-        f'<div class="calc-box">💰 Cartera del mes — Ingresos cobrados: '
-        f'<b>{fmt(round(cobrado_total_mes_inv))}</b> · Créditos pendientes por cobrar: '
-        f'<b>{fmt(round(pendiente_total_mes_inv))}</b></div>',
-        unsafe_allow_html=True
-    )
-
-    def _pdf_inv_mes(df, nombre_mes_pdf, cobrado_total, pendiente_total):
-        from reportlab.lib.pagesizes import A4, landscape
-        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-        from reportlab.lib.styles import getSampleStyleSheet
-        from reportlab.lib import colors
-        from reportlab.lib.units import cm
-        import io
-
-        buf = io.BytesIO()
-        doc = SimpleDocTemplate(buf, pagesize=landscape(A4),
-                                leftMargin=1*cm, rightMargin=1*cm,
-                                topMargin=1.5*cm, bottomMargin=1*cm)
-        styles = getSampleStyleSheet()
-        elements = [
-            Paragraph("Inventario Inicial a Fábrica de Papas Productos La Delicia — Producto Terminado", styles["Title"]),
-            Paragraph(f"Mes: {nombre_mes_pdf}  |  Generado: {fecha_hoy()}", styles["Normal"]),
-            Spacer(1, 0.4*cm),
-        ]
-        cols = list(df.columns)
-        filas_str = df.astype(str).replace("nan", "").values.tolist()
-        data = [cols] + filas_str
-        col_width = (landscape(A4)[0] - 2*cm) / len(cols)
-        tabla_pdf = Table(data, colWidths=[col_width]*len(cols), repeatRows=1)
-        estilo_cmds = [
-            ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#1565C0")),
-            ("TEXTCOLOR",  (0,0), (-1,0), colors.white),
-            ("FONTNAME",   (0,0), (-1,0), "Helvetica-Bold"),
-            ("FONTSIZE",   (0,0), (-1,-1), 7),
-            ("ROWBACKGROUNDS", (0,1), (-1,-1), [colors.white, colors.HexColor("#EEF4FF")]),
-            ("GRID",       (0,0), (-1,-1), 0.3, colors.HexColor("#BBDEFB")),
-            ("VALIGN",     (0,0), (-1,-1), "MIDDLE"),
-            ("TOPPADDING",    (0,0), (-1,-1), 2),
-            ("BOTTOMPADDING", (0,0), (-1,-1), 2),
-            ("LEFTPADDING",   (0,0), (-1,-1), 2),
-            ("RIGHTPADDING",  (0,0), (-1,-1), 2),
-        ]
-        # Filas-etiqueta (solo texto en la primera columna, el resto vacío) — se
-        # les da el ancho de 2 columnas para que el texto no se salga del recuadro.
-        for i, fila_r in enumerate(filas_str, start=1):
-            if fila_r[0] and all(v == "" for v in fila_r[1:]):
-                estilo_cmds.append(("SPAN", (0, i), (1, i)))
-                estilo_cmds.append(("FONTNAME", (0, i), (0, i), "Helvetica-Bold"))
-        tabla_pdf.setStyle(TableStyle(estilo_cmds))
-        elements.append(tabla_pdf)
-        elements.append(Spacer(1, 0.4*cm))
-        elements.append(Paragraph(
-            f"<b>Cartera del mes</b> — Ingresos cobrados: <b>{fmt(round(cobrado_total))}</b> · "
-            f"Créditos pendientes por cobrar: <b>{fmt(round(pendiente_total))}</b>",
-            styles["Normal"]
-        ))
-        doc.build(elements)
-        buf.seek(0)
-        return buf.read()
-
-    col_dl1, col_dl2 = st.columns(2)
-    csv_inv = df_inv_mes.to_csv(index=False).encode("utf-8")
-    col_dl1.download_button(
-        "📥 Descargar CSV", data=csv_inv,
-        file_name=f"inventario_inicial_{primer_dia_inv.strftime('%Y_%m')}.csv",
-        mime="text/csv", key="btn_desc_inv_inicial"
-    )
-    pdf_inv = _pdf_inv_mes(df_inv_mes, primer_dia_inv.strftime("%B %Y").capitalize(), cobrado_total_mes_inv, pendiente_total_mes_inv)
-    col_dl2.download_button(
-        "📄 Descargar PDF", data=pdf_inv,
-        file_name=f"inventario_inicial_{primer_dia_inv.strftime('%Y_%m')}.pdf",
-        mime="application/pdf", key="btn_desc_inv_inicial_pdf"
-    )
-
-    with st.expander("🔒 Cerrar inventario del mes"):
-        st.caption(
-            "Guarda el stock ACTUAL (en vivo, de la tabla Inventario) de cada sabor como el "
-            "\"Inventario inicial\" del mes siguiente. Hazlo cuando ya termines de registrar todo "
-            "el mes actual — así el próximo reporte arranca automático, sin que tengas que escribir nada."
+        mes_sab_sel = st.date_input(
+            "Mes a consultar", value=datetime.now(COL_TZ).date().replace(day=1), key="mes_sab_cont"
         )
-        raw_stock_cierre = sb_get("inventario", "select=sabor,stock") or []
-        stock_cierre_map = {r["sabor"]: r["stock"] for r in raw_stock_cierre}
-        ya_existe_cierre = sb_get(
-            "cierres_inventario", f"select=sabor&mes=eq.{primer_dia_inv_sig}&limit=1"
-        )
-        if ya_existe_cierre:
-            st.markdown(
-                f'<div class="warn-box">{ICO_WARN} Ya existe un cierre guardado para '
-                f'{primer_dia_inv_sig.strftime("%B %Y")}. Si confirmas, se sobrescribe.</div>',
-                unsafe_allow_html=True
-            )
-        df_preview_cierre = pd.DataFrame([
-            {"Sabor": s, "Stock actual": stock_cierre_map.get(s, 0)} for s in SABORES_LISTA
-        ])
-        tabla_view(df_preview_cierre)
-        if st.button(
-            f"✅ Confirmar cierre → será el inicial de {primer_dia_inv_sig.strftime('%B %Y')}",
-            key="btn_cerrar_inv_mes"
-        ):
-            sb_delete("cierres_inventario", f"mes=eq.{primer_dia_inv_sig}")
-            filas_cierre = [
-                {"mes": str(primer_dia_inv_sig), "sabor": s, "cantidad": stock_cierre_map.get(s, 0),
-                 "fecha_registro": fecha_hoy(), "hora": ahora(), "usuario": st.session_state.admin_actual}
-                for s in SABORES_LISTA
-            ]
-            sb_post("cierres_inventario", filas_cierre)
-            st.markdown(
-                f'<div class="success-toast">{ICO_CHECK} Inventario cerrado — quedó guardado como '
-                f'inicial de {primer_dia_inv_sig.strftime("%B %Y")}.</div>',
-                unsafe_allow_html=True
-            )
-            time.sleep(0.3)
-            st.rerun()
+        primer_dia_sab = date(mes_sab_sel.year, mes_sab_sel.month, 1)
+        if mes_sab_sel.month == 12:
+            primer_dia_sab_sig = date(mes_sab_sel.year + 1, 1, 1)
+        else:
+            primer_dia_sab_sig = date(mes_sab_sel.year, mes_sab_sel.month + 1, 1)
+        ultimo_dia_sab = primer_dia_sab_sig - timedelta(days=1)
+        hoy_sab = datetime.now(COL_TZ).date()
+        es_mes_actual_sab = (mes_sab_sel.year == hoy_sab.year and mes_sab_sel.month == hoy_sab.month)
 
-    # --- Inventario a Corte — Saborizantes ---
-    st.markdown(
-        '<div class="section-label">🧂 Inventario a Corte — Fábrica de Papas Productos La Delicia — Saborizantes</div>',
-        unsafe_allow_html=True
-    )
-    mes_sab_sel = st.date_input(
-        "Mes a consultar", value=datetime.now(COL_TZ).date().replace(day=1), key="mes_sab_cont"
-    )
-    primer_dia_sab = date(mes_sab_sel.year, mes_sab_sel.month, 1)
-    if mes_sab_sel.month == 12:
-        primer_dia_sab_sig = date(mes_sab_sel.year + 1, 1, 1)
-    else:
-        primer_dia_sab_sig = date(mes_sab_sel.year, mes_sab_sel.month + 1, 1)
-    ultimo_dia_sab = primer_dia_sab_sig - timedelta(days=1)
-    hoy_sab = datetime.now(COL_TZ).date()
-    es_mes_actual_sab = (mes_sab_sel.year == hoy_sab.year and mes_sab_sel.month == hoy_sab.month)
+        with ThreadPoolExecutor(max_workers=4) as ex:
+            f_inicial_sab  = ex.submit(sb_get, "cierres_saborizantes", f"select=sabor,cantidad&mes=eq.{primer_dia_sab}")
+            f_final_sab    = ex.submit(sb_get, "cierres_saborizantes", f"select=sabor,cantidad&mes=eq.{primer_dia_sab_sig}")
+            f_ent_mes_sab  = ex.submit(sb_get, "materia_prima", f"select=insumo,cantidad&fecha=gte.{primer_dia_sab}&fecha=lte.{ultimo_dia_sab}")
+            f_ent_todo_sab = ex.submit(sb_get, "materia_prima", "select=insumo,cantidad,precio_unitario")
+            f_sal_todo_sab = ex.submit(sb_get, "salidas_mp", "select=insumo,cantidad")
+        raw_inicial_sab  = f_inicial_sab.result() or []
+        raw_final_sab    = f_final_sab.result() or []
+        raw_ent_mes_sab  = f_ent_mes_sab.result() or []
+        raw_ent_todo_sab = f_ent_todo_sab.result() or []
+        raw_sal_todo_sab = f_sal_todo_sab.result() or []
 
-    with ThreadPoolExecutor(max_workers=4) as ex:
-        f_inicial_sab  = ex.submit(sb_get, "cierres_saborizantes", f"select=sabor,cantidad&mes=eq.{primer_dia_sab}")
-        f_final_sab    = ex.submit(sb_get, "cierres_saborizantes", f"select=sabor,cantidad&mes=eq.{primer_dia_sab_sig}")
-        f_ent_mes_sab  = ex.submit(sb_get, "materia_prima", f"select=insumo,cantidad&fecha=gte.{primer_dia_sab}&fecha=lte.{ultimo_dia_sab}")
-        f_ent_todo_sab = ex.submit(sb_get, "materia_prima", "select=insumo,cantidad,precio_unitario")
-        f_sal_todo_sab = ex.submit(sb_get, "salidas_mp", "select=insumo,cantidad")
-    raw_inicial_sab  = f_inicial_sab.result() or []
-    raw_final_sab    = f_final_sab.result() or []
-    raw_ent_mes_sab  = f_ent_mes_sab.result() or []
-    raw_ent_todo_sab = f_ent_todo_sab.result() or []
-    raw_sal_todo_sab = f_sal_todo_sab.result() or []
+        inicial_map_sab    = {r["sabor"]: float(r["cantidad"]) for r in raw_inicial_sab}
+        cierre_sig_map_sab = {r["sabor"]: float(r["cantidad"]) for r in raw_final_sab}
 
-    inicial_map_sab    = {r["sabor"]: float(r["cantidad"]) for r in raw_inicial_sab}
-    cierre_sig_map_sab = {r["sabor"]: float(r["cantidad"]) for r in raw_final_sab}
+        entradas_mes_map_sab = {}
+        for r in raw_ent_mes_sab:
+            if r["insumo"] in SABORIZANTES_NOMBRES:
+                entradas_mes_map_sab[r["insumo"]] = entradas_mes_map_sab.get(r["insumo"], 0) + float(r["cantidad"])
 
-    entradas_mes_map_sab = {}
-    for r in raw_ent_mes_sab:
-        if r["insumo"] in SABORIZANTES_NOMBRES:
-            entradas_mes_map_sab[r["insumo"]] = entradas_mes_map_sab.get(r["insumo"], 0) + float(r["cantidad"])
+        # Stock en vivo (histórico completo) — misma lógica que "Inventario total
+        # invertido ahora mismo": todas las entradas de siempre menos todas las
+        # salidas de siempre. Solo tiene sentido como "Inventario" del mes en curso;
+        # para un mes ya cerrado se usa el cierre guardado como inicial del siguiente.
+        stock_vivo_map_sab = {}
+        for r in raw_ent_todo_sab:
+            if r["insumo"] in SABORIZANTES_NOMBRES:
+                stock_vivo_map_sab[r["insumo"]] = stock_vivo_map_sab.get(r["insumo"], 0) + float(r["cantidad"])
+        for r in raw_sal_todo_sab:
+            if r["insumo"] in SABORIZANTES_NOMBRES:
+                stock_vivo_map_sab[r["insumo"]] = stock_vivo_map_sab.get(r["insumo"], 0) - float(r["cantidad"])
 
-    # Stock en vivo (histórico completo) — misma lógica que "Inventario total
-    # invertido ahora mismo": todas las entradas de siempre menos todas las
-    # salidas de siempre. Solo tiene sentido como "Inventario" del mes en curso;
-    # para un mes ya cerrado se usa el cierre guardado como inicial del siguiente.
-    stock_vivo_map_sab = {}
-    for r in raw_ent_todo_sab:
-        if r["insumo"] in SABORIZANTES_NOMBRES:
-            stock_vivo_map_sab[r["insumo"]] = stock_vivo_map_sab.get(r["insumo"], 0) + float(r["cantidad"])
-    for r in raw_sal_todo_sab:
-        if r["insumo"] in SABORIZANTES_NOMBRES:
-            stock_vivo_map_sab[r["insumo"]] = stock_vivo_map_sab.get(r["insumo"], 0) - float(r["cantidad"])
+        # Precio promedio ponderado histórico completo (no solo del mes) — los
+        # saborizantes entran a precios distintos cada vez que se compran.
+        costo_pond_map_sab = {}
+        for r in raw_ent_todo_sab:
+            k = r["insumo"]
+            if k not in SABORIZANTES_NOMBRES:
+                continue
+            pu   = float(r.get("precio_unitario", 0) or 0)
+            cant = float(r.get("cantidad", 0) or 0)
+            if pu > 0 and cant > 0:
+                if k not in costo_pond_map_sab:
+                    costo_pond_map_sab[k] = {"costo": 0.0, "cant": 0.0}
+                costo_pond_map_sab[k]["costo"] += pu * cant
+                costo_pond_map_sab[k]["cant"]  += cant
 
-    # Precio promedio ponderado histórico completo (no solo del mes) — los
-    # saborizantes entran a precios distintos cada vez que se compran.
-    costo_pond_map_sab = {}
-    for r in raw_ent_todo_sab:
-        k = r["insumo"]
-        if k not in SABORIZANTES_NOMBRES:
-            continue
-        pu   = float(r.get("precio_unitario", 0) or 0)
-        cant = float(r.get("cantidad", 0) or 0)
-        if pu > 0 and cant > 0:
-            if k not in costo_pond_map_sab:
-                costo_pond_map_sab[k] = {"costo": 0.0, "cant": 0.0}
-            costo_pond_map_sab[k]["costo"] += pu * cant
-            costo_pond_map_sab[k]["cant"]  += cant
+        filas_sab = []
+        tot_valor_sab = tot_valsal_sab = 0.0
+        for nombre_sab in SABORIZANTES_NOMBRES:
+            inicial_r  = inicial_map_sab.get(nombre_sab, 0.0)
+            entradas_r = entradas_mes_map_sab.get(nombre_sab, 0.0)
+            final_r    = stock_vivo_map_sab.get(nombre_sab, 0.0) if es_mes_actual_sab else cierre_sig_map_sab.get(nombre_sab, 0.0)
+            salida_r   = inicial_r + entradas_r - final_r
+            d = costo_pond_map_sab.get(nombre_sab)
+            costo_r = (d["costo"] / d["cant"]) if d and d["cant"] > 0 else 0.0
+            valor_r = final_r * costo_r
+            valor_salida_r = costo_r * salida_r
 
-    filas_sab = []
-    tot_valor_sab = tot_valsal_sab = 0.0
-    for nombre_sab in SABORIZANTES_NOMBRES:
-        inicial_r  = inicial_map_sab.get(nombre_sab, 0.0)
-        entradas_r = entradas_mes_map_sab.get(nombre_sab, 0.0)
-        final_r    = stock_vivo_map_sab.get(nombre_sab, 0.0) if es_mes_actual_sab else cierre_sig_map_sab.get(nombre_sab, 0.0)
-        salida_r   = inicial_r + entradas_r - final_r
-        d = costo_pond_map_sab.get(nombre_sab)
-        costo_r = (d["costo"] / d["cant"]) if d and d["cant"] > 0 else 0.0
-        valor_r = final_r * costo_r
-        valor_salida_r = costo_r * salida_r
+            filas_sab.append({
+                "Sabor": nombre_sab,
+                "Medida": "Kg",
+                "Inventario inicial": round(inicial_r, 3),
+                "Entradas": round(entradas_r, 3),
+                "Salida": round(salida_r, 3),
+                "Inventario": round(final_r, 3),
+                "Costo": fmt(round(costo_r)),
+                "Total": fmt(round(valor_r)),
+                "Total Salida": fmt(round(valor_salida_r)),
+            })
+            tot_valor_sab += valor_r
+            tot_valsal_sab += valor_salida_r
 
         filas_sab.append({
-            "Sabor": nombre_sab,
-            "Medida": "Kg",
-            "Inventario inicial": round(inicial_r, 3),
-            "Entradas": round(entradas_r, 3),
-            "Salida": round(salida_r, 3),
-            "Inventario": round(final_r, 3),
-            "Costo": fmt(round(costo_r)),
-            "Total": fmt(round(valor_r)),
-            "Total Salida": fmt(round(valor_salida_r)),
+            "Sabor": "Total", "Medida": "",
+            "Inventario inicial": "", "Entradas": "", "Salida": "", "Inventario": "", "Costo": "",
+            "Total": fmt(round(tot_valor_sab)),
+            "Total Salida": fmt(round(tot_valsal_sab)),
         })
-        tot_valor_sab += valor_r
-        tot_valsal_sab += valor_salida_r
 
-    filas_sab.append({
-        "Sabor": "Total", "Medida": "",
-        "Inventario inicial": "", "Entradas": "", "Salida": "", "Inventario": "", "Costo": "",
-        "Total": fmt(round(tot_valor_sab)),
-        "Total Salida": fmt(round(tot_valsal_sab)),
-    })
+        df_sab_mes = pd.DataFrame(filas_sab)
+        with st.expander("👁️ Ver tabla", expanded=st.session_state.get("contador_ver_todas", False)):
+            st.markdown(tabla_reporte_html(df_sab_mes), unsafe_allow_html=True)
+        if not raw_inicial_sab:
+            st.markdown(
+                f'<div class="warn-box">{ICO_WARN} No hay un cierre de saborizantes guardado para '
+                f'{primer_dia_sab.strftime("%B %Y")} — el "Inventario inicial" está en 0 para todos.</div>',
+                unsafe_allow_html=True
+            )
 
-    df_sab_mes = pd.DataFrame(filas_sab)
-    with st.expander("👁️ Ver tabla"):
-        st.markdown(tabla_reporte_html(df_sab_mes), unsafe_allow_html=True)
-    if not raw_inicial_sab:
+        def _pdf_sab_mes(df, nombre_mes_pdf):
+            from reportlab.lib.pagesizes import A4, landscape
+            from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+            from reportlab.lib.styles import getSampleStyleSheet
+            from reportlab.lib import colors
+            from reportlab.lib.units import cm
+            import io
+
+            buf = io.BytesIO()
+            doc = SimpleDocTemplate(buf, pagesize=landscape(A4),
+                                    leftMargin=1*cm, rightMargin=1*cm,
+                                    topMargin=1.5*cm, bottomMargin=1*cm)
+            styles = getSampleStyleSheet()
+            elements = [
+                Paragraph("INVENTARIO A CORTE — FÁBRICA DE PAPAS PRODUCTOS LA DELICIA — SABORIZANTES", styles["Title"]),
+                Paragraph(f"Mes: {nombre_mes_pdf}  |  Generado: {fecha_hoy()}", styles["Normal"]),
+                Spacer(1, 0.4*cm),
+            ]
+            cols = list(df.columns)
+            filas_str = df.astype(str).replace("nan", "").values.tolist()
+            data = [cols] + filas_str
+            col_width = (landscape(A4)[0] - 2*cm) / len(cols)
+            tabla_pdf = Table(data, colWidths=[col_width]*len(cols), repeatRows=1)
+            tabla_pdf.setStyle(TableStyle([
+                ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#1565C0")),
+                ("TEXTCOLOR",  (0,0), (-1,0), colors.white),
+                ("FONTNAME",   (0,0), (-1,0), "Helvetica-Bold"),
+                ("FONTSIZE",   (0,0), (-1,-1), 8),
+                ("ROWBACKGROUNDS", (0,1), (-1,-1), [colors.white, colors.HexColor("#EEF4FF")]),
+                ("GRID",       (0,0), (-1,-1), 0.3, colors.HexColor("#BBDEFB")),
+                ("VALIGN",     (0,0), (-1,-1), "MIDDLE"),
+                ("TOPPADDING",    (0,0), (-1,-1), 3),
+                ("BOTTOMPADDING", (0,0), (-1,-1), 3),
+                ("LEFTPADDING",   (0,0), (-1,-1), 3),
+                ("RIGHTPADDING",  (0,0), (-1,-1), 3),
+                ("FONTNAME", (0, len(filas_str)), (-1, len(filas_str)), "Helvetica-Bold"),
+            ]))
+            elements.append(tabla_pdf)
+            doc.build(elements)
+            buf.seek(0)
+            return buf.read()
+
+        col_dl1s, col_dl2s = st.columns(2)
+        csv_sab = df_sab_mes.to_csv(index=False, sep=";").encode("utf-8-sig")
+        col_dl1s.download_button(
+            "📥 Descargar CSV", data=csv_sab,
+            file_name=f"saborizantes_corte_{primer_dia_sab.strftime('%Y_%m')}.csv",
+            mime="text/csv", key="btn_desc_sab_csv"
+        )
+        pdf_sab = _pdf_sab_mes(df_sab_mes, primer_dia_sab.strftime("%B %Y").capitalize())
+        col_dl2s.download_button(
+            "📄 Descargar PDF", data=pdf_sab,
+            file_name=f"saborizantes_corte_{primer_dia_sab.strftime('%Y_%m')}.pdf",
+            mime="application/pdf", key="btn_desc_sab_pdf"
+        )
+
+        with st.expander("🔒 Cerrar inventario de saborizantes del mes"):
+            st.caption(
+                "Guarda el stock EN VIVO (entradas de siempre − salidas de siempre) de cada saborizante como el "
+                "\"Inventario inicial\" del mes siguiente. Hazlo cuando ya termines de registrar todo el mes actual."
+            )
+            ya_existe_cierre_sab = sb_get(
+                "cierres_saborizantes", f"select=sabor&mes=eq.{primer_dia_sab_sig}&limit=1"
+            )
+            if ya_existe_cierre_sab:
+                st.markdown(
+                    f'<div class="warn-box">{ICO_WARN} Ya existe un cierre guardado para '
+                    f'{primer_dia_sab_sig.strftime("%B %Y")}. Si confirmas, se sobrescribe.</div>',
+                    unsafe_allow_html=True
+                )
+            df_preview_cierre_sab = pd.DataFrame([
+                {"Sabor": n, "Stock actual (kg)": round(stock_vivo_map_sab.get(n, 0.0), 3)} for n in SABORIZANTES_NOMBRES
+            ])
+            tabla_view(df_preview_cierre_sab)
+            if st.button(
+                f"✅ Confirmar cierre → será el inicial de {primer_dia_sab_sig.strftime('%B %Y')}",
+                key="btn_cerrar_sab_mes"
+            ):
+                sb_delete("cierres_saborizantes", f"mes=eq.{primer_dia_sab_sig}")
+                filas_cierre_sab = [
+                    {"mes": str(primer_dia_sab_sig), "sabor": n, "cantidad": round(stock_vivo_map_sab.get(n, 0.0), 3),
+                     "fecha_registro": fecha_hoy(), "hora": ahora(), "usuario": st.session_state.admin_actual}
+                    for n in SABORIZANTES_NOMBRES
+                ]
+                sb_post("cierres_saborizantes", filas_cierre_sab)
+                st.markdown(
+                    f'<div class="success-toast">{ICO_CHECK} Inventario de saborizantes cerrado — quedó guardado '
+                    f'como inicial de {primer_dia_sab_sig.strftime("%B %Y")}.</div>',
+                    unsafe_allow_html=True
+                )
+                time.sleep(0.3)
+                st.rerun()
+
+        # --- Inventario a Corte — Materia Prima ---
         st.markdown(
-            f'<div class="warn-box">{ICO_WARN} No hay un cierre de saborizantes guardado para '
-            f'{primer_dia_sab.strftime("%B %Y")} — el "Inventario inicial" está en 0 para todos.</div>',
+            '<div class="section-label">🥔 Inventario a Corte — Fábrica de Papas Productos La Delicia — Materia Prima</div>',
             unsafe_allow_html=True
         )
-
-    def _pdf_sab_mes(df, nombre_mes_pdf):
-        from reportlab.lib.pagesizes import A4, landscape
-        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-        from reportlab.lib.styles import getSampleStyleSheet
-        from reportlab.lib import colors
-        from reportlab.lib.units import cm
-        import io
-
-        buf = io.BytesIO()
-        doc = SimpleDocTemplate(buf, pagesize=landscape(A4),
-                                leftMargin=1*cm, rightMargin=1*cm,
-                                topMargin=1.5*cm, bottomMargin=1*cm)
-        styles = getSampleStyleSheet()
-        elements = [
-            Paragraph("INVENTARIO A CORTE — FÁBRICA DE PAPAS PRODUCTOS LA DELICIA — SABORIZANTES", styles["Title"]),
-            Paragraph(f"Mes: {nombre_mes_pdf}  |  Generado: {fecha_hoy()}", styles["Normal"]),
-            Spacer(1, 0.4*cm),
-        ]
-        cols = list(df.columns)
-        filas_str = df.astype(str).replace("nan", "").values.tolist()
-        data = [cols] + filas_str
-        col_width = (landscape(A4)[0] - 2*cm) / len(cols)
-        tabla_pdf = Table(data, colWidths=[col_width]*len(cols), repeatRows=1)
-        tabla_pdf.setStyle(TableStyle([
-            ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#1565C0")),
-            ("TEXTCOLOR",  (0,0), (-1,0), colors.white),
-            ("FONTNAME",   (0,0), (-1,0), "Helvetica-Bold"),
-            ("FONTSIZE",   (0,0), (-1,-1), 8),
-            ("ROWBACKGROUNDS", (0,1), (-1,-1), [colors.white, colors.HexColor("#EEF4FF")]),
-            ("GRID",       (0,0), (-1,-1), 0.3, colors.HexColor("#BBDEFB")),
-            ("VALIGN",     (0,0), (-1,-1), "MIDDLE"),
-            ("TOPPADDING",    (0,0), (-1,-1), 3),
-            ("BOTTOMPADDING", (0,0), (-1,-1), 3),
-            ("LEFTPADDING",   (0,0), (-1,-1), 3),
-            ("RIGHTPADDING",  (0,0), (-1,-1), 3),
-            ("FONTNAME", (0, len(filas_str)), (-1, len(filas_str)), "Helvetica-Bold"),
-        ]))
-        elements.append(tabla_pdf)
-        doc.build(elements)
-        buf.seek(0)
-        return buf.read()
-
-    col_dl1s, col_dl2s = st.columns(2)
-    csv_sab = df_sab_mes.to_csv(index=False).encode("utf-8")
-    col_dl1s.download_button(
-        "📥 Descargar CSV", data=csv_sab,
-        file_name=f"saborizantes_corte_{primer_dia_sab.strftime('%Y_%m')}.csv",
-        mime="text/csv", key="btn_desc_sab_csv"
-    )
-    pdf_sab = _pdf_sab_mes(df_sab_mes, primer_dia_sab.strftime("%B %Y").capitalize())
-    col_dl2s.download_button(
-        "📄 Descargar PDF", data=pdf_sab,
-        file_name=f"saborizantes_corte_{primer_dia_sab.strftime('%Y_%m')}.pdf",
-        mime="application/pdf", key="btn_desc_sab_pdf"
-    )
-
-    with st.expander("🔒 Cerrar inventario de saborizantes del mes"):
-        st.caption(
-            "Guarda el stock EN VIVO (entradas de siempre − salidas de siempre) de cada saborizante como el "
-            "\"Inventario inicial\" del mes siguiente. Hazlo cuando ya termines de registrar todo el mes actual."
+        mes_mp_sel = st.date_input(
+            "Mes a consultar", value=datetime.now(COL_TZ).date().replace(day=1), key="mes_mp_cont"
         )
-        ya_existe_cierre_sab = sb_get(
-            "cierres_saborizantes", f"select=sabor&mes=eq.{primer_dia_sab_sig}&limit=1"
-        )
-        if ya_existe_cierre_sab:
-            st.markdown(
-                f'<div class="warn-box">{ICO_WARN} Ya existe un cierre guardado para '
-                f'{primer_dia_sab_sig.strftime("%B %Y")}. Si confirmas, se sobrescribe.</div>',
-                unsafe_allow_html=True
-            )
-        df_preview_cierre_sab = pd.DataFrame([
-            {"Sabor": n, "Stock actual (kg)": round(stock_vivo_map_sab.get(n, 0.0), 3)} for n in SABORIZANTES_NOMBRES
-        ])
-        tabla_view(df_preview_cierre_sab)
-        if st.button(
-            f"✅ Confirmar cierre → será el inicial de {primer_dia_sab_sig.strftime('%B %Y')}",
-            key="btn_cerrar_sab_mes"
-        ):
-            sb_delete("cierres_saborizantes", f"mes=eq.{primer_dia_sab_sig}")
-            filas_cierre_sab = [
-                {"mes": str(primer_dia_sab_sig), "sabor": n, "cantidad": round(stock_vivo_map_sab.get(n, 0.0), 3),
-                 "fecha_registro": fecha_hoy(), "hora": ahora(), "usuario": st.session_state.admin_actual}
-                for n in SABORIZANTES_NOMBRES
-            ]
-            sb_post("cierres_saborizantes", filas_cierre_sab)
-            st.markdown(
-                f'<div class="success-toast">{ICO_CHECK} Inventario de saborizantes cerrado — quedó guardado '
-                f'como inicial de {primer_dia_sab_sig.strftime("%B %Y")}.</div>',
-                unsafe_allow_html=True
-            )
-            time.sleep(0.3)
-            st.rerun()
+        primer_dia_mp = date(mes_mp_sel.year, mes_mp_sel.month, 1)
+        if mes_mp_sel.month == 12:
+            primer_dia_mp_sig = date(mes_mp_sel.year + 1, 1, 1)
+        else:
+            primer_dia_mp_sig = date(mes_mp_sel.year, mes_mp_sel.month + 1, 1)
+        ultimo_dia_mp = primer_dia_mp_sig - timedelta(days=1)
+        hoy_mp = datetime.now(COL_TZ).date()
+        es_mes_actual_mp = (mes_mp_sel.year == hoy_mp.year and mes_mp_sel.month == hoy_mp.month)
 
-    # --- Inventario a Corte — Materia Prima ---
-    st.markdown(
-        '<div class="section-label">🥔 Inventario a Corte — Fábrica de Papas Productos La Delicia — Materia Prima</div>',
-        unsafe_allow_html=True
-    )
-    mes_mp_sel = st.date_input(
-        "Mes a consultar", value=datetime.now(COL_TZ).date().replace(day=1), key="mes_mp_cont"
-    )
-    primer_dia_mp = date(mes_mp_sel.year, mes_mp_sel.month, 1)
-    if mes_mp_sel.month == 12:
-        primer_dia_mp_sig = date(mes_mp_sel.year + 1, 1, 1)
-    else:
-        primer_dia_mp_sig = date(mes_mp_sel.year, mes_mp_sel.month + 1, 1)
-    ultimo_dia_mp = primer_dia_mp_sig - timedelta(days=1)
-    hoy_mp = datetime.now(COL_TZ).date()
-    es_mes_actual_mp = (mes_mp_sel.year == hoy_mp.year and mes_mp_sel.month == hoy_mp.month)
+        with ThreadPoolExecutor(max_workers=4) as ex:
+            f_inicial_mp  = ex.submit(sb_get, "cierres_materia_prima", f"select=insumo,cantidad&mes=eq.{primer_dia_mp}")
+            f_final_mp    = ex.submit(sb_get, "cierres_materia_prima", f"select=insumo,cantidad&mes=eq.{primer_dia_mp_sig}")
+            f_ent_mes_mp  = ex.submit(sb_get, "materia_prima", f"select=insumo,cantidad&fecha=gte.{primer_dia_mp}&fecha=lte.{ultimo_dia_mp}")
+            f_ent_todo_mp = ex.submit(sb_get, "materia_prima", "select=insumo,cantidad,precio_unitario")
+            f_sal_todo_mp = ex.submit(sb_get, "salidas_mp", "select=insumo,cantidad")
+        raw_inicial_mp  = f_inicial_mp.result() or []
+        raw_final_mp    = f_final_mp.result() or []
+        raw_ent_mes_mp  = f_ent_mes_mp.result() or []
+        raw_ent_todo_mp = f_ent_todo_mp.result() or []
+        raw_sal_todo_mp = f_sal_todo_mp.result() or []
 
-    with ThreadPoolExecutor(max_workers=4) as ex:
-        f_inicial_mp  = ex.submit(sb_get, "cierres_materia_prima", f"select=insumo,cantidad&mes=eq.{primer_dia_mp}")
-        f_final_mp    = ex.submit(sb_get, "cierres_materia_prima", f"select=insumo,cantidad&mes=eq.{primer_dia_mp_sig}")
-        f_ent_mes_mp  = ex.submit(sb_get, "materia_prima", f"select=insumo,cantidad&fecha=gte.{primer_dia_mp}&fecha=lte.{ultimo_dia_mp}")
-        f_ent_todo_mp = ex.submit(sb_get, "materia_prima", "select=insumo,cantidad,precio_unitario")
-        f_sal_todo_mp = ex.submit(sb_get, "salidas_mp", "select=insumo,cantidad")
-    raw_inicial_mp  = f_inicial_mp.result() or []
-    raw_final_mp    = f_final_mp.result() or []
-    raw_ent_mes_mp  = f_ent_mes_mp.result() or []
-    raw_ent_todo_mp = f_ent_todo_mp.result() or []
-    raw_sal_todo_mp = f_sal_todo_mp.result() or []
+        inicial_map_mp    = {r["insumo"]: float(r["cantidad"]) for r in raw_inicial_mp}
+        cierre_sig_map_mp = {r["insumo"]: float(r["cantidad"]) for r in raw_final_mp}
 
-    inicial_map_mp    = {r["insumo"]: float(r["cantidad"]) for r in raw_inicial_mp}
-    cierre_sig_map_mp = {r["insumo"]: float(r["cantidad"]) for r in raw_final_mp}
+        entradas_mes_map_mp = {}
+        for r in raw_ent_mes_mp:
+            if r["insumo"] in INSUMOS_NOMBRES:
+                entradas_mes_map_mp[r["insumo"]] = entradas_mes_map_mp.get(r["insumo"], 0) + float(r["cantidad"])
 
-    entradas_mes_map_mp = {}
-    for r in raw_ent_mes_mp:
-        if r["insumo"] in INSUMOS_NOMBRES:
-            entradas_mes_map_mp[r["insumo"]] = entradas_mes_map_mp.get(r["insumo"], 0) + float(r["cantidad"])
+        # Stock en vivo (histórico completo) — misma lógica que saborizantes: todas las
+        # entradas de siempre menos todas las salidas de siempre.
+        stock_vivo_map_mp = {}
+        for r in raw_ent_todo_mp:
+            if r["insumo"] in INSUMOS_NOMBRES:
+                stock_vivo_map_mp[r["insumo"]] = stock_vivo_map_mp.get(r["insumo"], 0) + float(r["cantidad"])
+        for r in raw_sal_todo_mp:
+            if r["insumo"] in INSUMOS_NOMBRES:
+                stock_vivo_map_mp[r["insumo"]] = stock_vivo_map_mp.get(r["insumo"], 0) - float(r["cantidad"])
 
-    # Stock en vivo (histórico completo) — misma lógica que saborizantes: todas las
-    # entradas de siempre menos todas las salidas de siempre.
-    stock_vivo_map_mp = {}
-    for r in raw_ent_todo_mp:
-        if r["insumo"] in INSUMOS_NOMBRES:
-            stock_vivo_map_mp[r["insumo"]] = stock_vivo_map_mp.get(r["insumo"], 0) + float(r["cantidad"])
-    for r in raw_sal_todo_mp:
-        if r["insumo"] in INSUMOS_NOMBRES:
-            stock_vivo_map_mp[r["insumo"]] = stock_vivo_map_mp.get(r["insumo"], 0) - float(r["cantidad"])
+        # Precio promedio ponderado histórico completo — cada insumo entra a precios
+        # distintos cada vez que se compra.
+        costo_pond_map_mp = {}
+        for r in raw_ent_todo_mp:
+            k = r["insumo"]
+            if k not in INSUMOS_NOMBRES:
+                continue
+            pu   = float(r.get("precio_unitario", 0) or 0)
+            cant = float(r.get("cantidad", 0) or 0)
+            if pu > 0 and cant > 0:
+                if k not in costo_pond_map_mp:
+                    costo_pond_map_mp[k] = {"costo": 0.0, "cant": 0.0}
+                costo_pond_map_mp[k]["costo"] += pu * cant
+                costo_pond_map_mp[k]["cant"]  += cant
 
-    # Precio promedio ponderado histórico completo — cada insumo entra a precios
-    # distintos cada vez que se compra.
-    costo_pond_map_mp = {}
-    for r in raw_ent_todo_mp:
-        k = r["insumo"]
-        if k not in INSUMOS_NOMBRES:
-            continue
-        pu   = float(r.get("precio_unitario", 0) or 0)
-        cant = float(r.get("cantidad", 0) or 0)
-        if pu > 0 and cant > 0:
-            if k not in costo_pond_map_mp:
-                costo_pond_map_mp[k] = {"costo": 0.0, "cant": 0.0}
-            costo_pond_map_mp[k]["costo"] += pu * cant
-            costo_pond_map_mp[k]["cant"]  += cant
+        filas_mp = []
+        tot_valor_mp = tot_valsal_mp = 0.0
+        for nombre_mp in INSUMOS_NOMBRES:
+            inicial_r  = inicial_map_mp.get(nombre_mp, 0.0)
+            entradas_r = entradas_mes_map_mp.get(nombre_mp, 0.0)
+            final_r    = stock_vivo_map_mp.get(nombre_mp, 0.0) if es_mes_actual_mp else cierre_sig_map_mp.get(nombre_mp, 0.0)
+            salida_r   = inicial_r + entradas_r - final_r
+            d = costo_pond_map_mp.get(nombre_mp)
+            costo_r = (d["costo"] / d["cant"]) if d and d["cant"] > 0 else 0.0
+            valor_r = final_r * costo_r
+            valor_salida_r = costo_r * salida_r
 
-    filas_mp = []
-    tot_valor_mp = tot_valsal_mp = 0.0
-    for nombre_mp in INSUMOS_NOMBRES:
-        inicial_r  = inicial_map_mp.get(nombre_mp, 0.0)
-        entradas_r = entradas_mes_map_mp.get(nombre_mp, 0.0)
-        final_r    = stock_vivo_map_mp.get(nombre_mp, 0.0) if es_mes_actual_mp else cierre_sig_map_mp.get(nombre_mp, 0.0)
-        salida_r   = inicial_r + entradas_r - final_r
-        d = costo_pond_map_mp.get(nombre_mp)
-        costo_r = (d["costo"] / d["cant"]) if d and d["cant"] > 0 else 0.0
-        valor_r = final_r * costo_r
-        valor_salida_r = costo_r * salida_r
+            filas_mp.append({
+                "Insumo": nombre_mp,
+                "Medida": INSUMOS_UNIDAD.get(nombre_mp, ""),
+                "Inventario inicial": round(inicial_r, 3),
+                "Entradas": round(entradas_r, 3),
+                "Salida": round(salida_r, 3),
+                "Inventario": round(final_r, 3),
+                "Costo": fmt(round(costo_r)),
+                "Total": fmt(round(valor_r)),
+                "Total Salida": fmt(round(valor_salida_r)),
+            })
+            tot_valor_mp += valor_r
+            tot_valsal_mp += valor_salida_r
 
         filas_mp.append({
-            "Insumo": nombre_mp,
-            "Medida": INSUMOS_UNIDAD.get(nombre_mp, ""),
-            "Inventario inicial": round(inicial_r, 3),
-            "Entradas": round(entradas_r, 3),
-            "Salida": round(salida_r, 3),
-            "Inventario": round(final_r, 3),
-            "Costo": fmt(round(costo_r)),
-            "Total": fmt(round(valor_r)),
-            "Total Salida": fmt(round(valor_salida_r)),
+            "Insumo": "Total", "Medida": "",
+            "Inventario inicial": "", "Entradas": "", "Salida": "", "Inventario": "", "Costo": "",
+            "Total": fmt(round(tot_valor_mp)),
+            "Total Salida": fmt(round(tot_valsal_mp)),
         })
-        tot_valor_mp += valor_r
-        tot_valsal_mp += valor_salida_r
 
-    filas_mp.append({
-        "Insumo": "Total", "Medida": "",
-        "Inventario inicial": "", "Entradas": "", "Salida": "", "Inventario": "", "Costo": "",
-        "Total": fmt(round(tot_valor_mp)),
-        "Total Salida": fmt(round(tot_valsal_mp)),
-    })
+        df_mp_mes = pd.DataFrame(filas_mp)
+        with st.expander("👁️ Ver tabla", expanded=st.session_state.get("contador_ver_todas", False)):
+            st.markdown(tabla_reporte_html(df_mp_mes), unsafe_allow_html=True)
+        if not raw_inicial_mp:
+            st.markdown(
+                f'<div class="warn-box">{ICO_WARN} No hay un cierre de materia prima guardado para '
+                f'{primer_dia_mp.strftime("%B %Y")} — el "Inventario inicial" está en 0 para todos.</div>',
+                unsafe_allow_html=True
+            )
 
-    df_mp_mes = pd.DataFrame(filas_mp)
-    with st.expander("👁️ Ver tabla"):
-        st.markdown(tabla_reporte_html(df_mp_mes), unsafe_allow_html=True)
-    if not raw_inicial_mp:
+        def _pdf_mp_mes(df, nombre_mes_pdf):
+            from reportlab.lib.pagesizes import A4, landscape
+            from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+            from reportlab.lib.styles import getSampleStyleSheet
+            from reportlab.lib import colors
+            from reportlab.lib.units import cm
+            import io
+
+            buf = io.BytesIO()
+            doc = SimpleDocTemplate(buf, pagesize=landscape(A4),
+                                    leftMargin=1*cm, rightMargin=1*cm,
+                                    topMargin=1.5*cm, bottomMargin=1*cm)
+            styles = getSampleStyleSheet()
+            elements = [
+                Paragraph("INVENTARIO A CORTE — FÁBRICA DE PAPAS PRODUCTOS LA DELICIA — MATERIA PRIMA", styles["Title"]),
+                Paragraph(f"Mes: {nombre_mes_pdf}  |  Generado: {fecha_hoy()}", styles["Normal"]),
+                Spacer(1, 0.4*cm),
+            ]
+            cols = list(df.columns)
+            filas_str = df.astype(str).replace("nan", "").values.tolist()
+            data = [cols] + filas_str
+            col_width = (landscape(A4)[0] - 2*cm) / len(cols)
+            tabla_pdf = Table(data, colWidths=[col_width]*len(cols), repeatRows=1)
+            tabla_pdf.setStyle(TableStyle([
+                ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#1565C0")),
+                ("TEXTCOLOR",  (0,0), (-1,0), colors.white),
+                ("FONTNAME",   (0,0), (-1,0), "Helvetica-Bold"),
+                ("FONTSIZE",   (0,0), (-1,-1), 8),
+                ("ROWBACKGROUNDS", (0,1), (-1,-1), [colors.white, colors.HexColor("#EEF4FF")]),
+                ("GRID",       (0,0), (-1,-1), 0.3, colors.HexColor("#BBDEFB")),
+                ("VALIGN",     (0,0), (-1,-1), "MIDDLE"),
+                ("TOPPADDING",    (0,0), (-1,-1), 3),
+                ("BOTTOMPADDING", (0,0), (-1,-1), 3),
+                ("LEFTPADDING",   (0,0), (-1,-1), 3),
+                ("RIGHTPADDING",  (0,0), (-1,-1), 3),
+                ("FONTNAME", (0, len(filas_str)), (-1, len(filas_str)), "Helvetica-Bold"),
+            ]))
+            elements.append(tabla_pdf)
+            doc.build(elements)
+            buf.seek(0)
+            return buf.read()
+
+        col_dl1m, col_dl2m = st.columns(2)
+        csv_mp = df_mp_mes.to_csv(index=False, sep=";").encode("utf-8-sig")
+        col_dl1m.download_button(
+            "📥 Descargar CSV", data=csv_mp,
+            file_name=f"materia_prima_corte_{primer_dia_mp.strftime('%Y_%m')}.csv",
+            mime="text/csv", key="btn_desc_mp_csv"
+        )
+        pdf_mp = _pdf_mp_mes(df_mp_mes, primer_dia_mp.strftime("%B %Y").capitalize())
+        col_dl2m.download_button(
+            "📄 Descargar PDF", data=pdf_mp,
+            file_name=f"materia_prima_corte_{primer_dia_mp.strftime('%Y_%m')}.pdf",
+            mime="application/pdf", key="btn_desc_mp_pdf"
+        )
+
+        with st.expander("🔒 Cerrar inventario de materia prima del mes"):
+            st.caption(
+                "Guarda el stock EN VIVO (entradas de siempre − salidas de siempre) de cada insumo como el "
+                "\"Inventario inicial\" del mes siguiente. Hazlo cuando ya termines de registrar todo el mes actual."
+            )
+            ya_existe_cierre_mp = sb_get(
+                "cierres_materia_prima", f"select=insumo&mes=eq.{primer_dia_mp_sig}&limit=1"
+            )
+            if ya_existe_cierre_mp:
+                st.markdown(
+                    f'<div class="warn-box">{ICO_WARN} Ya existe un cierre guardado para '
+                    f'{primer_dia_mp_sig.strftime("%B %Y")}. Si confirmas, se sobrescribe.</div>',
+                    unsafe_allow_html=True
+                )
+            df_preview_cierre_mp = pd.DataFrame([
+                {"Insumo": n, "Medida": INSUMOS_UNIDAD.get(n, ""), "Stock actual": round(stock_vivo_map_mp.get(n, 0.0), 3)}
+                for n in INSUMOS_NOMBRES
+            ])
+            tabla_view(df_preview_cierre_mp)
+            if st.button(
+                f"✅ Confirmar cierre → será el inicial de {primer_dia_mp_sig.strftime('%B %Y')}",
+                key="btn_cerrar_mp_mes"
+            ):
+                sb_delete("cierres_materia_prima", f"mes=eq.{primer_dia_mp_sig}")
+                filas_cierre_mp = [
+                    {"mes": str(primer_dia_mp_sig), "insumo": n, "cantidad": round(stock_vivo_map_mp.get(n, 0.0), 3),
+                     "fecha_registro": fecha_hoy(), "hora": ahora(), "usuario": st.session_state.admin_actual}
+                    for n in INSUMOS_NOMBRES
+                ]
+                sb_post("cierres_materia_prima", filas_cierre_mp)
+                st.markdown(
+                    f'<div class="success-toast">{ICO_CHECK} Inventario de materia prima cerrado — quedó guardado '
+                    f'como inicial de {primer_dia_mp_sig.strftime("%B %Y")}.</div>',
+                    unsafe_allow_html=True
+                )
+                time.sleep(0.3)
+                st.rerun()
+
+        # --- Inventario a Corte — Empaque ---
         st.markdown(
-            f'<div class="warn-box">{ICO_WARN} No hay un cierre de materia prima guardado para '
-            f'{primer_dia_mp.strftime("%B %Y")} — el "Inventario inicial" está en 0 para todos.</div>',
+            '<div class="section-label">📦 Inventario a Corte — Fábrica de Papas Productos La Delicia — Empaque</div>',
             unsafe_allow_html=True
         )
-
-    def _pdf_mp_mes(df, nombre_mes_pdf):
-        from reportlab.lib.pagesizes import A4, landscape
-        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-        from reportlab.lib.styles import getSampleStyleSheet
-        from reportlab.lib import colors
-        from reportlab.lib.units import cm
-        import io
-
-        buf = io.BytesIO()
-        doc = SimpleDocTemplate(buf, pagesize=landscape(A4),
-                                leftMargin=1*cm, rightMargin=1*cm,
-                                topMargin=1.5*cm, bottomMargin=1*cm)
-        styles = getSampleStyleSheet()
-        elements = [
-            Paragraph("INVENTARIO A CORTE — FÁBRICA DE PAPAS PRODUCTOS LA DELICIA — MATERIA PRIMA", styles["Title"]),
-            Paragraph(f"Mes: {nombre_mes_pdf}  |  Generado: {fecha_hoy()}", styles["Normal"]),
-            Spacer(1, 0.4*cm),
-        ]
-        cols = list(df.columns)
-        filas_str = df.astype(str).replace("nan", "").values.tolist()
-        data = [cols] + filas_str
-        col_width = (landscape(A4)[0] - 2*cm) / len(cols)
-        tabla_pdf = Table(data, colWidths=[col_width]*len(cols), repeatRows=1)
-        tabla_pdf.setStyle(TableStyle([
-            ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#1565C0")),
-            ("TEXTCOLOR",  (0,0), (-1,0), colors.white),
-            ("FONTNAME",   (0,0), (-1,0), "Helvetica-Bold"),
-            ("FONTSIZE",   (0,0), (-1,-1), 8),
-            ("ROWBACKGROUNDS", (0,1), (-1,-1), [colors.white, colors.HexColor("#EEF4FF")]),
-            ("GRID",       (0,0), (-1,-1), 0.3, colors.HexColor("#BBDEFB")),
-            ("VALIGN",     (0,0), (-1,-1), "MIDDLE"),
-            ("TOPPADDING",    (0,0), (-1,-1), 3),
-            ("BOTTOMPADDING", (0,0), (-1,-1), 3),
-            ("LEFTPADDING",   (0,0), (-1,-1), 3),
-            ("RIGHTPADDING",  (0,0), (-1,-1), 3),
-            ("FONTNAME", (0, len(filas_str)), (-1, len(filas_str)), "Helvetica-Bold"),
-        ]))
-        elements.append(tabla_pdf)
-        doc.build(elements)
-        buf.seek(0)
-        return buf.read()
-
-    col_dl1m, col_dl2m = st.columns(2)
-    csv_mp = df_mp_mes.to_csv(index=False).encode("utf-8")
-    col_dl1m.download_button(
-        "📥 Descargar CSV", data=csv_mp,
-        file_name=f"materia_prima_corte_{primer_dia_mp.strftime('%Y_%m')}.csv",
-        mime="text/csv", key="btn_desc_mp_csv"
-    )
-    pdf_mp = _pdf_mp_mes(df_mp_mes, primer_dia_mp.strftime("%B %Y").capitalize())
-    col_dl2m.download_button(
-        "📄 Descargar PDF", data=pdf_mp,
-        file_name=f"materia_prima_corte_{primer_dia_mp.strftime('%Y_%m')}.pdf",
-        mime="application/pdf", key="btn_desc_mp_pdf"
-    )
-
-    with st.expander("🔒 Cerrar inventario de materia prima del mes"):
-        st.caption(
-            "Guarda el stock EN VIVO (entradas de siempre − salidas de siempre) de cada insumo como el "
-            "\"Inventario inicial\" del mes siguiente. Hazlo cuando ya termines de registrar todo el mes actual."
+        mes_emp_sel = st.date_input(
+            "Mes a consultar", value=datetime.now(COL_TZ).date().replace(day=1), key="mes_emp_cont"
         )
-        ya_existe_cierre_mp = sb_get(
-            "cierres_materia_prima", f"select=insumo&mes=eq.{primer_dia_mp_sig}&limit=1"
-        )
-        if ya_existe_cierre_mp:
-            st.markdown(
-                f'<div class="warn-box">{ICO_WARN} Ya existe un cierre guardado para '
-                f'{primer_dia_mp_sig.strftime("%B %Y")}. Si confirmas, se sobrescribe.</div>',
-                unsafe_allow_html=True
-            )
-        df_preview_cierre_mp = pd.DataFrame([
-            {"Insumo": n, "Medida": INSUMOS_UNIDAD.get(n, ""), "Stock actual": round(stock_vivo_map_mp.get(n, 0.0), 3)}
-            for n in INSUMOS_NOMBRES
-        ])
-        tabla_view(df_preview_cierre_mp)
-        if st.button(
-            f"✅ Confirmar cierre → será el inicial de {primer_dia_mp_sig.strftime('%B %Y')}",
-            key="btn_cerrar_mp_mes"
-        ):
-            sb_delete("cierres_materia_prima", f"mes=eq.{primer_dia_mp_sig}")
-            filas_cierre_mp = [
-                {"mes": str(primer_dia_mp_sig), "insumo": n, "cantidad": round(stock_vivo_map_mp.get(n, 0.0), 3),
-                 "fecha_registro": fecha_hoy(), "hora": ahora(), "usuario": st.session_state.admin_actual}
-                for n in INSUMOS_NOMBRES
-            ]
-            sb_post("cierres_materia_prima", filas_cierre_mp)
-            st.markdown(
-                f'<div class="success-toast">{ICO_CHECK} Inventario de materia prima cerrado — quedó guardado '
-                f'como inicial de {primer_dia_mp_sig.strftime("%B %Y")}.</div>',
-                unsafe_allow_html=True
-            )
-            time.sleep(0.3)
-            st.rerun()
+        primer_dia_emp = date(mes_emp_sel.year, mes_emp_sel.month, 1)
+        if mes_emp_sel.month == 12:
+            primer_dia_emp_sig = date(mes_emp_sel.year + 1, 1, 1)
+        else:
+            primer_dia_emp_sig = date(mes_emp_sel.year, mes_emp_sel.month + 1, 1)
+        ultimo_dia_emp = primer_dia_emp_sig - timedelta(days=1)
+        hoy_emp = datetime.now(COL_TZ).date()
+        es_mes_actual_emp = (mes_emp_sel.year == hoy_emp.year and mes_emp_sel.month == hoy_emp.month)
 
-    # --- Inventario a Corte — Empaque ---
-    st.markdown(
-        '<div class="section-label">📦 Inventario a Corte — Fábrica de Papas Productos La Delicia — Empaque</div>',
-        unsafe_allow_html=True
-    )
-    mes_emp_sel = st.date_input(
-        "Mes a consultar", value=datetime.now(COL_TZ).date().replace(day=1), key="mes_emp_cont"
-    )
-    primer_dia_emp = date(mes_emp_sel.year, mes_emp_sel.month, 1)
-    if mes_emp_sel.month == 12:
-        primer_dia_emp_sig = date(mes_emp_sel.year + 1, 1, 1)
-    else:
-        primer_dia_emp_sig = date(mes_emp_sel.year, mes_emp_sel.month + 1, 1)
-    ultimo_dia_emp = primer_dia_emp_sig - timedelta(days=1)
-    hoy_emp = datetime.now(COL_TZ).date()
-    es_mes_actual_emp = (mes_emp_sel.year == hoy_emp.year and mes_emp_sel.month == hoy_emp.month)
+        with ThreadPoolExecutor(max_workers=4) as ex:
+            f_inicial_emp  = ex.submit(sb_get, "cierres_empaque", f"select=insumo,cantidad&mes=eq.{primer_dia_emp}")
+            f_final_emp    = ex.submit(sb_get, "cierres_empaque", f"select=insumo,cantidad&mes=eq.{primer_dia_emp_sig}")
+            f_ent_mes_emp  = ex.submit(sb_get, "materia_prima", f"select=insumo,cantidad&fecha=gte.{primer_dia_emp}&fecha=lte.{ultimo_dia_emp}")
+            f_ent_todo_emp = ex.submit(sb_get, "materia_prima", "select=insumo,cantidad,precio_unitario")
+            f_sal_todo_emp = ex.submit(sb_get, "salidas_mp", "select=insumo,cantidad")
+        raw_inicial_emp  = f_inicial_emp.result() or []
+        raw_final_emp    = f_final_emp.result() or []
+        raw_ent_mes_emp  = f_ent_mes_emp.result() or []
+        raw_ent_todo_emp = f_ent_todo_emp.result() or []
+        raw_sal_todo_emp = f_sal_todo_emp.result() or []
 
-    with ThreadPoolExecutor(max_workers=4) as ex:
-        f_inicial_emp  = ex.submit(sb_get, "cierres_empaque", f"select=insumo,cantidad&mes=eq.{primer_dia_emp}")
-        f_final_emp    = ex.submit(sb_get, "cierres_empaque", f"select=insumo,cantidad&mes=eq.{primer_dia_emp_sig}")
-        f_ent_mes_emp  = ex.submit(sb_get, "materia_prima", f"select=insumo,cantidad&fecha=gte.{primer_dia_emp}&fecha=lte.{ultimo_dia_emp}")
-        f_ent_todo_emp = ex.submit(sb_get, "materia_prima", "select=insumo,cantidad,precio_unitario")
-        f_sal_todo_emp = ex.submit(sb_get, "salidas_mp", "select=insumo,cantidad")
-    raw_inicial_emp  = f_inicial_emp.result() or []
-    raw_final_emp    = f_final_emp.result() or []
-    raw_ent_mes_emp  = f_ent_mes_emp.result() or []
-    raw_ent_todo_emp = f_ent_todo_emp.result() or []
-    raw_sal_todo_emp = f_sal_todo_emp.result() or []
+        inicial_map_emp    = {r["insumo"]: float(r["cantidad"]) for r in raw_inicial_emp}
+        cierre_sig_map_emp = {r["insumo"]: float(r["cantidad"]) for r in raw_final_emp}
 
-    inicial_map_emp    = {r["insumo"]: float(r["cantidad"]) for r in raw_inicial_emp}
-    cierre_sig_map_emp = {r["insumo"]: float(r["cantidad"]) for r in raw_final_emp}
+        entradas_mes_map_emp = {}
+        for r in raw_ent_mes_emp:
+            if r["insumo"] in EMPAQUES_NOMBRES:
+                entradas_mes_map_emp[r["insumo"]] = entradas_mes_map_emp.get(r["insumo"], 0) + float(r["cantidad"])
 
-    entradas_mes_map_emp = {}
-    for r in raw_ent_mes_emp:
-        if r["insumo"] in EMPAQUES_NOMBRES:
-            entradas_mes_map_emp[r["insumo"]] = entradas_mes_map_emp.get(r["insumo"], 0) + float(r["cantidad"])
+        # Stock en vivo (histórico completo) — misma lógica que materia prima/saborizantes:
+        # todas las entradas de siempre menos todas las salidas de siempre. El consumo de
+        # rollos (pesaje antes/después en Salida → Empaque) también queda en "salidas_mp",
+        # así que este cálculo ya lo incluye sin tratamiento especial.
+        stock_vivo_map_emp = {}
+        for r in raw_ent_todo_emp:
+            if r["insumo"] in EMPAQUES_NOMBRES:
+                stock_vivo_map_emp[r["insumo"]] = stock_vivo_map_emp.get(r["insumo"], 0) + float(r["cantidad"])
+        for r in raw_sal_todo_emp:
+            if r["insumo"] in EMPAQUES_NOMBRES:
+                stock_vivo_map_emp[r["insumo"]] = stock_vivo_map_emp.get(r["insumo"], 0) - float(r["cantidad"])
 
-    # Stock en vivo (histórico completo) — misma lógica que materia prima/saborizantes:
-    # todas las entradas de siempre menos todas las salidas de siempre. El consumo de
-    # rollos (pesaje antes/después en Salida → Empaque) también queda en "salidas_mp",
-    # así que este cálculo ya lo incluye sin tratamiento especial.
-    stock_vivo_map_emp = {}
-    for r in raw_ent_todo_emp:
-        if r["insumo"] in EMPAQUES_NOMBRES:
-            stock_vivo_map_emp[r["insumo"]] = stock_vivo_map_emp.get(r["insumo"], 0) + float(r["cantidad"])
-    for r in raw_sal_todo_emp:
-        if r["insumo"] in EMPAQUES_NOMBRES:
-            stock_vivo_map_emp[r["insumo"]] = stock_vivo_map_emp.get(r["insumo"], 0) - float(r["cantidad"])
+        # Precio promedio ponderado histórico completo.
+        costo_pond_map_emp = {}
+        for r in raw_ent_todo_emp:
+            k = r["insumo"]
+            if k not in EMPAQUES_NOMBRES:
+                continue
+            pu   = float(r.get("precio_unitario", 0) or 0)
+            cant = float(r.get("cantidad", 0) or 0)
+            if pu > 0 and cant > 0:
+                if k not in costo_pond_map_emp:
+                    costo_pond_map_emp[k] = {"costo": 0.0, "cant": 0.0}
+                costo_pond_map_emp[k]["costo"] += pu * cant
+                costo_pond_map_emp[k]["cant"]  += cant
 
-    # Precio promedio ponderado histórico completo.
-    costo_pond_map_emp = {}
-    for r in raw_ent_todo_emp:
-        k = r["insumo"]
-        if k not in EMPAQUES_NOMBRES:
-            continue
-        pu   = float(r.get("precio_unitario", 0) or 0)
-        cant = float(r.get("cantidad", 0) or 0)
-        if pu > 0 and cant > 0:
-            if k not in costo_pond_map_emp:
-                costo_pond_map_emp[k] = {"costo": 0.0, "cant": 0.0}
-            costo_pond_map_emp[k]["costo"] += pu * cant
-            costo_pond_map_emp[k]["cant"]  += cant
+        filas_emp = []
+        tot_valor_emp = tot_valsal_emp = 0.0
+        for nombre_emp in EMPAQUES_NOMBRES:
+            inicial_r  = inicial_map_emp.get(nombre_emp, 0.0)
+            entradas_r = entradas_mes_map_emp.get(nombre_emp, 0.0)
+            final_r    = stock_vivo_map_emp.get(nombre_emp, 0.0) if es_mes_actual_emp else cierre_sig_map_emp.get(nombre_emp, 0.0)
+            salida_r   = inicial_r + entradas_r - final_r
+            d = costo_pond_map_emp.get(nombre_emp)
+            costo_r = (d["costo"] / d["cant"]) if d and d["cant"] > 0 else 0.0
+            valor_r = final_r * costo_r
+            valor_salida_r = costo_r * salida_r
 
-    filas_emp = []
-    tot_valor_emp = tot_valsal_emp = 0.0
-    for nombre_emp in EMPAQUES_NOMBRES:
-        inicial_r  = inicial_map_emp.get(nombre_emp, 0.0)
-        entradas_r = entradas_mes_map_emp.get(nombre_emp, 0.0)
-        final_r    = stock_vivo_map_emp.get(nombre_emp, 0.0) if es_mes_actual_emp else cierre_sig_map_emp.get(nombre_emp, 0.0)
-        salida_r   = inicial_r + entradas_r - final_r
-        d = costo_pond_map_emp.get(nombre_emp)
-        costo_r = (d["costo"] / d["cant"]) if d and d["cant"] > 0 else 0.0
-        valor_r = final_r * costo_r
-        valor_salida_r = costo_r * salida_r
+            filas_emp.append({
+                "Insumo": nombre_emp,
+                "Medida": EMPAQUES_UNIDAD.get(nombre_emp, ""),
+                "Inventario inicial": round(inicial_r, 3),
+                "Entradas": round(entradas_r, 3),
+                "Salida": round(salida_r, 3),
+                "Inventario": round(final_r, 3),
+                "Costo": fmt(round(costo_r)),
+                "Total": fmt(round(valor_r)),
+                "Total Salida": fmt(round(valor_salida_r)),
+            })
+            tot_valor_emp += valor_r
+            tot_valsal_emp += valor_salida_r
 
         filas_emp.append({
-            "Insumo": nombre_emp,
-            "Medida": EMPAQUES_UNIDAD.get(nombre_emp, ""),
-            "Inventario inicial": round(inicial_r, 3),
-            "Entradas": round(entradas_r, 3),
-            "Salida": round(salida_r, 3),
-            "Inventario": round(final_r, 3),
-            "Costo": fmt(round(costo_r)),
-            "Total": fmt(round(valor_r)),
-            "Total Salida": fmt(round(valor_salida_r)),
+            "Insumo": "Total", "Medida": "",
+            "Inventario inicial": "", "Entradas": "", "Salida": "", "Inventario": "", "Costo": "",
+            "Total": fmt(round(tot_valor_emp)),
+            "Total Salida": fmt(round(tot_valsal_emp)),
         })
-        tot_valor_emp += valor_r
-        tot_valsal_emp += valor_salida_r
 
-    filas_emp.append({
-        "Insumo": "Total", "Medida": "",
-        "Inventario inicial": "", "Entradas": "", "Salida": "", "Inventario": "", "Costo": "",
-        "Total": fmt(round(tot_valor_emp)),
-        "Total Salida": fmt(round(tot_valsal_emp)),
-    })
-
-    df_emp_mes = pd.DataFrame(filas_emp)
-    with st.expander("👁️ Ver tabla"):
-        st.markdown(tabla_reporte_html(df_emp_mes), unsafe_allow_html=True)
-    if not raw_inicial_emp:
-        st.markdown(
-            f'<div class="warn-box">{ICO_WARN} No hay un cierre de empaque guardado para '
-            f'{primer_dia_emp.strftime("%B %Y")} — el "Inventario inicial" está en 0 para todos.</div>',
-            unsafe_allow_html=True
-        )
-
-    def _pdf_emp_mes(df, nombre_mes_pdf):
-        from reportlab.lib.pagesizes import A4, landscape
-        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-        from reportlab.lib.styles import getSampleStyleSheet
-        from reportlab.lib import colors
-        from reportlab.lib.units import cm
-        import io
-
-        buf = io.BytesIO()
-        doc = SimpleDocTemplate(buf, pagesize=landscape(A4),
-                                leftMargin=1*cm, rightMargin=1*cm,
-                                topMargin=1.5*cm, bottomMargin=1*cm)
-        styles = getSampleStyleSheet()
-        elements = [
-            Paragraph("INVENTARIO A CORTE — FÁBRICA DE PAPAS PRODUCTOS LA DELICIA — EMPAQUE", styles["Title"]),
-            Paragraph(f"Mes: {nombre_mes_pdf}  |  Generado: {fecha_hoy()}", styles["Normal"]),
-            Spacer(1, 0.4*cm),
-        ]
-        cols = list(df.columns)
-        filas_str = df.astype(str).replace("nan", "").values.tolist()
-        data = [cols] + filas_str
-        col_width = (landscape(A4)[0] - 2*cm) / len(cols)
-        tabla_pdf = Table(data, colWidths=[col_width]*len(cols), repeatRows=1)
-        tabla_pdf.setStyle(TableStyle([
-            ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#1565C0")),
-            ("TEXTCOLOR",  (0,0), (-1,0), colors.white),
-            ("FONTNAME",   (0,0), (-1,0), "Helvetica-Bold"),
-            ("FONTSIZE",   (0,0), (-1,-1), 7),
-            ("ROWBACKGROUNDS", (0,1), (-1,-1), [colors.white, colors.HexColor("#EEF4FF")]),
-            ("GRID",       (0,0), (-1,-1), 0.3, colors.HexColor("#BBDEFB")),
-            ("VALIGN",     (0,0), (-1,-1), "MIDDLE"),
-            ("TOPPADDING",    (0,0), (-1,-1), 2),
-            ("BOTTOMPADDING", (0,0), (-1,-1), 2),
-            ("LEFTPADDING",   (0,0), (-1,-1), 2),
-            ("RIGHTPADDING",  (0,0), (-1,-1), 2),
-            ("FONTNAME", (0, len(filas_str)), (-1, len(filas_str)), "Helvetica-Bold"),
-        ]))
-        elements.append(tabla_pdf)
-        doc.build(elements)
-        buf.seek(0)
-        return buf.read()
-
-    col_dl1e, col_dl2e = st.columns(2)
-    csv_emp = df_emp_mes.to_csv(index=False).encode("utf-8")
-    col_dl1e.download_button(
-        "📥 Descargar CSV", data=csv_emp,
-        file_name=f"empaque_corte_{primer_dia_emp.strftime('%Y_%m')}.csv",
-        mime="text/csv", key="btn_desc_emp_csv"
-    )
-    pdf_emp = _pdf_emp_mes(df_emp_mes, primer_dia_emp.strftime("%B %Y").capitalize())
-    col_dl2e.download_button(
-        "📄 Descargar PDF", data=pdf_emp,
-        file_name=f"empaque_corte_{primer_dia_emp.strftime('%Y_%m')}.pdf",
-        mime="application/pdf", key="btn_desc_emp_pdf"
-    )
-
-    with st.expander("🔒 Cerrar inventario de empaque del mes"):
-        st.caption(
-            "Guarda el stock EN VIVO (entradas de siempre − salidas de siempre) de cada insumo de empaque como "
-            "el \"Inventario inicial\" del mes siguiente. Hazlo cuando ya termines de registrar todo el mes actual."
-        )
-        ya_existe_cierre_emp = sb_get(
-            "cierres_empaque", f"select=insumo&mes=eq.{primer_dia_emp_sig}&limit=1"
-        )
-        if ya_existe_cierre_emp:
+        df_emp_mes = pd.DataFrame(filas_emp)
+        with st.expander("👁️ Ver tabla", expanded=st.session_state.get("contador_ver_todas", False)):
+            st.markdown(tabla_reporte_html(df_emp_mes), unsafe_allow_html=True)
+        if not raw_inicial_emp:
             st.markdown(
-                f'<div class="warn-box">{ICO_WARN} Ya existe un cierre guardado para '
-                f'{primer_dia_emp_sig.strftime("%B %Y")}. Si confirmas, se sobrescribe.</div>',
+                f'<div class="warn-box">{ICO_WARN} No hay un cierre de empaque guardado para '
+                f'{primer_dia_emp.strftime("%B %Y")} — el "Inventario inicial" está en 0 para todos.</div>',
                 unsafe_allow_html=True
             )
-        df_preview_cierre_emp = pd.DataFrame([
-            {"Insumo": n, "Medida": EMPAQUES_UNIDAD.get(n, ""), "Stock actual": round(stock_vivo_map_emp.get(n, 0.0), 3)}
-            for n in EMPAQUES_NOMBRES
-        ])
-        tabla_view(df_preview_cierre_emp)
-        if st.button(
-            f"✅ Confirmar cierre → será el inicial de {primer_dia_emp_sig.strftime('%B %Y')}",
-            key="btn_cerrar_emp_mes"
-        ):
-            sb_delete("cierres_empaque", f"mes=eq.{primer_dia_emp_sig}")
-            filas_cierre_emp = [
-                {"mes": str(primer_dia_emp_sig), "insumo": n, "cantidad": round(stock_vivo_map_emp.get(n, 0.0), 3),
-                 "fecha_registro": fecha_hoy(), "hora": ahora(), "usuario": st.session_state.admin_actual}
-                for n in EMPAQUES_NOMBRES
+
+        def _pdf_emp_mes(df, nombre_mes_pdf):
+            from reportlab.lib.pagesizes import A4, landscape
+            from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+            from reportlab.lib.styles import getSampleStyleSheet
+            from reportlab.lib import colors
+            from reportlab.lib.units import cm
+            import io
+
+            buf = io.BytesIO()
+            doc = SimpleDocTemplate(buf, pagesize=landscape(A4),
+                                    leftMargin=1*cm, rightMargin=1*cm,
+                                    topMargin=1.5*cm, bottomMargin=1*cm)
+            styles = getSampleStyleSheet()
+            elements = [
+                Paragraph("INVENTARIO A CORTE — FÁBRICA DE PAPAS PRODUCTOS LA DELICIA — EMPAQUE", styles["Title"]),
+                Paragraph(f"Mes: {nombre_mes_pdf}  |  Generado: {fecha_hoy()}", styles["Normal"]),
+                Spacer(1, 0.4*cm),
             ]
-            sb_post("cierres_empaque", filas_cierre_emp)
-            st.markdown(
-                f'<div class="success-toast">{ICO_CHECK} Inventario de empaque cerrado — quedó guardado '
-                f'como inicial de {primer_dia_emp_sig.strftime("%B %Y")}.</div>',
-                unsafe_allow_html=True
-            )
-            time.sleep(0.3)
-            st.rerun()
+            cols = list(df.columns)
+            filas_str = df.astype(str).replace("nan", "").values.tolist()
+            data = [cols] + filas_str
+            col_width = (landscape(A4)[0] - 2*cm) / len(cols)
+            tabla_pdf = Table(data, colWidths=[col_width]*len(cols), repeatRows=1)
+            tabla_pdf.setStyle(TableStyle([
+                ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#1565C0")),
+                ("TEXTCOLOR",  (0,0), (-1,0), colors.white),
+                ("FONTNAME",   (0,0), (-1,0), "Helvetica-Bold"),
+                ("FONTSIZE",   (0,0), (-1,-1), 7),
+                ("ROWBACKGROUNDS", (0,1), (-1,-1), [colors.white, colors.HexColor("#EEF4FF")]),
+                ("GRID",       (0,0), (-1,-1), 0.3, colors.HexColor("#BBDEFB")),
+                ("VALIGN",     (0,0), (-1,-1), "MIDDLE"),
+                ("TOPPADDING",    (0,0), (-1,-1), 2),
+                ("BOTTOMPADDING", (0,0), (-1,-1), 2),
+                ("LEFTPADDING",   (0,0), (-1,-1), 2),
+                ("RIGHTPADDING",  (0,0), (-1,-1), 2),
+                ("FONTNAME", (0, len(filas_str)), (-1, len(filas_str)), "Helvetica-Bold"),
+            ]))
+            elements.append(tabla_pdf)
+            doc.build(elements)
+            buf.seek(0)
+            return buf.read()
 
-    # --- Historial de pagos por empleado ---
-    st.markdown(f'<div class="section-label">{ICO_RECEIPT} Historial por empleado</div>', unsafe_allow_html=True)
-    raw_salarios = sb_get("caja_egresos", "select=fecha,hora,concepto,valor,empleado&categoria=eq.Salario&empleado=not.is.null&order=fecha.desc,hora.desc") or []
-    nombres_empleados = sorted({r["empleado"] for r in raw_salarios if r.get("empleado")})
-    if not nombres_empleados:
-        st.info("Todavía no hay pagos de salario con nombre de empleado registrados.")
-    else:
-        emp_sel_cont = st.selectbox("Empleado", nombres_empleados, key="emp_sel_cont")
-        pagos_emp = [r for r in raw_salarios if r["empleado"] == emp_sel_cont]
-        total_pagado_emp = sum(float(r["valor"]) for r in pagos_emp)
-        st.markdown(f'<div class="calc-box">💵 Total pagado a <b>{emp_sel_cont}</b>: <b>{fmt(total_pagado_emp)}</b> ({len(pagos_emp)} pagos)</div>', unsafe_allow_html=True)
-        df_emp = pd.DataFrame([{
-            "Fecha": r["fecha"], "Hora": r["hora"],
-            "Concepto": r["concepto"], "Valor": fmt(r["valor"]),
-        } for r in pagos_emp])
-        tabla_view(df_emp)
+        col_dl1e, col_dl2e = st.columns(2)
+        csv_emp = df_emp_mes.to_csv(index=False, sep=";").encode("utf-8-sig")
+        col_dl1e.download_button(
+            "📥 Descargar CSV", data=csv_emp,
+            file_name=f"empaque_corte_{primer_dia_emp.strftime('%Y_%m')}.csv",
+            mime="text/csv", key="btn_desc_emp_csv"
+        )
+        pdf_emp = _pdf_emp_mes(df_emp_mes, primer_dia_emp.strftime("%B %Y").capitalize())
+        col_dl2e.download_button(
+            "📄 Descargar PDF", data=pdf_emp,
+            file_name=f"empaque_corte_{primer_dia_emp.strftime('%Y_%m')}.pdf",
+            mime="application/pdf", key="btn_desc_emp_pdf"
+        )
+
+        with st.expander("🔒 Cerrar inventario de empaque del mes"):
+            st.caption(
+                "Guarda el stock EN VIVO (entradas de siempre − salidas de siempre) de cada insumo de empaque como "
+                "el \"Inventario inicial\" del mes siguiente. Hazlo cuando ya termines de registrar todo el mes actual."
+            )
+            ya_existe_cierre_emp = sb_get(
+                "cierres_empaque", f"select=insumo&mes=eq.{primer_dia_emp_sig}&limit=1"
+            )
+            if ya_existe_cierre_emp:
+                st.markdown(
+                    f'<div class="warn-box">{ICO_WARN} Ya existe un cierre guardado para '
+                    f'{primer_dia_emp_sig.strftime("%B %Y")}. Si confirmas, se sobrescribe.</div>',
+                    unsafe_allow_html=True
+                )
+            df_preview_cierre_emp = pd.DataFrame([
+                {"Insumo": n, "Medida": EMPAQUES_UNIDAD.get(n, ""), "Stock actual": round(stock_vivo_map_emp.get(n, 0.0), 3)}
+                for n in EMPAQUES_NOMBRES
+            ])
+            tabla_view(df_preview_cierre_emp)
+            if st.button(
+                f"✅ Confirmar cierre → será el inicial de {primer_dia_emp_sig.strftime('%B %Y')}",
+                key="btn_cerrar_emp_mes"
+            ):
+                sb_delete("cierres_empaque", f"mes=eq.{primer_dia_emp_sig}")
+                filas_cierre_emp = [
+                    {"mes": str(primer_dia_emp_sig), "insumo": n, "cantidad": round(stock_vivo_map_emp.get(n, 0.0), 3),
+                     "fecha_registro": fecha_hoy(), "hora": ahora(), "usuario": st.session_state.admin_actual}
+                    for n in EMPAQUES_NOMBRES
+                ]
+                sb_post("cierres_empaque", filas_cierre_emp)
+                st.markdown(
+                    f'<div class="success-toast">{ICO_CHECK} Inventario de empaque cerrado — quedó guardado '
+                    f'como inicial de {primer_dia_emp_sig.strftime("%B %Y")}.</div>',
+                    unsafe_allow_html=True
+                )
+                time.sleep(0.3)
+                st.rerun()
+
+        # --- Descargar los 4 reportes de inventario mensual juntos en un solo PDF ---
+        # (una vez que ya se calcularon df_inv_mes, df_sab_mes, df_mp_mes y df_emp_mes arriba)
+        def _pdf_contador_todo():
+            from reportlab.lib.pagesizes import A4, landscape
+            from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
+            from reportlab.lib.styles import getSampleStyleSheet
+            from reportlab.lib import colors
+            from reportlab.lib.units import cm
+            import io
+
+            buf = io.BytesIO()
+            doc = SimpleDocTemplate(buf, pagesize=landscape(A4),
+                                    leftMargin=1*cm, rightMargin=1*cm,
+                                    topMargin=1.5*cm, bottomMargin=1*cm)
+            styles = getSampleStyleSheet()
+
+            def _tabla_flowable(df):
+                cols = list(df.columns)
+                filas_str = df.astype(str).replace("nan", "").values.tolist()
+                data = [cols] + filas_str
+                col_width = (landscape(A4)[0] - 2*cm) / len(cols)
+                tabla_pdf = Table(data, colWidths=[col_width]*len(cols), repeatRows=1)
+                estilo_cmds = [
+                    ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#1565C0")),
+                    ("TEXTCOLOR",  (0,0), (-1,0), colors.white),
+                    ("FONTNAME",   (0,0), (-1,0), "Helvetica-Bold"),
+                    ("FONTSIZE",   (0,0), (-1,-1), 7),
+                    ("ROWBACKGROUNDS", (0,1), (-1,-1), [colors.white, colors.HexColor("#EEF4FF")]),
+                    ("GRID",       (0,0), (-1,-1), 0.3, colors.HexColor("#BBDEFB")),
+                    ("VALIGN",     (0,0), (-1,-1), "MIDDLE"),
+                    ("TOPPADDING",    (0,0), (-1,-1), 2),
+                    ("BOTTOMPADDING", (0,0), (-1,-1), 2),
+                    ("LEFTPADDING",   (0,0), (-1,-1), 2),
+                    ("RIGHTPADDING",  (0,0), (-1,-1), 2),
+                ]
+                for i, fila_r in enumerate(filas_str, start=1):
+                    if fila_r[0] and all(v == "" for v in fila_r[1:]):
+                        estilo_cmds.append(("SPAN", (0, i), (1, i)))
+                        estilo_cmds.append(("FONTNAME", (0, i), (0, i), "Helvetica-Bold"))
+                tabla_pdf.setStyle(TableStyle(estilo_cmds))
+                return tabla_pdf
+
+            reportes = [
+                ("Inventario Inicial a Fábrica de Papas Productos La Delicia — Producto Terminado",
+                 primer_dia_inv.strftime("%B %Y").capitalize(), df_inv_mes),
+                ("Inventario a Corte — Fábrica de Papas Productos La Delicia — Saborizantes",
+                 primer_dia_sab.strftime("%B %Y").capitalize(), df_sab_mes),
+                ("Inventario a Corte — Fábrica de Papas Productos La Delicia — Materia Prima",
+                 primer_dia_mp.strftime("%B %Y").capitalize(), df_mp_mes),
+                ("Inventario a Corte — Fábrica de Papas Productos La Delicia — Empaque",
+                 primer_dia_emp.strftime("%B %Y").capitalize(), df_emp_mes),
+            ]
+            elements = []
+            for i, (titulo, mes_txt, df_rep) in enumerate(reportes):
+                if i > 0:
+                    elements.append(PageBreak())
+                elements.append(Paragraph(titulo, styles["Title"]))
+                elements.append(Paragraph(f"Mes: {mes_txt}  |  Generado: {fecha_hoy()}", styles["Normal"]))
+                elements.append(Spacer(1, 0.4*cm))
+                elements.append(_tabla_flowable(df_rep))
+                if i == 0:
+                    elements.append(Spacer(1, 0.4*cm))
+                    elements.append(Paragraph(
+                        f"<b>Cartera del mes</b> — Ingresos cobrados: <b>{fmt(round(cobrado_total_mes_inv))}</b> · "
+                        f"Créditos pendientes por cobrar: <b>{fmt(round(pendiente_total_mes_inv))}</b> · "
+                        f"Créditos cobrados del mes anterior: <b>{fmt(round(creditos_cobrados_mes_ant_inv))}</b>",
+                        styles["Normal"]
+                    ))
+            doc.build(elements)
+            buf.seek(0)
+            return buf.read()
+
+        st.markdown('<div class="section-label">📥 Descargar todo junto</div>', unsafe_allow_html=True)
+        pdf_contador_todo = _pdf_contador_todo()
+        st.download_button(
+            "📄 Descargar los 4 reportes en un solo PDF", data=pdf_contador_todo,
+            file_name=f"reportes_contador_{primer_dia_emp.strftime('%Y_%m')}.pdf",
+            mime="application/pdf", key="btn_desc_contador_todo"
+        )
+
+
+    with tab_nomina:
+        # --- Historial de pagos por empleado ---
+        st.markdown(f'<div class="section-label">{ICO_RECEIPT} Historial por empleado</div>', unsafe_allow_html=True)
+        raw_salarios = sb_get("caja_egresos", "select=fecha,hora,concepto,valor,empleado&categoria=eq.Salario&empleado=not.is.null&order=fecha.desc,hora.desc") or []
+        nombres_empleados = sorted({r["empleado"] for r in raw_salarios if r.get("empleado")})
+        if not nombres_empleados:
+            st.info("Todavía no hay pagos de salario con nombre de empleado registrados.")
+        else:
+            emp_sel_cont = st.selectbox("Empleado", nombres_empleados, key="emp_sel_cont")
+            pagos_emp = [r for r in raw_salarios if r["empleado"] == emp_sel_cont]
+            total_pagado_emp = sum(float(r["valor"]) for r in pagos_emp)
+            st.markdown(f'<div class="calc-box">💵 Total pagado a <b>{emp_sel_cont}</b>: <b>{fmt(total_pagado_emp)}</b> ({len(pagos_emp)} pagos)</div>', unsafe_allow_html=True)
+            df_emp = pd.DataFrame([{
+                "Fecha": r["fecha"], "Hora": r["hora"],
+                "Concepto": r["concepto"], "Valor": fmt(r["valor"]),
+            } for r in pagos_emp])
+            tabla_view(df_emp)
