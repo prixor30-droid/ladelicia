@@ -2040,6 +2040,11 @@ if st.session_state.vista == "menu":
         scroll-snap-align:center !important;
         scroll-snap-stop:always !important;
     }
+    @keyframes menuCardLift{
+        from{transform:translateY(18px) scale(0.96);opacity:0.5;}
+        to{transform:translateY(0) scale(1);opacity:1;}
+    }
+    .menu-card-activa{animation:menuCardLift 0.35s ease-out;}
     </style>
     """, unsafe_allow_html=True)
     st.caption("← Desliza para ver la siguiente opción →")
@@ -2050,6 +2055,35 @@ if st.session_state.vista == "menu":
         if col_m.button(texto_btn, key=f"btn_{vista}", use_container_width=True):
             st.session_state.vista = vista
             st.rerun()
+
+    # JS que detecta cuál tarjeta queda a la vista al deslizar y le agrega la clase
+    # "menu-card-activa" (dispara la animación menuCardLift de arriba) — corre en el
+    # documento padre porque components.html() renderiza en un iframe aparte, mismo
+    # truco que ya usa el botón de imprimir el recibo (ver window.parent.document).
+    # Va DESPUÉS del bucle de botones a propósito: necesita que ya existan en el DOM.
+    components.html("""
+    <script>
+    (function() {
+        var doc = window.parent.document;
+        var fila = doc.querySelector('[data-testid="stHorizontalBlock"]:has(.st-key-btn_produccion)');
+        if (!fila || fila.dataset.menuCarouselInit === "1") return;
+        fila.dataset.menuCarouselInit = "1";
+        var cols = fila.querySelectorAll('[data-testid="stColumn"]');
+        var observer = new IntersectionObserver(function(entries) {
+            entries.forEach(function(entry) {
+                var btn = entry.target.querySelector("button");
+                if (!btn) return;
+                if (entry.isIntersecting && entry.intersectionRatio > 0.6) {
+                    btn.classList.remove("menu-card-activa");
+                    void btn.offsetWidth;
+                    btn.classList.add("menu-card-activa");
+                }
+            });
+        }, { root: fila, threshold: [0.6] });
+        cols.forEach(function(col) { observer.observe(col); });
+    })();
+    </script>
+    """, height=0)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # VISTA: PRODUCCIÓN
