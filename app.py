@@ -1368,7 +1368,7 @@ label,.stSelectbox label,.stNumberInput label,.stDateInput label,.stTextInput la
 .brand-header p{color:rgba(255,255,255,0.85);font-size:0.78rem;margin:0;}
 .brand-logo img{height:620px !important;margin-bottom:0 !important;animation:logoBounce 2.2s ease-in-out infinite;transform-origin:bottom center;}
 .brand-corner-logo{position:fixed;top:8px;right:10px;margin:0;z-index:9999;pointer-events:none;}
-.brand-corner-logo img{height:88px !important;margin-bottom:0 !important;filter:drop-shadow(0 2px 6px rgba(0,0,0,0.25));}
+.brand-corner-logo img{height:130px !important;margin-bottom:0 !important;filter:drop-shadow(0 2px 6px rgba(0,0,0,0.25));}
 .metric-row{display:flex;gap:9px;margin-bottom:16px;}
 .metric-box{flex:1;background:#FFFFFF;border-radius:14px;padding:14px 8px;text-align:center;box-shadow:0 2px 8px rgba(21,101,192,0.12);}
 .metric-box .val{font-size:1.2rem;font-weight:700;line-height:1.1;}
@@ -1884,8 +1884,8 @@ if "admin_actual" not in st.session_state:
     st.session_state.admin_actual = None
 
 # ══════════════════════════════════════════════════════════════════════════════
-# HEADER — el grande con caja/foto de fondo solo en la ventana principal (menú);
-# en el resto de páginas queda el logo solo, fijo en la esquina al deslizar.
+# HEADER — el logo fijo en la esquina sale SIEMPRE, en todas las páginas. El header
+# grande (caja/foto de fondo) sale ADEMÁS solo en la ventana principal (menú).
 # ══════════════════════════════════════════════════════════════════════════════
 if st.session_state.vista == "menu":
     st.markdown(f"""
@@ -1894,10 +1894,10 @@ if st.session_state.vista == "menu":
         <p>Control de producción y ventas</p>
     </div>
     """, unsafe_allow_html=True)
-else:
-    st.markdown(f"""
-    <div class="brand-corner-logo">{logo_html}</div>
-    """, unsafe_allow_html=True)
+
+st.markdown(f"""
+<div class="brand-corner-logo">{logo_html}</div>
+""", unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # MÉTRICAS
