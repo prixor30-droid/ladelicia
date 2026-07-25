@@ -1362,8 +1362,7 @@ html,body,[class*="css"],.stApp{font-family:'Inter',sans-serif !important;backgr
 [data-baseweb="calendar"] tbody tr:last-child td{background-color:#FFFFFF !important;}
 label,.stSelectbox label,.stNumberInput label,.stDateInput label,.stTextInput label{color:#1565C0 !important;font-weight:600 !important;font-size:0.85rem !important;}
 .stTabs [data-baseweb="tab-list"]{background:#FFFFFF;border-radius:12px;padding:4px;gap:2px;box-shadow:0 1px 4px rgba(21,101,192,0.10);margin-bottom:16px;}
-.stTabs [data-baseweb="tab"]{border-radius:10px;font-size:0.78rem;font-weight:800 !important;padding:8px 4px;color:#7A2050 !important;flex:1;justify-content:center;background:transparent !important;}
-.stTabs [data-baseweb="tab"] p{font-weight:800 !important;}
+.stTabs [data-baseweb="tab"]{border-radius:10px;font-size:0.92rem;font-weight:600;padding:8px 4px;color:#7A2050 !important;flex:1;justify-content:center;background:transparent !important;}
 .stTabs [aria-selected="true"]{background-color:#1565C0 !important;color:white !important;}
 .brand-header{background:linear-gradient(135deg,#1565C0,#1E88E5);border-radius:0 0 22px 22px;padding:12px 20px 12px;margin:-1rem -1rem 16px -1rem;text-align:center;}
 .brand-header p{color:rgba(255,255,255,0.85);font-size:0.78rem;margin:0;}
@@ -1414,8 +1413,7 @@ label,.stSelectbox label,.stNumberInput label,.stDateInput label,.stTextInput la
 .warn-box{background:#FFFFFF;border-left:3px solid #E68900;border-radius:10px;padding:12px 14px;margin:8px 0 14px;font-size:0.82rem;color:#8D6E00;box-shadow:0 1px 6px rgba(0,0,0,0.05);}
 .success-toast{background:#E8F5E9;border:1px solid #A5D6A7;border-radius:12px;padding:14px 16px;text-align:center;font-weight:600;color:#1B5E20;font-size:0.95rem;margin-top:10px;}
 .section-label{font-size:0.69rem;font-weight:700;text-transform:uppercase;letter-spacing:0.7px;color:#B0185F;margin:16px 0 6px;}
-.stButton>button{width:100%;background:#1565C0 !important;color:white !important;-webkit-text-fill-color:white !important;border:none !important;border-radius:12px !important;padding:14px !important;font-size:1rem !important;font-weight:800 !important;cursor:pointer;margin-top:4px;box-shadow:0 4px 16px rgba(21,101,192,0.25);white-space:pre-line !important;line-height:1.4 !important;transition:transform 0.3s ease,box-shadow 0.3s ease,opacity 0.3s ease !important;-webkit-tap-highlight-color:transparent;touch-action:manipulation;}
-.stButton>button p{font-weight:800 !important;}
+.stButton>button{width:100%;background:#1565C0 !important;color:white !important;-webkit-text-fill-color:white !important;border:none !important;border-radius:12px !important;padding:14px !important;font-size:1.12rem !important;font-weight:700 !important;cursor:pointer;margin-top:4px;box-shadow:0 4px 16px rgba(21,101,192,0.25);white-space:pre-line !important;line-height:1.4 !important;transition:transform 0.3s ease,box-shadow 0.3s ease,opacity 0.3s ease !important;-webkit-tap-highlight-color:transparent;touch-action:manipulation;}
 .stButton>button:hover{opacity:0.88;box-shadow:0 6px 20px rgba(21,101,192,0.35);transform:translateY(-1px);}
 .stButton>button:active{transform:scale(0.97) translateY(0);box-shadow:0 2px 8px rgba(21,101,192,0.25);opacity:1;animation:btnPress 0.45s ease-out;}
 .st-key-btn_resumen button,.st-key-btn_contador button,.st-key-btn_nomina button{
@@ -2016,74 +2014,12 @@ if st.session_state.vista == "menu":
         opciones.append(("nomina", "Nómina", "Pagos quincenales y bonos"))
         opciones.append(("contador", "Contador", "Costos, inventario y utilidad"))
 
-    # Carrusel horizontal (probado a pedido del usuario 2026-07-25) — antes era una
-    # lista vertical de botones apilados. Se fuerza la fila de columnas a no apilarse
-    # en pantallas angostas (comportamiento por defecto de Streamlit) y en su lugar
-    # se desplaza horizontalmente con scroll/swipe, usando :has() para que el CSS
-    # solo afecte esta fila (ya se usa :has() en otras partes de la app, es seguro
-    # para los navegadores/tablets que usa el negocio). Si da problemas en la tablet,
-    # revertir a: un st.container() + st.button(use_container_width=True) por opción.
-    st.markdown("""
-    <style>
-    [data-testid="stHorizontalBlock"]:has(.st-key-btn_produccion){
-        flex-wrap:nowrap !important;
-        overflow-x:auto !important;
-        -webkit-overflow-scrolling:touch !important;
-        scroll-snap-type:x mandatory !important;
-        gap:0 !important;
-        padding-bottom:10px !important;
-    }
-    [data-testid="stHorizontalBlock"]:has(.st-key-btn_produccion) [data-testid="stColumn"]{
-        flex:0 0 100% !important;
-        width:100% !important;
-        min-width:100% !important;
-        scroll-snap-align:center !important;
-        scroll-snap-stop:always !important;
-    }
-    @keyframes menuCardLift{
-        from{transform:translateY(18px) scale(0.96);opacity:0.5;}
-        to{transform:translateY(0) scale(1);opacity:1;}
-    }
-    .menu-card-activa{animation:menuCardLift 0.35s ease-out;}
-    </style>
-    """, unsafe_allow_html=True)
-    st.caption("← Desliza para ver la siguiente opción →")
-
-    cols_menu = st.columns(len(opciones))
-    for col_m, (vista, titulo, sub) in zip(cols_menu, opciones):
-        texto_btn = f"{titulo}\n{sub}" if sub else titulo
-        if col_m.button(texto_btn, key=f"btn_{vista}", use_container_width=True):
-            st.session_state.vista = vista
-            st.rerun()
-
-    # JS que detecta cuál tarjeta queda a la vista al deslizar y le agrega la clase
-    # "menu-card-activa" (dispara la animación menuCardLift de arriba) — corre en el
-    # documento padre porque components.html() renderiza en un iframe aparte, mismo
-    # truco que ya usa el botón de imprimir el recibo (ver window.parent.document).
-    # Va DESPUÉS del bucle de botones a propósito: necesita que ya existan en el DOM.
-    components.html("""
-    <script>
-    (function() {
-        var doc = window.parent.document;
-        var fila = doc.querySelector('[data-testid="stHorizontalBlock"]:has(.st-key-btn_produccion)');
-        if (!fila || fila.dataset.menuCarouselInit === "1") return;
-        fila.dataset.menuCarouselInit = "1";
-        var cols = fila.querySelectorAll('[data-testid="stColumn"]');
-        var observer = new IntersectionObserver(function(entries) {
-            entries.forEach(function(entry) {
-                var btn = entry.target.querySelector("button");
-                if (!btn) return;
-                if (entry.isIntersecting && entry.intersectionRatio > 0.6) {
-                    btn.classList.remove("menu-card-activa");
-                    void btn.offsetWidth;
-                    btn.classList.add("menu-card-activa");
-                }
-            });
-        }, { root: fila, threshold: [0.6] });
-        cols.forEach(function(col) { observer.observe(col); });
-    })();
-    </script>
-    """, height=0)
+    for vista, titulo, sub in opciones:
+        with st.container():
+            texto_btn = f"{titulo}\n{sub}" if sub else titulo
+            if st.button(texto_btn, key=f"btn_{vista}", use_container_width=True):
+                st.session_state.vista = vista
+                st.rerun()
 
 # ══════════════════════════════════════════════════════════════════════════════
 # VISTA: PRODUCCIÓN
