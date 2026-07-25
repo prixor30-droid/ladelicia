@@ -1327,7 +1327,8 @@ st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 html,body,[class*="css"],.stApp{font-family:'Inter',sans-serif !important;background-color:#F0F4FF !important;color:#0D1B2A !important;font-size:20px;}
-#MainMenu,footer,header{visibility:hidden;}
+#MainMenu,footer{visibility:hidden;}
+header,[data-testid="stHeader"]{display:none !important;}
 .block-container{padding-top:1rem;padding-bottom:3rem;max-width:500px;margin:0 auto;}
 @media (min-width: 768px){
   .block-container{max-width:900px;}
@@ -1368,7 +1369,8 @@ label,.stSelectbox label,.stNumberInput label,.stDateInput label,.stTextInput la
 .brand-header p{color:rgba(255,255,255,0.85);font-size:0.78rem;margin:0;}
 .brand-logo img{height:620px !important;margin-bottom:0 !important;animation:logoBounce 2.2s ease-in-out infinite;transform-origin:bottom center;}
 .brand-corner-logo{position:fixed;top:8px;right:10px;margin:0;z-index:9999;pointer-events:none;}
-.brand-corner-logo img{height:130px !important;margin-bottom:0 !important;filter:drop-shadow(0 2px 6px rgba(0,0,0,0.25));}
+.brand-corner-logo img{height:200px !important;margin-bottom:0 !important;filter:drop-shadow(0 2px 6px rgba(0,0,0,0.25));}
+.brand-corner-titulo{position:fixed;top:14px;left:10px;margin:0;z-index:9999;pointer-events:none;background:rgba(21,101,192,0.92);color:white;padding:7px 14px;border-radius:12px;font-weight:700;font-size:0.85rem;box-shadow:0 2px 8px rgba(0,0,0,0.2);}
 .metric-row{display:flex;gap:9px;margin-bottom:16px;}
 .metric-box{flex:1;background:#FFFFFF;border-radius:14px;padding:14px 8px;text-align:center;box-shadow:0 2px 8px rgba(21,101,192,0.12);}
 .metric-box .val{font-size:1.2rem;font-weight:700;line-height:1.1;}
@@ -1898,6 +1900,19 @@ if st.session_state.vista == "menu":
 st.markdown(f"""
 <div class="brand-corner-logo">{logo_html}</div>
 """, unsafe_allow_html=True)
+
+# Nombre de la sección actual, flotante en la esquina opuesta al logo (misma idea,
+# mismo mecanismo: position:fixed, se queda visible aunque se haga scroll).
+TITULOS_VISTA = {
+    "produccion": "Producción", "carro": "Carro", "fabrica": "Fábrica",
+    "materia_prima": "Materia Prima", "caja": "Caja", "resumen": "Resumen",
+    "nomina": "Nómina", "contador": "Contador", "recibo": "Recibo",
+}
+_titulo_vista_actual = TITULOS_VISTA.get(st.session_state.vista)
+if _titulo_vista_actual:
+    st.markdown(f"""
+    <div class="brand-corner-titulo">{_titulo_vista_actual}</div>
+    """, unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # MÉTRICAS
@@ -5013,6 +5028,7 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
     st.markdown("""
     <style>
     .stApp{background-color:#EAF7EE !important;}
+    .brand-corner-titulo{background:rgba(46,125,50,0.92) !important;}
     .section-label{color:#1B7A43 !important;}
     label,.stSelectbox label,.stNumberInput label,.stDateInput label,.stTextInput label{color:#1B7A43 !important;}
     .stButton>button{background:#43A047 !important;box-shadow:0 4px 16px rgba(67,160,71,0.25) !important;}
