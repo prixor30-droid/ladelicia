@@ -1050,6 +1050,93 @@ def render_recibo(registros):
     ]
     return "".join(partes)
 
+def bloque_lote_impresion(df_canal, key_prefix, etiqueta):
+    """Botón para ver y, si se quiere, imprimir de una sola vez todas las facturas
+    de un canal (ej. todas las de fábrica de hoy), sin abrirlas una por una."""
+    key_ver = f"ver_lote_{key_prefix}"
+    if key_ver not in st.session_state:
+        st.session_state[key_ver] = False
+    if st.button(
+        f"🙈 Ocultar facturas de {etiqueta}" if st.session_state[key_ver] else f"👁️ Ver todas las facturas de {etiqueta}",
+        key=f"btn_lote_{key_prefix}"
+    ):
+        st.session_state[key_ver] = not st.session_state[key_ver]
+        st.rerun()
+
+    if not st.session_state[key_ver]:
+        return
+
+    grupos_lote = []
+    if not df_canal.empty:
+        for fid in df_canal["factura_id"].unique():
+            if not fid:
+                continue
+            grupo = df_canal[df_canal["factura_id"] == fid]
+            grupos_lote.append(grupo.to_dict("records"))
+    grupos_lote.sort(key=lambda g: (g[0]["fecha"], _parse_hora(g[0].get("hora", ""))))
+
+    if not grupos_lote:
+        st.caption(f"No hay facturas de {etiqueta} para mostrar.")
+        return
+
+    st.caption(f"{len(grupos_lote)} factura(s) de {etiqueta}, en orden.")
+    clase_lote = f"recibo-lote-{key_prefix}"
+    html_lote = f'<div class="recibo-lote {clase_lote}">' + "".join(render_recibo(g) for g in grupos_lote) + '</div>'
+    st.markdown(html_lote, unsafe_allow_html=True)
+
+    # Igual que el botón de imprimir de una sola factura, pero cada ticket queda con
+    # page-break-after para que el navegador los mande como páginas/recibos
+    # separados en una sola impresión. La clase lleva el key_prefix para que, si
+    # fábrica y carro están abiertos a la vez en pantalla, imprimir uno no arrastre
+    # los tickets del otro canal.
+    _html_btn_imprimir_lote = ("""
+    <div style="text-align:center;margin-top:12px;">
+        <button onclick="window.parent.print()" style="
+            background:#1565C0;color:white;border:none;
+            border-radius:12px;padding:14px 32px;
+            font-size:1rem;font-weight:700;cursor:pointer;
+            box-shadow:0 4px 12px rgba(21,101,192,0.3);
+        ">ICONO_PRINTER Imprimir todas (ETIQUETA)</button>
+    </div>
+    <script>
+    (function() {
+        var doc = window.parent.document;
+        var old = doc.getElementById("STYLEID");
+        if (old) old.remove();
+        var style = doc.createElement("style");
+        style.id = "STYLEID";
+        style.innerHTML = `
+            @media print {
+                body * { visibility: hidden !important; }
+                .CLASE, .CLASE * { visibility: visible !important; }
+                .CLASE {
+                    position: absolute !important;
+                    left: 0 !important; top: 0 !important;
+                    width: 100% !important;
+                }
+                .CLASE .recibo-wrap {
+                    position: static !important;
+                    padding: 0 !important;
+                    page-break-after: always !important;
+                }
+                .CLASE .recibo-ticket {
+                    width: 58mm !important;
+                    margin: 0 auto !important;
+                    box-shadow: none !important;
+                    font-size: 11px !important;
+                }
+            }
+        `;
+        doc.head.appendChild(style);
+    })();
+    </script>
+    """
+    .replace("ICONO_PRINTER", ICO_PRINTER)
+    .replace("ETIQUETA", etiqueta)
+    .replace("STYLEID", f"fabrica-print-style-lote-{key_prefix}")
+    .replace("CLASE", clase_lote))
+    components.html(_html_btn_imprimir_lote, height=80)
+
 def grafica_barras_sabor(labels, valores, titulo="bolsas"):
     """Gráfica de barras horizontales con colores de La Delicia."""
     import json as _json
@@ -4096,88 +4183,14 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
             df_fab = df_vt[df_vt["canal"]=="Fábrica"]
             if not df_fab.empty:
                 mostrar_facturas_seleccionables(df_fab, "hoy")
+            bloque_lote_impresion(df_fab, "fab_hoy", "fábrica")
 
             st.markdown('<div class="section-label">Facturas carro</div>', unsafe_allow_html=True)
             st.caption("Toca una fila para ver el recibo completo.")
             df_carro_resumen = df_vt[df_vt["canal"]=="Carro"]
             if not df_carro_resumen.empty:
                 mostrar_facturas_seleccionables(df_carro_resumen, "hoy_carro")
-
-            st.markdown('<div class="section-label">Imprimir todo</div>', unsafe_allow_html=True)
-            if "ver_lote_hoy" not in st.session_state:
-                st.session_state.ver_lote_hoy = False
-            if st.button(
-                "🙈 Ocultar facturas para imprimir" if st.session_state.ver_lote_hoy else "🖨️ Imprimir todas las facturas de hoy",
-                key="btn_lote_hoy"
-            ):
-                st.session_state.ver_lote_hoy = not st.session_state.ver_lote_hoy
-                st.rerun()
-
-            if st.session_state.ver_lote_hoy:
-                grupos_lote = []
-                for df_canal_lote in (df_fab, df_carro_resumen):
-                    if df_canal_lote.empty:
-                        continue
-                    for fid in df_canal_lote["factura_id"].unique():
-                        if not fid:
-                            continue
-                        grupo = df_canal_lote[df_canal_lote["factura_id"] == fid]
-                        grupos_lote.append(grupo.to_dict("records"))
-                grupos_lote.sort(key=lambda g: (g[0]["fecha"], _parse_hora(g[0].get("hora", ""))))
-
-                if grupos_lote:
-                    st.caption(f"{len(grupos_lote)} factura(s) de hoy listas para imprimir, en orden.")
-                    html_lote = '<div class="recibo-lote">' + "".join(render_recibo(g) for g in grupos_lote) + '</div>'
-                    st.markdown(html_lote, unsafe_allow_html=True)
-
-                    # Igual que el botón de imprimir de una sola factura, pero cada
-                    # ticket queda con page-break-after para que el navegador los
-                    # mande como páginas/recibos separados en una sola impresión.
-                    _html_btn_imprimir_lote = """
-                    <div style="text-align:center;margin-top:12px;">
-                        <button onclick="window.parent.print()" style="
-                            background:#1565C0;color:white;border:none;
-                            border-radius:12px;padding:14px 32px;
-                            font-size:1rem;font-weight:700;cursor:pointer;
-                            box-shadow:0 4px 12px rgba(21,101,192,0.3);
-                        ">ICONO_PRINTER Imprimir todas</button>
-                    </div>
-                    <script>
-                    (function() {
-                        var doc = window.parent.document;
-                        var old = doc.getElementById("fabrica-print-style-lote");
-                        if (old) old.remove();
-                        var style = doc.createElement("style");
-                        style.id = "fabrica-print-style-lote";
-                        style.innerHTML = `
-                            @media print {
-                                body * { visibility: hidden !important; }
-                                .recibo-lote, .recibo-lote * { visibility: visible !important; }
-                                .recibo-lote {
-                                    position: absolute !important;
-                                    left: 0 !important; top: 0 !important;
-                                    width: 100% !important;
-                                }
-                                .recibo-lote .recibo-wrap {
-                                    position: static !important;
-                                    padding: 0 !important;
-                                    page-break-after: always !important;
-                                }
-                                .recibo-lote .recibo-ticket {
-                                    width: 58mm !important;
-                                    margin: 0 auto !important;
-                                    box-shadow: none !important;
-                                    font-size: 11px !important;
-                                }
-                            }
-                        `;
-                        doc.head.appendChild(style);
-                    })();
-                    </script>
-                    """.replace("ICONO_PRINTER", ICO_PRINTER)
-                    components.html(_html_btn_imprimir_lote, height=80)
-                else:
-                    st.caption("No hay facturas de hoy para imprimir.")
+            bloque_lote_impresion(df_carro_resumen, "carro_hoy", "carro")
 
     with sub_r2:
         st.markdown('<div class="section-label">Consultar por fechas</div>', unsafe_allow_html=True)
