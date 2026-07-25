@@ -4103,6 +4103,82 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
             if not df_carro_resumen.empty:
                 mostrar_facturas_seleccionables(df_carro_resumen, "hoy_carro")
 
+            st.markdown('<div class="section-label">Imprimir todo</div>', unsafe_allow_html=True)
+            if "ver_lote_hoy" not in st.session_state:
+                st.session_state.ver_lote_hoy = False
+            if st.button(
+                "🙈 Ocultar facturas para imprimir" if st.session_state.ver_lote_hoy else "🖨️ Imprimir todas las facturas de hoy",
+                key="btn_lote_hoy"
+            ):
+                st.session_state.ver_lote_hoy = not st.session_state.ver_lote_hoy
+                st.rerun()
+
+            if st.session_state.ver_lote_hoy:
+                grupos_lote = []
+                for df_canal_lote in (df_fab, df_carro_resumen):
+                    if df_canal_lote.empty:
+                        continue
+                    for fid in df_canal_lote["factura_id"].unique():
+                        if not fid:
+                            continue
+                        grupo = df_canal_lote[df_canal_lote["factura_id"] == fid]
+                        grupos_lote.append(grupo.to_dict("records"))
+                grupos_lote.sort(key=lambda g: (g[0]["fecha"], _parse_hora(g[0].get("hora", ""))))
+
+                if grupos_lote:
+                    st.caption(f"{len(grupos_lote)} factura(s) de hoy listas para imprimir, en orden.")
+                    html_lote = '<div class="recibo-lote">' + "".join(render_recibo(g) for g in grupos_lote) + '</div>'
+                    st.markdown(html_lote, unsafe_allow_html=True)
+
+                    # Igual que el botón de imprimir de una sola factura, pero cada
+                    # ticket queda con page-break-after para que el navegador los
+                    # mande como páginas/recibos separados en una sola impresión.
+                    _html_btn_imprimir_lote = """
+                    <div style="text-align:center;margin-top:12px;">
+                        <button onclick="window.parent.print()" style="
+                            background:#1565C0;color:white;border:none;
+                            border-radius:12px;padding:14px 32px;
+                            font-size:1rem;font-weight:700;cursor:pointer;
+                            box-shadow:0 4px 12px rgba(21,101,192,0.3);
+                        ">ICONO_PRINTER Imprimir todas</button>
+                    </div>
+                    <script>
+                    (function() {
+                        var doc = window.parent.document;
+                        var old = doc.getElementById("fabrica-print-style-lote");
+                        if (old) old.remove();
+                        var style = doc.createElement("style");
+                        style.id = "fabrica-print-style-lote";
+                        style.innerHTML = `
+                            @media print {
+                                body * { visibility: hidden !important; }
+                                .recibo-lote, .recibo-lote * { visibility: visible !important; }
+                                .recibo-lote {
+                                    position: absolute !important;
+                                    left: 0 !important; top: 0 !important;
+                                    width: 100% !important;
+                                }
+                                .recibo-lote .recibo-wrap {
+                                    position: static !important;
+                                    padding: 0 !important;
+                                    page-break-after: always !important;
+                                }
+                                .recibo-lote .recibo-ticket {
+                                    width: 58mm !important;
+                                    margin: 0 auto !important;
+                                    box-shadow: none !important;
+                                    font-size: 11px !important;
+                                }
+                            }
+                        `;
+                        doc.head.appendChild(style);
+                    })();
+                    </script>
+                    """.replace("ICONO_PRINTER", ICO_PRINTER)
+                    components.html(_html_btn_imprimir_lote, height=80)
+                else:
+                    st.caption("No hay facturas de hoy para imprimir.")
+
     with sub_r2:
         st.markdown('<div class="section-label">Consultar por fechas</div>', unsafe_allow_html=True)
         col_a, col_b = st.columns(2)
