@@ -1428,7 +1428,7 @@ label,.stSelectbox label,.stNumberInput label,.stDateInput label,.stTextInput la
   min-height:90px !important;
   padding:18px 20px !important;
   font-size:1rem !important;
-  font-weight:800 !important;
+  font-weight:700 !important;
   white-space:pre-line !important;
   line-height:1.5 !important;
   text-align:left !important;
@@ -1618,7 +1618,7 @@ for _vista, _archivo in _imagenes_menu.items():
   min-height:110px !important;
   padding:18px 20px 18px 60px !important;
   font-size:1rem !important;
-  font-weight:800 !important;
+  font-weight:700 !important;
   white-space:pre-line !important;
   line-height:1.5 !important;
   text-align:left !important;
@@ -1715,7 +1715,7 @@ for _key_cat, _archivo_cat in _imagenes_cat_mp.items():
   min-height:110px !important;
   padding:18px 20px !important;
   font-size:1rem !important;
-  font-weight:800 !important;
+  font-weight:700 !important;
   white-space:pre-line !important;
   line-height:1.5 !important;
   text-align:left !important;
@@ -2016,12 +2016,39 @@ if st.session_state.vista == "menu":
         opciones.append(("nomina", "Nómina", "Pagos quincenales y bonos"))
         opciones.append(("contador", "Contador", "Costos, inventario y utilidad"))
 
-    for vista, titulo, sub in opciones:
-        with st.container():
-            texto_btn = f"{titulo}\n{sub}" if sub else titulo
-            if st.button(texto_btn, key=f"btn_{vista}", use_container_width=True):
-                st.session_state.vista = vista
-                st.rerun()
+    # Carrusel horizontal (probado a pedido del usuario 2026-07-25) — antes era una
+    # lista vertical de botones apilados. Se fuerza la fila de columnas a no apilarse
+    # en pantallas angostas (comportamiento por defecto de Streamlit) y en su lugar
+    # se desplaza horizontalmente con scroll/swipe, usando :has() para que el CSS
+    # solo afecte esta fila (ya se usa :has() en otras partes de la app, es seguro
+    # para los navegadores/tablets que usa el negocio). Si da problemas en la tablet,
+    # revertir a: un st.container() + st.button(use_container_width=True) por opción.
+    st.markdown("""
+    <style>
+    [data-testid="stHorizontalBlock"]:has(.st-key-btn_produccion){
+        flex-wrap:nowrap !important;
+        overflow-x:auto !important;
+        -webkit-overflow-scrolling:touch !important;
+        scroll-snap-type:x proximity !important;
+        gap:12px !important;
+        padding-bottom:10px !important;
+    }
+    [data-testid="stHorizontalBlock"]:has(.st-key-btn_produccion) [data-testid="stColumn"]{
+        flex:0 0 auto !important;
+        width:190px !important;
+        min-width:190px !important;
+        scroll-snap-align:start !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    st.caption("← Desliza para ver más opciones →")
+
+    cols_menu = st.columns(len(opciones))
+    for col_m, (vista, titulo, sub) in zip(cols_menu, opciones):
+        texto_btn = f"{titulo}\n{sub}" if sub else titulo
+        if col_m.button(texto_btn, key=f"btn_{vista}", use_container_width=True):
+            st.session_state.vista = vista
+            st.rerun()
 
 # ══════════════════════════════════════════════════════════════════════════════
 # VISTA: PRODUCCIÓN
