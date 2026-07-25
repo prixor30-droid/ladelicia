@@ -520,7 +520,7 @@ def mostrar_creditos_pendientes(canal):
     with st.expander("➕ Cargar crédito antiguo"):
         st.caption("Para deudas que ya existían antes de usar la app. Solo el monto — no afecta el inventario.")
         col_f1, col_f2 = st.columns(2)
-        fecha_cred = col_f1.date_input("Fecha de la venta", value=datetime.now(COL_TZ).date(), key=f"cred_fecha_{canal}")
+        fecha_cred = col_f1.date_input("Fecha de la venta", value=datetime.now(COL_TZ).date(), key=f"cred_fecha_{canal}", format="DD/MM/YYYY")
         vendedor_cred = col_f2.radio("Vendedor", EMPLEADOS, horizontal=True, key=f"cred_vendedor_{canal}")
         cliente_cred = st.text_input("Nombre del cliente", key=f"cred_cliente_{canal}", placeholder="Ej: Tienda Don Carlos")
         col_t, col_a = st.columns(2)
@@ -622,8 +622,8 @@ def mostrar_historial_pagos_credito(canal):
     (no la fecha de la venta original) — visible para Fábrica y Carro, no solo admin."""
     st.markdown('<div class="section-label">🕒 Historial de créditos pagados</div>', unsafe_allow_html=True)
     col_hp1, col_hp2 = st.columns(2)
-    f_ini_hp = col_hp1.date_input("Desde", value=datetime.now(COL_TZ).date().replace(day=1), key=f"hp_ini_{canal}")
-    f_fin_hp = col_hp2.date_input("Hasta", value=datetime.now(COL_TZ).date(), key=f"hp_fin_{canal}")
+    f_ini_hp = col_hp1.date_input("Desde", value=datetime.now(COL_TZ).date().replace(day=1), key=f"hp_ini_{canal}", format="DD/MM/YYYY")
+    f_fin_hp = col_hp2.date_input("Hasta", value=datetime.now(COL_TZ).date(), key=f"hp_fin_{canal}", format="DD/MM/YYYY")
 
     raw_hp = sb_get("pagos_credito", f"select=*&canal=eq.{requests.utils.quote(canal)}&fecha=gte.{f_ini_hp}&fecha=lte.{f_fin_hp}&order=fecha.desc,hora.desc")
     if not raw_hp:
@@ -1362,7 +1362,8 @@ html,body,[class*="css"],.stApp{font-family:'Inter',sans-serif !important;backgr
 [data-baseweb="calendar"] tbody tr:last-child td{background-color:#FFFFFF !important;}
 label,.stSelectbox label,.stNumberInput label,.stDateInput label,.stTextInput label{color:#1565C0 !important;font-weight:600 !important;font-size:0.85rem !important;}
 .stTabs [data-baseweb="tab-list"]{background:#FFFFFF;border-radius:12px;padding:4px;gap:2px;box-shadow:0 1px 4px rgba(21,101,192,0.10);margin-bottom:16px;}
-.stTabs [data-baseweb="tab"]{border-radius:10px;font-size:0.78rem;font-weight:600;padding:8px 4px;color:#7A2050 !important;flex:1;justify-content:center;background:transparent !important;}
+.stTabs [data-baseweb="tab"]{border-radius:10px;font-size:0.78rem;font-weight:800 !important;padding:8px 4px;color:#7A2050 !important;flex:1;justify-content:center;background:transparent !important;}
+.stTabs [data-baseweb="tab"] p{font-weight:800 !important;}
 .stTabs [aria-selected="true"]{background-color:#1565C0 !important;color:white !important;}
 .brand-header{background:linear-gradient(135deg,#1565C0,#1E88E5);border-radius:0 0 22px 22px;padding:12px 20px 12px;margin:-1rem -1rem 16px -1rem;text-align:center;}
 .brand-header p{color:rgba(255,255,255,0.85);font-size:0.78rem;margin:0;}
@@ -1413,7 +1414,8 @@ label,.stSelectbox label,.stNumberInput label,.stDateInput label,.stTextInput la
 .warn-box{background:#FFFFFF;border-left:3px solid #E68900;border-radius:10px;padding:12px 14px;margin:8px 0 14px;font-size:0.82rem;color:#8D6E00;box-shadow:0 1px 6px rgba(0,0,0,0.05);}
 .success-toast{background:#E8F5E9;border:1px solid #A5D6A7;border-radius:12px;padding:14px 16px;text-align:center;font-weight:600;color:#1B5E20;font-size:0.95rem;margin-top:10px;}
 .section-label{font-size:0.69rem;font-weight:700;text-transform:uppercase;letter-spacing:0.7px;color:#B0185F;margin:16px 0 6px;}
-.stButton>button{width:100%;background:#1565C0 !important;color:white !important;-webkit-text-fill-color:white !important;border:none !important;border-radius:12px !important;padding:14px !important;font-size:1rem !important;font-weight:700 !important;cursor:pointer;margin-top:4px;box-shadow:0 4px 16px rgba(21,101,192,0.25);white-space:pre-line !important;line-height:1.4 !important;transition:transform 0.3s ease,box-shadow 0.3s ease,opacity 0.3s ease !important;-webkit-tap-highlight-color:transparent;touch-action:manipulation;}
+.stButton>button{width:100%;background:#1565C0 !important;color:white !important;-webkit-text-fill-color:white !important;border:none !important;border-radius:12px !important;padding:14px !important;font-size:1rem !important;font-weight:800 !important;cursor:pointer;margin-top:4px;box-shadow:0 4px 16px rgba(21,101,192,0.25);white-space:pre-line !important;line-height:1.4 !important;transition:transform 0.3s ease,box-shadow 0.3s ease,opacity 0.3s ease !important;-webkit-tap-highlight-color:transparent;touch-action:manipulation;}
+.stButton>button p{font-weight:800 !important;}
 .stButton>button:hover{opacity:0.88;box-shadow:0 6px 20px rgba(21,101,192,0.35);transform:translateY(-1px);}
 .stButton>button:active{transform:scale(0.97) translateY(0);box-shadow:0 2px 8px rgba(21,101,192,0.25);opacity:1;animation:btnPress 0.45s ease-out;}
 .st-key-btn_resumen button,.st-key-btn_contador button,.st-key-btn_nomina button{
@@ -1426,7 +1428,7 @@ label,.stSelectbox label,.stNumberInput label,.stDateInput label,.stTextInput la
   min-height:90px !important;
   padding:18px 20px !important;
   font-size:1rem !important;
-  font-weight:700 !important;
+  font-weight:800 !important;
   white-space:pre-line !important;
   line-height:1.5 !important;
   text-align:left !important;
@@ -1616,7 +1618,7 @@ for _vista, _archivo in _imagenes_menu.items():
   min-height:110px !important;
   padding:18px 20px 18px 60px !important;
   font-size:1rem !important;
-  font-weight:700 !important;
+  font-weight:800 !important;
   white-space:pre-line !important;
   line-height:1.5 !important;
   text-align:left !important;
@@ -1713,7 +1715,7 @@ for _key_cat, _archivo_cat in _imagenes_cat_mp.items():
   min-height:110px !important;
   padding:18px 20px !important;
   font-size:1rem !important;
-  font-weight:700 !important;
+  font-weight:800 !important;
   white-space:pre-line !important;
   line-height:1.5 !important;
   text-align:left !important;
@@ -2062,7 +2064,7 @@ elif st.session_state.vista == "produccion":
     fecha_consulta = st.date_input(
         "Día a consultar",
         value=datetime.now(COL_TZ).date(),
-        key="fecha_consulta_prod"
+        key="fecha_consulta_prod", format="DD/MM/YYYY"
     )
     fecha_consulta_str = str(fecha_consulta)
     es_hoy = fecha_consulta_str == fecha_hoy()
@@ -2265,7 +2267,7 @@ elif st.session_state.vista == "carro":
         fecha_consulta_cg = st.date_input(
             "Día a consultar",
             value=datetime.now(COL_TZ).date(),
-            key="fecha_consulta_cg"
+            key="fecha_consulta_cg", format="DD/MM/YYYY"
         )
         fecha_consulta_cg_str = str(fecha_consulta_cg)
         es_hoy_cg = fecha_consulta_cg_str == fecha_hoy()
@@ -2381,7 +2383,7 @@ elif st.session_state.vista == "carro":
         max_dev = max(1, max_cargado - ya_devuelto)
 
         cant_dev  = st.number_input("Bolsas devueltas", min_value=1, max_value=max_dev, value=1, step=1, key="cant_dev")
-        fecha_dev = st.date_input("Fecha de devolución", value=datetime.now(COL_TZ).date(), key="fecha_dev")
+        fecha_dev = st.date_input("Fecha de devolución", value=datetime.now(COL_TZ).date(), key="fecha_dev", format="DD/MM/YYYY")
         st.markdown(f'<div class="info-box">{ICO_PACKAGE} Máximo a devolver de <b>{sabor_dev}</b> hoy: <b>{max_dev}</b> bolsas</div>', unsafe_allow_html=True)
 
         if st.button("🔄 Registrar devolución", key="btn_dev"):
@@ -2925,7 +2927,7 @@ elif st.session_state.vista == "materia_prima":
             stock_actual_ins = max(0, sum(float(r["cantidad"]) for r in raw_ent_actual) - sum(float(r["cantidad"]) for r in raw_sal_actual))
             st.markdown(f'<div class="info-box">{ICO_PACKAGE} Stock disponible de <b>{nombre_sel}</b>: <b>{stock_actual_ins:.3f} {unidad_sel}</b></div>', unsafe_allow_html=True)
 
-            fecha_mp = st.date_input("Fecha de la entrada", value=datetime.now(COL_TZ).date(), max_value=datetime.now(COL_TZ).date(), key="fecha_mp")
+            fecha_mp = st.date_input("Fecha de la entrada", value=datetime.now(COL_TZ).date(), max_value=datetime.now(COL_TZ).date(), key="fecha_mp", format="DD/MM/YYYY")
             if fecha_mp != datetime.now(COL_TZ).date():
                 st.markdown(f'<div class="warn-box">{ICO_CALENDAR} Se registrará con fecha {fecha_mp}, no con la de hoy.</div>', unsafe_allow_html=True)
             cant_mp        = st.number_input(f"Cantidad ({unidad_sel})", min_value=0.001, max_value=999999.0, value=1.0, step=0.001, format="%.3f", key="cant_mp")
@@ -3107,7 +3109,7 @@ elif st.session_state.vista == "materia_prima":
             else:
                 st.markdown(f'<div class="info-box">{ICO_PACKAGE} Stock disponible de <b>{insumo_rollo}</b> en bodega: <b>{stock_disp_emp:.3f} kg</b></div>', unsafe_allow_html=True)
 
-            fecha_sal_rollo = st.date_input("Fecha de la salida", value=datetime.now(COL_TZ).date(), max_value=datetime.now(COL_TZ).date(), key=f"fecha_sal_rollo_{insumo_rollo}")
+            fecha_sal_rollo = st.date_input("Fecha de la salida", value=datetime.now(COL_TZ).date(), max_value=datetime.now(COL_TZ).date(), key=f"fecha_sal_rollo_{insumo_rollo}", format="DD/MM/YYYY")
             if str(fecha_sal_rollo) != fecha_hoy():
                 st.markdown(f'<div class="warn-box">{ICO_CALENDAR} Se registrará con fecha {fecha_sal_rollo}, no con la de hoy.</div>', unsafe_allow_html=True)
 
@@ -3241,7 +3243,7 @@ elif st.session_state.vista == "materia_prima":
             else:
                 st.markdown(f'<div class="info-box">{ICO_PACKAGE} Stock disponible de <b>{insumo_sal}</b>: <b>{stock_disp_sal:.3f} {unidad_sal}</b></div>', unsafe_allow_html=True)
 
-            fecha_sal = st.date_input("Fecha de la salida", value=datetime.now(COL_TZ).date(), max_value=datetime.now(COL_TZ).date(), key="fecha_sal")
+            fecha_sal = st.date_input("Fecha de la salida", value=datetime.now(COL_TZ).date(), max_value=datetime.now(COL_TZ).date(), key="fecha_sal", format="DD/MM/YYYY")
             if str(fecha_sal) != fecha_hoy():
                 st.markdown(f'<div class="warn-box">{ICO_CALENDAR} Se registrará con fecha {fecha_sal}, no con la de hoy.</div>', unsafe_allow_html=True)
             cant_sal = st.number_input(f"Cantidad ({unidad_sal})", min_value=0.001,
@@ -3397,8 +3399,8 @@ elif st.session_state.vista == "materia_prima":
 
         st.markdown('<div class="section-label">🕒 Historial de créditos pagados</div>', unsafe_allow_html=True)
         col_hcp1, col_hcp2 = st.columns(2)
-        f_ini_hcp = col_hcp1.date_input("Desde", value=datetime.now(COL_TZ).date().replace(day=1), key="f_ini_hist_cred_mp")
-        f_fin_hcp = col_hcp2.date_input("Hasta", value=datetime.now(COL_TZ).date(), key="f_fin_hist_cred_mp")
+        f_ini_hcp = col_hcp1.date_input("Desde", value=datetime.now(COL_TZ).date().replace(day=1), key="f_ini_hist_cred_mp", format="DD/MM/YYYY")
+        f_fin_hcp = col_hcp2.date_input("Hasta", value=datetime.now(COL_TZ).date(), key="f_fin_hist_cred_mp", format="DD/MM/YYYY")
 
         raw_pagados_mp = sb_get("materia_prima", f"select=*&estado=eq.pagado&abono=gt.0&fecha=gte.{f_ini_hcp}&fecha=lte.{f_fin_hcp}&order=fecha.desc") or []
         if not raw_pagados_mp:
@@ -3429,8 +3431,8 @@ elif st.session_state.vista == "materia_prima":
     with tab_mp4:
         st.markdown('<div class="section-label">Resumen del período</div>', unsafe_allow_html=True)
         col_f1, col_f2 = st.columns(2)
-        f_ini_mp = col_f1.date_input("Desde", value=datetime.now(COL_TZ).date().replace(day=1), key="f_ini_mp")
-        f_fin_mp = col_f2.date_input("Hasta", value=datetime.now(COL_TZ).date(), key="f_fin_mp")
+        f_ini_mp = col_f1.date_input("Desde", value=datetime.now(COL_TZ).date().replace(day=1), key="f_ini_mp", format="DD/MM/YYYY")
+        f_fin_mp = col_f2.date_input("Hasta", value=datetime.now(COL_TZ).date(), key="f_fin_mp", format="DD/MM/YYYY")
 
         raw_ent = sb_get("materia_prima", f"select=*&fecha=gte.{f_ini_mp}&fecha=lte.{f_fin_mp}&order=fecha.desc") or []
         raw_sal = sb_get("salidas_mp",    f"select=*&fecha=gte.{f_ini_mp}&fecha=lte.{f_fin_mp}&order=fecha.desc") or []
@@ -3537,8 +3539,8 @@ elif st.session_state.vista == "caja" and st.session_state.es_admin:
     with tab_caja1:
         st.markdown('<div class="section-label">Resumen de caja</div>', unsafe_allow_html=True)
         col_c1, col_c2 = st.columns(2)
-        f_ini_caja = col_c1.date_input("Desde", value=primer_dia_caja, key="f_ini_caja")
-        f_fin_caja = col_c2.date_input("Hasta", value=hoy_caja, key="f_fin_caja")
+        f_ini_caja = col_c1.date_input("Desde", value=primer_dia_caja, key="f_ini_caja", format="DD/MM/YYYY")
+        f_fin_caja = col_c2.date_input("Hasta", value=hoy_caja, key="f_fin_caja", format="DD/MM/YYYY")
 
         # INGRESOS — ventas pagadas (total - saldo = abonado) y cobros de créditos
         with ThreadPoolExecutor(max_workers=3) as ex:
@@ -3689,8 +3691,8 @@ elif st.session_state.vista == "caja" and st.session_state.es_admin:
     with tab_caja3:
         st.markdown('<div class="section-label">Historial de movimientos</div>', unsafe_allow_html=True)
         col_h1, col_h2 = st.columns(2)
-        f_ini_h = col_h1.date_input("Desde", value=primer_dia_caja, key="f_ini_h")
-        f_fin_h = col_h2.date_input("Hasta", value=hoy_caja, key="f_fin_h")
+        f_ini_h = col_h1.date_input("Desde", value=primer_dia_caja, key="f_ini_h", format="DD/MM/YYYY")
+        f_fin_h = col_h2.date_input("Hasta", value=hoy_caja, key="f_fin_h", format="DD/MM/YYYY")
 
         movimientos = []
 
@@ -3774,7 +3776,7 @@ elif st.session_state.vista == "caja" and st.session_state.es_admin:
         st.markdown('<div class="section-label">Arqueo de caja</div>', unsafe_allow_html=True)
         st.caption("Compara el efectivo que el sistema esperaba tener contra lo que contaste físicamente, para detectar si falta o sobra plata.")
 
-        fecha_arq = st.date_input("Fecha del arqueo", value=hoy_caja, max_value=hoy_caja, key="fecha_arqueo")
+        fecha_arq = st.date_input("Fecha del arqueo", value=hoy_caja, max_value=hoy_caja, key="fecha_arqueo", format="DD/MM/YYYY")
         fecha_arq_str = str(fecha_arq)
 
         with ThreadPoolExecutor(max_workers=3) as ex:
@@ -3849,8 +3851,8 @@ elif st.session_state.vista == "caja" and st.session_state.es_admin:
         st.markdown('<div class="section-label">📊 Resumen de diferencias (sobra/falta)</div>', unsafe_allow_html=True)
         st.caption("Suma cuánto sobró y cuánto faltó en total durante el rango que elijas — por ejemplo, todo el mes o todo el año.")
         col_ra1, col_ra2 = st.columns(2)
-        f_ini_ra = col_ra1.date_input("Desde", value=hoy_caja.replace(day=1), key="arq_resumen_ini")
-        f_fin_ra = col_ra2.date_input("Hasta", value=hoy_caja, key="arq_resumen_fin")
+        f_ini_ra = col_ra1.date_input("Desde", value=hoy_caja.replace(day=1), key="arq_resumen_ini", format="DD/MM/YYYY")
+        f_fin_ra = col_ra2.date_input("Hasta", value=hoy_caja, key="arq_resumen_fin", format="DD/MM/YYYY")
 
         raw_arq_rango = sb_get("arqueos_caja", f"select=diferencia&fecha=gte.{f_ini_ra}&fecha=lte.{f_fin_ra}") or []
         total_sobra_ra = sum(float(r["diferencia"]) for r in raw_arq_rango if float(r["diferencia"]) > 0)
@@ -4083,8 +4085,8 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
     with sub_r2:
         st.markdown('<div class="section-label">Consultar por fechas</div>', unsafe_allow_html=True)
         col_a, col_b = st.columns(2)
-        f_ini = col_a.date_input("Desde", value=date(datetime.now(COL_TZ).year, datetime.now(COL_TZ).month, 1), key="f_ini")
-        f_fin = col_b.date_input("Hasta", value=datetime.now(COL_TZ).date(), key="f_fin")
+        f_ini = col_a.date_input("Desde", value=date(datetime.now(COL_TZ).year, datetime.now(COL_TZ).month, 1), key="f_ini", format="DD/MM/YYYY")
+        f_fin = col_b.date_input("Hasta", value=datetime.now(COL_TZ).date(), key="f_fin", format="DD/MM/YYYY")
         cobros_rango = calcular_cobros_periodo(f_ini, f_fin)
         raw_rango = cobros_rango["raw_ventas"]
         cobro_creditos_rango_por_canal = cobros_rango["cobro_creditos_por_canal"]
@@ -4179,7 +4181,7 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
     with sub_r3:
         st.markdown('<div class="section-label">Reporte del mes</div>', unsafe_allow_html=True)
         hoy_dt = datetime.now(COL_TZ)
-        mes_sel = st.date_input("Mes a consultar", value=hoy_dt.date().replace(day=1), key="mes_reporte_sel")
+        mes_sel = st.date_input("Mes a consultar", value=hoy_dt.date().replace(day=1), key="mes_reporte_sel", format="DD/MM/YYYY")
         primer_dia = date(mes_sel.year, mes_sel.month, 1)
         if mes_sel.month == 12:
             primer_dia_sig = date(mes_sel.year + 1, 1, 1)
@@ -4300,8 +4302,8 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
         st.markdown('<div class="section-label">Créditos pagados</div>', unsafe_allow_html=True)
         st.caption("Cobros de créditos, con la fecha real en que se pagaron (no la fecha de la venta original).")
         col_p1, col_p2 = st.columns(2)
-        f_ini_pg = col_p1.date_input("Desde", value=date(datetime.now(COL_TZ).year, datetime.now(COL_TZ).month, 1), key="f_ini_pg")
-        f_fin_pg = col_p2.date_input("Hasta", value=datetime.now(COL_TZ).date(), key="f_fin_pg")
+        f_ini_pg = col_p1.date_input("Desde", value=date(datetime.now(COL_TZ).year, datetime.now(COL_TZ).month, 1), key="f_ini_pg", format="DD/MM/YYYY")
+        f_fin_pg = col_p2.date_input("Hasta", value=datetime.now(COL_TZ).date(), key="f_fin_pg", format="DD/MM/YYYY")
 
         raw_pagos = sb_get("pagos_credito", f"select=*&fecha=gte.{f_ini_pg}&fecha=lte.{f_fin_pg}&order=fecha.desc,hora.desc")
 
@@ -4339,8 +4341,8 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
     with sub_r4:
         st.markdown('<div class="section-label">Exportar datos</div>', unsafe_allow_html=True)
         col_e1, col_e2 = st.columns(2)
-        f_exp_ini = col_e1.date_input("Desde", value=date(datetime.now(COL_TZ).year, datetime.now(COL_TZ).month, 1), key="f_exp_ini")
-        f_exp_fin = col_e2.date_input("Hasta", value=datetime.now(COL_TZ).date(), key="f_exp_fin")
+        f_exp_ini = col_e1.date_input("Desde", value=date(datetime.now(COL_TZ).year, datetime.now(COL_TZ).month, 1), key="f_exp_ini", format="DD/MM/YYYY")
+        f_exp_fin = col_e2.date_input("Hasta", value=datetime.now(COL_TZ).date(), key="f_exp_fin", format="DD/MM/YYYY")
 
         def generar_pdf(titulo, df, nombre_archivo):
             from reportlab.lib.pagesizes import A4, landscape
@@ -4605,7 +4607,7 @@ elif st.session_state.vista == "nomina" and st.session_state.es_admin:
         st.markdown('<div class="section-label">Agregar empleado</div>', unsafe_allow_html=True)
         nombre_ne = st.text_input("Nombre", key="nombre_ne")
         salario_ne = st.number_input("Salario mensual ($)", min_value=0, value=0, step=50000, key="salario_ne")
-        fecha_ne = st.date_input("Fecha de ingreso", value=datetime.now(COL_TZ).date(), key="fecha_ne")
+        fecha_ne = st.date_input("Fecha de ingreso", value=datetime.now(COL_TZ).date(), key="fecha_ne", format="DD/MM/YYYY")
         tipo_ne = st.radio("Tipo de pago", ["Fijo (según días trabajados)", "Variable (monto manual cada quincena)"], key="tipo_ne")
         es_variable_ne = tipo_ne.startswith("Variable")
         if st.button("✅ Agregar empleado", key="btn_add_ne"):
@@ -4644,7 +4646,7 @@ elif st.session_state.vista == "nomina" and st.session_state.es_admin:
             dias_prorr_ne = 0
             semestre_prorr_ne = None
             if emp_baja_obj_ne["tipo"] == "fijo" and emp_baja_obj_ne.get("bono_semestral"):
-                fecha_salida_ne = st.date_input("Fecha de salida", value=datetime.now(COL_TZ).date(), key="fecha_salida_ne")
+                fecha_salida_ne = st.date_input("Fecha de salida", value=datetime.now(COL_TZ).date(), key="fecha_salida_ne", format="DD/MM/YYYY")
                 fecha_ingreso_baja_ne = datetime.strptime(emp_baja_obj_ne["fecha_ingreso"], "%Y-%m-%d").date()
                 raw_bonos_baja_ne = sb_get("nomina_pagos", f"select=semestre_num&empleado_id=eq.{emp_baja_obj_ne['id']}&bono_semestral=gt.0") or []
                 semestres_pagados_ne = max([r.get("semestre_num") or 0 for r in raw_bonos_baja_ne], default=0)
@@ -4691,7 +4693,7 @@ elif st.session_state.vista == "nomina" and st.session_state.es_admin:
             emp_aus_sel = st.radio("Empleado", nombres_aus, key="emp_aus_sel")
             fecha_aus = st.date_input(
                 "Fecha que no trabajó", value=datetime.now(COL_TZ).date(),
-                max_value=datetime.now(COL_TZ).date(), key="fecha_aus"
+                max_value=datetime.now(COL_TZ).date(), key="fecha_aus", format="DD/MM/YYYY"
             )
             motivo_aus = st.text_input("Motivo", placeholder="Ej: Incapacidad médica, permiso personal...", key="motivo_aus")
             if st.button("✅ Registrar ausencia", key="btn_aus"):
@@ -4731,7 +4733,7 @@ elif st.session_state.vista == "nomina" and st.session_state.es_admin:
     # ── Calcular quincena ──
     with sub_n3:
         st.markdown('<div class="section-label">Calcular quincena</div>', unsafe_allow_html=True)
-        fecha_ref_n = st.date_input("Calcular hasta esta fecha", value=datetime.now(COL_TZ).date(), key="fecha_ref_n")
+        fecha_ref_n = st.date_input("Calcular hasta esta fecha", value=datetime.now(COL_TZ).date(), key="fecha_ref_n", format="DD/MM/YYYY")
         if fecha_ref_n.day <= 15:
             periodo_ini_n = date(fecha_ref_n.year, fecha_ref_n.month, 1)
             periodo_fin_n = date(fecha_ref_n.year, fecha_ref_n.month, 15)
@@ -4786,7 +4788,7 @@ elif st.session_state.vista == "nomina" and st.session_state.es_admin:
                 with st.expander(f"💵 Registrar adelanto — {emp['nombre']}"):
                     valor_adel = st.number_input("Valor del adelanto ($)", min_value=0, value=0, step=10000, key=f"valor_adel_{eid}")
                     motivo_adel = st.text_input("Motivo (opcional)", key=f"motivo_adel_{eid}")
-                    fecha_adel = st.date_input("Fecha del adelanto", value=datetime.now(COL_TZ).date(), key=f"fecha_adel_{eid}")
+                    fecha_adel = st.date_input("Fecha del adelanto", value=datetime.now(COL_TZ).date(), key=f"fecha_adel_{eid}", format="DD/MM/YYYY")
                     if st.button(f"✅ Registrar adelanto — {emp['nombre']}", key=f"btn_adel_{eid}"):
                         if valor_adel <= 0:
                             st.markdown(f'<div class="alert-low">{ICO_WARN} Ingresa el valor del adelanto.</div>', unsafe_allow_html=True)
@@ -4911,7 +4913,7 @@ elif st.session_state.vista == "nomina" and st.session_state.es_admin:
                     "Bono semestral ($)", min_value=0, value=int(pago_edit.get("bono_semestral") or 0), step=10000, key="bono_edit"
                 )
                 fecha_pago_edit = st.date_input(
-                    "Fecha de pago", value=datetime.strptime(pago_edit["fecha_pago"], "%Y-%m-%d").date(), key="fecha_pago_edit"
+                    "Fecha de pago", value=datetime.strptime(pago_edit["fecha_pago"], "%Y-%m-%d").date(), key="fecha_pago_edit", format="DD/MM/YYYY"
                 )
                 total_edit = monto_base_edit + bono_edit
                 st.markdown(f'<div class="info-box">{ICO_DOLLAR} Nuevo total: <b>{fmt(total_edit)}</b></div>', unsafe_allow_html=True)
@@ -4979,7 +4981,7 @@ elif st.session_state.vista == "nomina" and st.session_state.es_admin:
             emp_liq_obj = raw_emp_liq[etiquetas_liq.index(etiqueta_sel_liq)]
             st.markdown(f'<div class="info-box">{ICO_CALENDAR} Fecha de ingreso: <b>{emp_liq_obj["fecha_ingreso"]}</b></div>', unsafe_allow_html=True)
             monto_liq = st.number_input("Monto de la liquidación ($)", min_value=0, value=0, step=50000, key="monto_liq")
-            fecha_liq = st.date_input("Fecha de pago", value=datetime.now(COL_TZ).date(), key="fecha_liq")
+            fecha_liq = st.date_input("Fecha de pago", value=datetime.now(COL_TZ).date(), key="fecha_liq", format="DD/MM/YYYY")
             nota_liq = st.text_input("Nota (opcional)", key="nota_liq", placeholder="Ej: incluye cesantías y vacaciones")
             opcion_baja_liq = st.radio(
                 "¿Marcar también a este empleado como inactivo?",
@@ -5212,6 +5214,165 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
                     time.sleep(0.3)
                     st.rerun()
 
+        # --- Egresos clasificados por tipo (costo de producción vs gasto operativo) ---
+        # Junta 2 fuentes de salida de plata que hoy viven separadas: caja_egresos (ya
+        # trae categoria+tipo desde "Registrar egreso") y materia_prima.abono (compras de
+        # insumos/saborizantes/empaque, que NO tienen tipo propio pero son casi siempre
+        # costo de producción — se clasifican así aquí, sin tocar la tabla materia_prima).
+        st.markdown('<div class="section-label">🏭 Egresos clasificados por tipo</div>', unsafe_allow_html=True)
+        mes_egr_sel = st.date_input(
+            "Mes a consultar", value=datetime.now(COL_TZ).date().replace(day=1), key="mes_egr_cont", format="DD/MM/YYYY"
+        )
+        primer_dia_egr = date(mes_egr_sel.year, mes_egr_sel.month, 1)
+        if mes_egr_sel.month == 12:
+            ultimo_dia_egr = date(mes_egr_sel.year, 12, 31)
+        else:
+            ultimo_dia_egr = date(mes_egr_sel.year, mes_egr_sel.month + 1, 1) - timedelta(days=1)
+
+        raw_egresos_clas = sb_get(
+            "caja_egresos", f"select=categoria,tipo,valor&fecha=gte.{primer_dia_egr}&fecha=lte.{ultimo_dia_egr}"
+        ) or []
+        raw_mp_clas = sb_get(
+            "materia_prima", f"select=insumo,abono&fecha=gte.{primer_dia_egr}&fecha=lte.{ultimo_dia_egr}&abono=gt.0"
+        ) or []
+
+        mp_insumos_total = mp_sab_total = mp_emp_total = 0.0
+        for r in raw_mp_clas:
+            ab = float(r.get("abono", 0) or 0)
+            ins = r.get("insumo")
+            if ins in INSUMOS_NOMBRES:
+                mp_insumos_total += ab
+            elif ins in SABORIZANTES_NOMBRES:
+                mp_sab_total += ab
+            elif ins in EMPAQUES_NOMBRES:
+                mp_emp_total += ab
+
+        costo_rows = {
+            "Materia prima e insumos": mp_insumos_total,
+            "Saborizantes": mp_sab_total,
+            "Empaque": mp_emp_total,
+        }
+        gasto_rows = {}
+        for r in raw_egresos_clas:
+            cat_r = r.get("categoria") or "Otro"
+            val_r = float(r.get("valor", 0) or 0)
+            destino = costo_rows if r.get("tipo") == "costo" else gasto_rows
+            destino[cat_r] = destino.get(cat_r, 0.0) + val_r
+
+        filas_clas = []
+        for cat_r, val_r in costo_rows.items():
+            if val_r > 0:
+                filas_clas.append({"Categoría": cat_r, "Clasificación": "🏭 Costo de producción", "Valor": fmt(round(val_r))})
+        subtotal_costo_clas = sum(costo_rows.values())
+        filas_clas.append({"Categoría": "Subtotal costo de producción", "Clasificación": "", "Valor": fmt(round(subtotal_costo_clas))})
+
+        for cat_r, val_r in gasto_rows.items():
+            if val_r > 0:
+                filas_clas.append({"Categoría": cat_r, "Clasificación": "🏢 Gasto operativo", "Valor": fmt(round(val_r))})
+        subtotal_gasto_clas = sum(gasto_rows.values())
+        filas_clas.append({"Categoría": "Subtotal gasto operativo", "Clasificación": "", "Valor": fmt(round(subtotal_gasto_clas))})
+
+        filas_clas.append({"Categoría": "Total", "Clasificación": "", "Valor": fmt(round(subtotal_costo_clas + subtotal_gasto_clas))})
+
+        df_egr_clas = pd.DataFrame(filas_clas)
+        st.markdown(tabla_reporte_html(df_egr_clas), unsafe_allow_html=True)
+        csv_egr_clas = df_egr_clas.to_csv(index=False, sep=";").encode("utf-8-sig")
+        st.download_button(
+            "📥 Descargar CSV", data=csv_egr_clas,
+            file_name=f"egresos_clasificados_{primer_dia_egr.strftime('%Y_%m')}.csv",
+            mime="text/csv", key="btn_desc_egr_clas"
+        )
+
+        # --- PDF de todo lo de esta pestaña junto (Inventario invertido, Cuentas
+        # vigentes, Deudas con terceros, Egresos clasificados) ---
+        def _tabla_flowable_resumen(df, landscape_pagesize):
+            from reportlab.platypus import Table, TableStyle
+            from reportlab.lib import colors
+            from reportlab.lib.units import cm
+            cols = list(df.columns)
+            filas_str = df.astype(str).replace("nan", "").values.tolist()
+            data = [cols] + filas_str
+            col_width = (landscape_pagesize[0] - 2*cm) / len(cols)
+            tabla_pdf = Table(data, colWidths=[col_width]*len(cols), repeatRows=1)
+            estilo_cmds = [
+                ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#1565C0")),
+                ("TEXTCOLOR",  (0,0), (-1,0), colors.white),
+                ("FONTNAME",   (0,0), (-1,0), "Helvetica-Bold"),
+                ("FONTSIZE",   (0,0), (-1,-1), 8),
+                ("ROWBACKGROUNDS", (0,1), (-1,-1), [colors.white, colors.HexColor("#EEF4FF")]),
+                ("GRID",       (0,0), (-1,-1), 0.3, colors.HexColor("#BBDEFB")),
+                ("VALIGN",     (0,0), (-1,-1), "MIDDLE"),
+                ("TOPPADDING",    (0,0), (-1,-1), 3),
+                ("BOTTOMPADDING", (0,0), (-1,-1), 3),
+                ("LEFTPADDING",   (0,0), (-1,-1), 3),
+                ("RIGHTPADDING",  (0,0), (-1,-1), 3),
+            ]
+            for i, fila_r in enumerate(filas_str, start=1):
+                if fila_r[0] and all(v == "" for v in fila_r[1:]):
+                    estilo_cmds.append(("SPAN", (0, i), (1, i)))
+                    estilo_cmds.append(("FONTNAME", (0, i), (0, i), "Helvetica-Bold"))
+            tabla_pdf.setStyle(TableStyle(estilo_cmds))
+            return tabla_pdf
+
+        def _elementos_resumen_financiero(styles, landscape_pagesize):
+            """Arma el contenido del resumen financiero como lista de flowables — se
+            reutiliza tanto en el PDF individual como dentro de 'Descargar todo junto'."""
+            from reportlab.platypus import Paragraph, Spacer
+            from reportlab.lib.units import cm
+            elems = [
+                Paragraph("Resumen Financiero — Fábrica de Papas Productos La Delicia", styles["Title"]),
+                Paragraph(f"Generado: {fecha_hoy()}", styles["Normal"]),
+                Spacer(1, 0.4*cm),
+                Paragraph(
+                    f"<b>Inventario total invertido ahora mismo</b> (materia prima + saborizantes + "
+                    f"empaque): <b>{fmt(round(total_invertido_c))}</b>",
+                    styles["Normal"]
+                ),
+                Spacer(1, 0.2*cm),
+                Paragraph(
+                    f"<b>Cuentas por cobrar (clientes):</b> {fmt(cuentas_por_cobrar_c)} &nbsp;&nbsp;·&nbsp;&nbsp; "
+                    f"<b>Cuentas por pagar (proveedores):</b> {fmt(cuentas_por_pagar_c)}",
+                    styles["Normal"]
+                ),
+                Spacer(1, 0.4*cm),
+                Paragraph("Deudas con terceros", styles["Heading2"]),
+            ]
+            if raw_deudas:
+                elems.append(_tabla_flowable_resumen(df_deudas, landscape_pagesize))
+            else:
+                elems.append(Paragraph("Todavía no hay deudas con terceros registradas.", styles["Normal"]))
+            elems.append(Spacer(1, 0.4*cm))
+            elems.append(Paragraph(
+                f"Egresos clasificados por tipo — {primer_dia_egr.strftime('%B %Y').capitalize()}",
+                styles["Heading2"]
+            ))
+            elems.append(_tabla_flowable_resumen(df_egr_clas, landscape_pagesize))
+            return elems
+
+        def _pdf_resumen_financiero():
+            from reportlab.lib.pagesizes import A4, landscape
+            from reportlab.platypus import SimpleDocTemplate
+            from reportlab.lib.styles import getSampleStyleSheet
+            from reportlab.lib.units import cm
+            import io
+
+            buf = io.BytesIO()
+            pagesize = landscape(A4)
+            doc = SimpleDocTemplate(buf, pagesize=pagesize,
+                                    leftMargin=1*cm, rightMargin=1*cm,
+                                    topMargin=1.5*cm, bottomMargin=1*cm)
+            styles = getSampleStyleSheet()
+            doc.build(_elementos_resumen_financiero(styles, pagesize))
+            buf.seek(0)
+            return buf.read()
+
+        st.markdown('<div class="section-label">📥 Descargar esta pestaña</div>', unsafe_allow_html=True)
+        pdf_resumen_financiero = _pdf_resumen_financiero()
+        st.download_button(
+            "📄 Descargar Resumen financiero en PDF", data=pdf_resumen_financiero,
+            file_name=f"resumen_financiero_{fecha_hoy()}.pdf",
+            mime="application/pdf", key="btn_desc_resumen_financiero"
+        )
 
     with tab_reportes:
         # --- Control conjunto de los 4 reportes de inventario mensual (Producto Terminado,
@@ -5234,7 +5395,7 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
             unsafe_allow_html=True
         )
         mes_inv_sel = st.date_input(
-            "Mes a consultar", value=datetime.now(COL_TZ).date().replace(day=1), key="mes_inv_cont"
+            "Mes a consultar", value=datetime.now(COL_TZ).date().replace(day=1), key="mes_inv_cont", format="DD/MM/YYYY"
         )
         primer_dia_inv = date(mes_inv_sel.year, mes_inv_sel.month, 1)
         if mes_inv_sel.month == 12:
@@ -5485,7 +5646,7 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
             unsafe_allow_html=True
         )
         mes_sab_sel = st.date_input(
-            "Mes a consultar", value=datetime.now(COL_TZ).date().replace(day=1), key="mes_sab_cont"
+            "Mes a consultar", value=datetime.now(COL_TZ).date().replace(day=1), key="mes_sab_cont", format="DD/MM/YYYY"
         )
         primer_dia_sab = date(mes_sab_sel.year, mes_sab_sel.month, 1)
         if mes_sab_sel.month == 12:
@@ -5685,7 +5846,7 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
             unsafe_allow_html=True
         )
         mes_mp_sel = st.date_input(
-            "Mes a consultar", value=datetime.now(COL_TZ).date().replace(day=1), key="mes_mp_cont"
+            "Mes a consultar", value=datetime.now(COL_TZ).date().replace(day=1), key="mes_mp_cont", format="DD/MM/YYYY"
         )
         primer_dia_mp = date(mes_mp_sel.year, mes_mp_sel.month, 1)
         if mes_mp_sel.month == 12:
@@ -5884,7 +6045,7 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
             unsafe_allow_html=True
         )
         mes_emp_sel = st.date_input(
-            "Mes a consultar", value=datetime.now(COL_TZ).date().replace(day=1), key="mes_emp_cont"
+            "Mes a consultar", value=datetime.now(COL_TZ).date().replace(day=1), key="mes_emp_cont", format="DD/MM/YYYY"
         )
         primer_dia_emp = date(mes_emp_sel.year, mes_emp_sel.month, 1)
         if mes_emp_sel.month == 12:
@@ -6130,10 +6291,9 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
                 ("Inventario a Corte — Fábrica de Papas Productos La Delicia — Empaque",
                  primer_dia_emp.strftime("%B %Y").capitalize(), df_emp_mes),
             ]
-            elements = []
+            elements = _elementos_resumen_financiero(styles, landscape(A4))
             for i, (titulo, mes_txt, df_rep) in enumerate(reportes):
-                if i > 0:
-                    elements.append(PageBreak())
+                elements.append(PageBreak())
                 elements.append(Paragraph(titulo, styles["Title"]))
                 elements.append(Paragraph(f"Mes: {mes_txt}  |  Generado: {fecha_hoy()}", styles["Normal"]))
                 elements.append(Spacer(1, 0.4*cm))
