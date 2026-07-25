@@ -1332,7 +1332,6 @@ html,body,[class*="css"],.stApp{font-family:'Inter',sans-serif !important;backgr
 @media (min-width: 768px){
   .block-container{max-width:900px;}
   html,body{font-size:21px;}
-  .brand-header p{font-size:0.95rem;}
   .metric-box .val{font-size:1.6rem;}
   .metric-box .lbl{font-size:0.8rem;}
   .section-label{font-size:0.85rem;}
@@ -1364,9 +1363,8 @@ label,.stSelectbox label,.stNumberInput label,.stDateInput label,.stTextInput la
 .stTabs [data-baseweb="tab-list"]{background:#FFFFFF;border-radius:12px;padding:4px;gap:2px;box-shadow:0 1px 4px rgba(21,101,192,0.10);margin-bottom:16px;}
 .stTabs [data-baseweb="tab"]{border-radius:10px;font-size:0.92rem;font-weight:600;padding:8px 4px;color:#7A2050 !important;flex:1;justify-content:center;background:transparent !important;}
 .stTabs [aria-selected="true"]{background-color:#1565C0 !important;color:white !important;}
-.brand-header{background:linear-gradient(135deg,#1565C0,#1E88E5);border-radius:0 0 22px 22px;padding:12px 20px 12px;margin:-1rem -1rem 16px -1rem;text-align:center;}
-.brand-header p{color:rgba(255,255,255,0.85);font-size:0.78rem;margin:0;}
-.brand-logo img{height:620px !important;margin-bottom:0 !important;animation:logoBounce 2.2s ease-in-out infinite;transform-origin:bottom center;}
+.brand-header{position:fixed;top:8px;right:10px;margin:0;z-index:9999;pointer-events:none;}
+.brand-logo img{height:56px !important;margin-bottom:0 !important;filter:drop-shadow(0 2px 6px rgba(0,0,0,0.25));}
 .metric-row{display:flex;gap:9px;margin-bottom:16px;}
 .metric-box{flex:1;background:#FFFFFF;border-radius:14px;padding:14px 8px;text-align:center;box-shadow:0 2px 8px rgba(21,101,192,0.12);}
 .metric-box .val{font-size:1.2rem;font-weight:700;line-height:1.1;}
@@ -1375,7 +1373,6 @@ label,.stSelectbox label,.stNumberInput label,.stDateInput label,.stTextInput la
 @keyframes fadeInUp{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:translateY(0);}}
 @keyframes btnPress{0%{transform:scale(1);}40%{transform:scale(0.93);}100%{transform:scale(0.97);}}
 @keyframes cardPress{0%{transform:scale(1) translateY(0);}30%{transform:scale(0.93) translateY(2px);}65%{transform:scale(1.01) translateY(-1px);}100%{transform:scale(0.98) translateY(0);}}
-@keyframes logoBounce{0%,100%{transform:translateY(0) scale(1,1);}10%{transform:translateY(0) scale(1.08,0.92);}35%{transform:translateY(-36px) scale(0.96,1.06);}55%{transform:translateY(0) scale(1.1,0.9);}65%{transform:translateY(-12px) scale(1,1);}80%{transform:translateY(0) scale(1.04,0.96);}90%{transform:translateY(0) scale(1,1);}}
 @keyframes ctaPulse{0%,100%{box-shadow:0 4px 16px rgba(21,101,192,0.3);transform:scale(1);}50%{box-shadow:0 4px 26px rgba(21,101,192,0.65);transform:scale(1.02);}}
 .st-key-venta_btn_confirmar button:not(:disabled),
 .st-key-btn_prod button:not(:disabled),
@@ -1686,14 +1683,6 @@ if _fondo_b64:
 }}
 """
 
-_fondo_logo_b64 = get_img_b64("Fondo_del_logo.jpg")
-if _fondo_logo_b64:
-    _css_botones_menu += f"""
-.brand-header{{
-  background:linear-gradient(135deg,rgba(21,101,192,0.55),rgba(30,136,229,0.55)),url("data:image/jpeg;base64,{_fondo_logo_b64}") center/cover no-repeat !important;
-}}
-"""
-
 _imagenes_cat_mp = {
     "btn_cat_mp":  "MateriaprimaInsumos.jpg",
     "btn_cat_sab": "saborizantes.jpg",
@@ -1887,7 +1876,6 @@ if "admin_actual" not in st.session_state:
 st.markdown(f"""
 <div class="brand-header">
     <div class="brand-logo">{logo_html}</div>
-    <p>Control de producción y ventas</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -5002,17 +4990,9 @@ elif st.session_state.vista == "nomina" and st.session_state.es_admin:
 elif st.session_state.vista == "contador" and st.session_state.es_admin:
     # Tema verde pastel — solo para esta vista. El <style> se inyecta únicamente
     # cuando se está renderizando Contador, así que no afecta a ninguna otra sección.
-    if _fondo_logo_b64:
-        _brand_header_contador = (
-            'background:linear-gradient(135deg,rgba(46,125,50,0.55),rgba(102,187,106,0.55)),'
-            'url("data:image/jpeg;base64,' + _fondo_logo_b64 + '") center/cover no-repeat !important;'
-        )
-    else:
-        _brand_header_contador = 'background:linear-gradient(135deg,#2E7D32,#66BB6A) !important;'
     st.markdown("""
     <style>
     .stApp{background-color:#EAF7EE !important;}
-    .brand-header{""" + _brand_header_contador + """}
     .section-label{color:#1B7A43 !important;}
     label,.stSelectbox label,.stNumberInput label,.stDateInput label,.stTextInput label{color:#1B7A43 !important;}
     .stButton>button{background:#43A047 !important;box-shadow:0 4px 16px rgba(67,160,71,0.25) !important;}
