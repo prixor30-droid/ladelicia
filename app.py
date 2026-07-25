@@ -2029,19 +2029,20 @@ if st.session_state.vista == "menu":
         flex-wrap:nowrap !important;
         overflow-x:auto !important;
         -webkit-overflow-scrolling:touch !important;
-        scroll-snap-type:x proximity !important;
-        gap:12px !important;
+        scroll-snap-type:x mandatory !important;
+        gap:0 !important;
         padding-bottom:10px !important;
     }
     [data-testid="stHorizontalBlock"]:has(.st-key-btn_produccion) [data-testid="stColumn"]{
-        flex:0 0 auto !important;
-        width:190px !important;
-        min-width:190px !important;
-        scroll-snap-align:start !important;
+        flex:0 0 100% !important;
+        width:100% !important;
+        min-width:100% !important;
+        scroll-snap-align:center !important;
+        scroll-snap-stop:always !important;
     }
     </style>
     """, unsafe_allow_html=True)
-    st.caption("← Desliza para ver más opciones →")
+    st.caption("← Desliza para ver la siguiente opción →")
 
     cols_menu = st.columns(len(opciones))
     for col_m, (vista, titulo, sub) in zip(cols_menu, opciones):
