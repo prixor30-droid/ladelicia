@@ -599,23 +599,38 @@ def mostrar_creditos_pendientes(canal):
             "Abono ($)", min_value=0, max_value=int(saldo),
             value=int(saldo), step=1000, key=f"abono_pend_{key}"
         )
-        if col_b.button("✅ Cobrar", key=f"btn_cobrar_{key}") and nuevo_abono > 0:
-            if datos["tipo"] == "venta":
-                filtro_cobro = f"factura_id=eq.{datos['ref']}&canal=eq.{requests.utils.quote(canal)}"
-                ok_cobro = _ajustar_saldo_ventas_cas(filtro_cobro, delta_saldo=-nuevo_abono, delta_abono=nuevo_abono)
-                id_factura, id_credito = datos["ref"], None
-            else:
-                ok_cobro = _registrar_pago_credito_cas(datos["ref"], nuevo_abono)
-                id_factura, id_credito = None, datos["ref"]
-            if ok_cobro:
-                sb_post("pagos_credito", {
-                    "fecha": fecha_hoy(), "hora": ahora(), "tipo": datos["tipo"],
-                    "factura_id": id_factura, "credito_id": id_credito,
-                    "cliente": datos["cliente"], "canal": canal, "vendedor": datos["vendedor"],
-                    "monto": float(nuevo_abono),
-                })
-            time.sleep(0.3)
-            st.rerun()
+        confirmando_cobro = st.session_state.get("confirmar_cobro") == key
+        if not confirmando_cobro:
+            if col_b.button("✅ Cobrar", key=f"btn_cobrar_{key}") and nuevo_abono > 0:
+                st.session_state["confirmar_cobro"] = key
+                st.rerun()
+        else:
+            contenedor_creditos.markdown(
+                f'<div class="alert-low">¿Confirmas cobrar <b>{fmt(nuevo_abono)}</b> a <b>{datos["cliente"]}</b>?</div>',
+                unsafe_allow_html=True
+            )
+            col_si_cr, col_no_cr = contenedor_creditos.columns(2)
+            if col_si_cr.button("✅ Sí, cobrar", key=f"btn_cobrar_si_{key}"):
+                if datos["tipo"] == "venta":
+                    filtro_cobro = f"factura_id=eq.{datos['ref']}&canal=eq.{requests.utils.quote(canal)}"
+                    ok_cobro = _ajustar_saldo_ventas_cas(filtro_cobro, delta_saldo=-nuevo_abono, delta_abono=nuevo_abono)
+                    id_factura, id_credito = datos["ref"], None
+                else:
+                    ok_cobro = _registrar_pago_credito_cas(datos["ref"], nuevo_abono)
+                    id_factura, id_credito = None, datos["ref"]
+                if ok_cobro:
+                    sb_post("pagos_credito", {
+                        "fecha": fecha_hoy(), "hora": ahora(), "tipo": datos["tipo"],
+                        "factura_id": id_factura, "credito_id": id_credito,
+                        "cliente": datos["cliente"], "canal": canal, "vendedor": datos["vendedor"],
+                        "monto": float(nuevo_abono),
+                    })
+                st.session_state["confirmar_cobro"] = None
+                time.sleep(0.3)
+                st.rerun()
+            if col_no_cr.button("✗ Cancelar", key=f"btn_cobrar_no_{key}"):
+                st.session_state["confirmar_cobro"] = None
+                st.rerun()
 
 def mostrar_historial_pagos_credito(canal):
     """Historial de créditos ya cobrados en este canal, con la fecha real del pago
@@ -1117,6 +1132,8 @@ def bloque_lote_impresion(df_canal, key_prefix, etiqueta):
                 .CLASE .recibo-wrap {
                     position: static !important;
                     padding: 0 !important;
+                }
+                .CLASE .recibo-wrap:not(:last-child) {
                     page-break-after: always !important;
                 }
                 .CLASE .recibo-ticket {
