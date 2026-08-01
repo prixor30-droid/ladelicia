@@ -344,15 +344,28 @@ def _parse_hora(hora_str):
     except (ValueError, TypeError):
         return dtime.min
 
-def mostrar_facturas_seleccionables(df_canal, key_prefix):
-    """Tabla con facturas; al seleccionar una fila se abre el recibo en una vista nueva."""
+def mostrar_facturas_seleccionables(df_canal, key_prefix, cobrado_ese_dia=None):
+    """Tabla con facturas; al seleccionar una fila se abre el recibo en una vista nueva.
+
+    cobrado_ese_dia: opcional, {factura_id: abono cobrado EN LA FECHA de la venta}
+    (viene de calcular_cobros_periodo, ya sin lo cobrado después vía "Cobrar" créditos).
+    Sin esto, el Estado se basa en el saldo ACTUAL de la factura — que si el crédito se
+    cobró después (ej. hoy, de una venta de ayer), muestra "✓ Aprobado" aunque ese día
+    haya sido crédito, dando la falsa impresión de que se recibió el dinero ese día.
+    """
     filas = []
     for fid in df_canal["factura_id"].unique():
         if not fid:
             continue
         grupo = df_canal[df_canal["factura_id"]==fid]
         saldo_fac = float(grupo["saldo"].max()) if "saldo" in grupo.columns and not grupo.empty else 0
-        estado = "📋 Crédito" if saldo_fac > 0 else "✓ Aprobado"
+        total_fac = float(grupo[grupo["total"] > 0]["total"].sum()) if "total" in grupo.columns else 0
+        if saldo_fac > 0:
+            estado = "📋 Crédito (pendiente)"
+        elif cobrado_ese_dia is not None and cobrado_ese_dia.get(fid, total_fac) < total_fac - 0.01:
+            estado = "📋 Crédito (cobrado después)"
+        else:
+            estado = "✓ Aprobado"
         filas.append({
             "Fecha": grupo["fecha"].iloc[0],
             "N° Comprobante": f"FV-{fid}",
@@ -4197,16 +4210,17 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
 
             st.markdown('<div class="section-label">Facturas fábrica</div>', unsafe_allow_html=True)
             st.caption("Toca una fila para ver el recibo completo.")
+            cobrado_ese_dia_hoy = {fid: v["abono"] for fid, v in facturas_hoy.items()}
             df_fab = df_vt[df_vt["canal"]=="Fábrica"]
             if not df_fab.empty:
-                mostrar_facturas_seleccionables(df_fab, "hoy")
+                mostrar_facturas_seleccionables(df_fab, "hoy", cobrado_ese_dia_hoy)
             bloque_lote_impresion(df_fab, "fab_hoy", "fábrica")
 
             st.markdown('<div class="section-label">Facturas carro</div>', unsafe_allow_html=True)
             st.caption("Toca una fila para ver el recibo completo.")
             df_carro_resumen = df_vt[df_vt["canal"]=="Carro"]
             if not df_carro_resumen.empty:
-                mostrar_facturas_seleccionables(df_carro_resumen, "hoy_carro")
+                mostrar_facturas_seleccionables(df_carro_resumen, "hoy_carro", cobrado_ese_dia_hoy)
             bloque_lote_impresion(df_carro_resumen, "carro_hoy", "carro")
 
     with sub_r2:
@@ -4293,17 +4307,18 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
                 tabla_view(por_canal_base)
 
                 # Facturas individuales del rango, en formato tabla
+                cobrado_ese_dia_rango = {fid: v["abono"] for fid, v in facturas_rango.items()}
                 df_fab_r = df_r[df_r["canal"]=="Fábrica"]
                 if not df_fab_r.empty:
                     st.markdown('<div class="section-label">Facturas fábrica del rango</div>', unsafe_allow_html=True)
                     st.caption("Toca una fila para ver el recibo completo.")
-                    mostrar_facturas_seleccionables(df_fab_r, "rango")
+                    mostrar_facturas_seleccionables(df_fab_r, "rango", cobrado_ese_dia_rango)
 
                 df_carro_r = df_r[df_r["canal"]=="Carro"]
                 if not df_carro_r.empty:
                     st.markdown('<div class="section-label">Facturas carro del rango</div>', unsafe_allow_html=True)
                     st.caption("Toca una fila para ver el recibo completo.")
-                    mostrar_facturas_seleccionables(df_carro_r, "rango_carro")
+                    mostrar_facturas_seleccionables(df_carro_r, "rango_carro", cobrado_ese_dia_rango)
 
     with sub_r3:
         st.markdown('<div class="section-label">Reporte del mes</div>', unsafe_allow_html=True)
