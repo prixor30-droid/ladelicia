@@ -5296,7 +5296,7 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
                     unsafe_allow_html=True
                 )
             st.markdown(
-                f"Por cobrar: **{fmt(cuentas_por_cobrar_c)}** &nbsp;&nbsp;·&nbsp;&nbsp; "
+                f"Por cobrar: **{fmt(cuentas_por_cobrar_c)}**   ·   "
                 f"Por pagar: **{fmt(cuentas_por_pagar_c)}**"
             )
             if st.button(
