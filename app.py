@@ -5233,6 +5233,60 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
         </div>
         """, unsafe_allow_html=True)
 
+        # --- Cierre mensual de cuentas por cobrar/pagar (para no depender de captura
+        # manual): mismo patrón que los 4 reportes de inventario mensual — el cierre
+        # de un mes queda guardado como el "inicial" del mes siguiente.
+        hoy_dt_cta = datetime.now(COL_TZ)
+        primer_dia_mes_cta = date(hoy_dt_cta.year, hoy_dt_cta.month, 1)
+        if hoy_dt_cta.month == 12:
+            primer_dia_mes_sig_cta = date(hoy_dt_cta.year + 1, 1, 1)
+        else:
+            primer_dia_mes_sig_cta = date(hoy_dt_cta.year, hoy_dt_cta.month + 1, 1)
+
+        raw_cierre_cta_actual = sb_get(
+            "cierres_cuentas",
+            f"select=cuentas_por_cobrar,cuentas_por_pagar,fecha_registro&mes=eq.{primer_dia_mes_cta}&limit=1"
+        )
+        if raw_cierre_cta_actual:
+            c0_cta = raw_cierre_cta_actual[0]
+            st.caption(
+                f"📌 Créditos iniciales de {primer_dia_mes_cta.strftime('%B %Y').capitalize()} "
+                f"(cerrado el {c0_cta['fecha_registro']}): "
+                f"Por cobrar {fmt(c0_cta['cuentas_por_cobrar'])} · Por pagar {fmt(c0_cta['cuentas_por_pagar'])}"
+            )
+
+        with st.expander("🔒 Cerrar cuentas del mes"):
+            st.caption(
+                "Guarda las cuentas por cobrar/pagar ACTUALES (en vivo, de arriba) como el valor "
+                "\"inicial\" del mes siguiente. Hazlo cuando ya termines de registrar todo el mes "
+                "actual — así el próximo mes arranca con un número fijo, sin que tengas que tomarle "
+                "captura de pantalla."
+            )
+            ya_existe_cierre_cta = sb_get("cierres_cuentas", f"select=id&mes=eq.{primer_dia_mes_sig_cta}&limit=1")
+            if ya_existe_cierre_cta:
+                st.markdown(
+                    f'<div class="warn-box">{ICO_WARN} Ya existe un cierre guardado para '
+                    f'{primer_dia_mes_sig_cta.strftime("%B %Y")}. Si confirmas, se sobrescribe.</div>',
+                    unsafe_allow_html=True
+                )
+            st.markdown(
+                f"Por cobrar: **{fmt(cuentas_por_cobrar_c)}** &nbsp;&nbsp;·&nbsp;&nbsp; "
+                f"Por pagar: **{fmt(cuentas_por_pagar_c)}**"
+            )
+            if st.button(
+                f"✅ Confirmar cierre → será el inicial de {primer_dia_mes_sig_cta.strftime('%B %Y')}",
+                key="btn_cerrar_cuentas_mes"
+            ):
+                sb_delete("cierres_cuentas", f"mes=eq.{primer_dia_mes_sig_cta}")
+                sb_post("cierres_cuentas", {
+                    "mes": str(primer_dia_mes_sig_cta), "cuentas_por_cobrar": cuentas_por_cobrar_c,
+                    "cuentas_por_pagar": cuentas_por_pagar_c, "fecha_registro": fecha_hoy(),
+                    "hora": ahora(), "usuario": st.session_state.admin_actual,
+                })
+                st.markdown(f'<div class="success-toast">{ICO_CHECK} Cierre guardado.</div>', unsafe_allow_html=True)
+                time.sleep(0.3)
+                st.rerun()
+
         # --- Deudas con terceros (préstamos personales con garantía, no proveedores) ---
         st.markdown('<div class="section-label">🏦 Deudas con terceros</div>', unsafe_allow_html=True)
         raw_deudas = sb_get("deudas_terceros", "select=*&order=id.asc") or []
