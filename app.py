@@ -597,6 +597,7 @@ def mostrar_creditos_pendientes(canal):
             f'</div>',
             unsafe_allow_html=True
         )
+        col_del = None
         if datos["tipo"] == "venta":
             col_v, col_m, col_b = contenedor_creditos.columns([1, 2, 1])
             if col_v.button("🧾", key=f"ver_fact_{key}", help="Ver factura completa"):
@@ -606,6 +607,8 @@ def mostrar_creditos_pendientes(canal):
                 st.session_state.vista_anterior = st.session_state.vista
                 st.session_state.vista = "recibo"
                 st.rerun()
+        elif st.session_state.es_admin:
+            col_m, col_b, col_del = contenedor_creditos.columns([3, 1, 1])
         else:
             col_m, col_b = contenedor_creditos.columns([3, 1])
         nuevo_abono = col_m.number_input(
@@ -644,6 +647,29 @@ def mostrar_creditos_pendientes(canal):
             if col_no_cr.button("✗ Cancelar", key=f"btn_cobrar_no_{key}"):
                 st.session_state["confirmar_cobro"] = None
                 st.rerun()
+
+        if col_del is not None and not confirmando_cobro:
+            confirmando_borrado = st.session_state.get("confirmar_borrar_credito") == key
+            if not confirmando_borrado:
+                if col_del.button("🗑️", key=f"btn_borrar_cred_{key}", help="Eliminar este crédito (fue mal ingresado)"):
+                    st.session_state["confirmar_borrar_credito"] = key
+                    st.rerun()
+            else:
+                contenedor_creditos.markdown(
+                    f'<div class="alert-low">{ICO_WARN} ¿Borrar por completo el crédito de <b>{datos["cliente"]}</b> '
+                    f'por <b>{fmt(datos["total"])}</b>? Esto no se puede deshacer.</div>',
+                    unsafe_allow_html=True
+                )
+                col_si_del, col_no_del = contenedor_creditos.columns(2)
+                if col_si_del.button("🗑️ Sí, borrar", key=f"btn_borrar_cred_si_{key}"):
+                    sb_delete("creditos", f"id=eq.{datos['ref']}")
+                    st.session_state["confirmar_borrar_credito"] = None
+                    st.markdown(f'<div class="success-toast">{ICO_CHECK} Crédito borrado.</div>', unsafe_allow_html=True)
+                    time.sleep(0.3)
+                    st.rerun()
+                if col_no_del.button("✗ Cancelar", key=f"btn_borrar_cred_no_{key}"):
+                    st.session_state["confirmar_borrar_credito"] = None
+                    st.rerun()
 
 def mostrar_historial_pagos_credito(canal):
     """Historial de créditos ya cobrados en este canal, con la fecha real del pago
