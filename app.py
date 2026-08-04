@@ -2446,71 +2446,16 @@ elif st.session_state.vista == "carro":
         raw_cg_full = sb_get("cargues", f"select=id,fecha,hora,sabor,cantidad&fecha=eq.{fecha_consulta_cg_str}&order=hora.desc")
         if raw_cg_full:
             st.markdown(f'<div class="section-label">{titulo_cg}</div>', unsafe_allow_html=True)
-            st.caption("Toca cualquier celda para corregir un error. Luego presiona Guardar cambios.")
+            st.caption("Si un cargue quedó mal, bórralo y vuelve a registrarlo bien desde 🚗 Cargue.")
             df_cg_full = pd.DataFrame(raw_cg_full)
-            df_cg_edit = df_cg_full[["fecha","hora","sabor","cantidad"]].copy()
-            df_cg_edit.columns = ["Fecha","Hora","Sabor","Bolsas"]
-
-            edited_cg = st.data_editor(
-                df_cg_edit,
-                use_container_width=True,
-                hide_index=True,
-                column_config={
-                    "Fecha":  st.column_config.TextColumn("Fecha"),
-                    "Hora":   st.column_config.TextColumn("Hora"),
-                    "Sabor":  st.column_config.SelectboxColumn("Sabor", options=SABORES_LISTA),
-                    "Bolsas": st.column_config.NumberColumn("Bolsas", min_value=0, step=1),
-                },
-                key="cargue_editor"
-            )
+            df_cg_view = df_cg_full[["fecha","hora","sabor","cantidad"]].copy()
+            df_cg_view.columns = ["Fecha","Hora","Sabor","Bolsas"]
+            tabla_view(df_cg_view)
 
             quien_edita_cg = st.selectbox("¿Quién hace este cambio?", EMPLEADOS, key="quien_edita_cg")
-            col_gcg, col_ecg = st.columns(2)
-            if col_gcg.button("💾 Guardar cambios", key="btn_save_cg"):
-                for i, row in edited_cg.iterrows():
-                    orig = df_cg_full.iloc[i]
-                    cambios = {}
-
-                    fecha_orig = str(orig["fecha"])
-                    hora_orig  = str(orig["hora"])
-                    sabor_orig = str(orig["sabor"])
-                    cant_orig  = int(orig["cantidad"])
-
-                    fecha_new  = str(row["Fecha"])
-                    hora_new   = str(row["Hora"])
-                    sabor_new  = str(row["Sabor"])
-                    cant_new   = int(row["Bolsas"])
-
-                    if fecha_new != fecha_orig:
-                        cambios["fecha"] = fecha_new
-                    if hora_new != hora_orig:
-                        cambios["hora"] = hora_new
-                    if sabor_new != sabor_orig:
-                        agregar_stock(sabor_orig, cant_orig)
-                        restar_stock(sabor_new, cant_new)
-                        cambios["sabor"] = sabor_new
-                        cambios["cantidad"] = cant_new
-                    elif cant_new != cant_orig:
-                        diff = cant_new - cant_orig
-                        if diff > 0:
-                            restar_stock(sabor_orig, diff)
-                        else:
-                            agregar_stock(sabor_orig, abs(diff))
-                        cambios["cantidad"] = cant_new
-
-                    if cambios:
-                        sb_patch("cargues", f"id=eq.{orig['id']}", cambios)
-                        detalle_cambios_cg = ", ".join(f"{k}: {orig[k] if k != 'cantidad' else cant_orig} → {v}" for k, v in cambios.items())
-                        _registrar_auditoria_stock(
-                            "cargues", orig["id"], "Editar",
-                            f"{sabor_orig} — {detalle_cambios_cg}", quien_edita_cg
-                        )
-                time.sleep(1)
-                st.rerun()
-
             ids_cg = {f"{r['fecha']} {r['hora']} — {r['sabor']} ({r['cantidad']} bolsas)": r for r in raw_cg_full}
             sel_del_cg = st.selectbox("Eliminar registro", ["— Selecciona —"] + list(ids_cg.keys()), key="sel_del_cg")
-            if sel_del_cg != "— Selecciona —" and col_ecg.button("🗑️ Eliminar", key="btn_del_cg"):
+            if sel_del_cg != "— Selecciona —" and st.button("🗑️ Eliminar", key="btn_del_cg"):
                 reg_del_cg = ids_cg[sel_del_cg]
                 sb_delete("cargues", f"id=eq.{reg_del_cg['id']}")
                 agregar_stock(reg_del_cg["sabor"], reg_del_cg["cantidad"])
