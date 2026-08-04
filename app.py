@@ -2779,7 +2779,17 @@ elif st.session_state.vista == "recibo":
                         margin: 0 auto !important;
                         box-shadow: none !important;
                         font-size: 11px !important;
+                        padding: 8px 6px !important;
+                        line-height: 1.15 !important;
                     }
+                    /* Espacio entre líneas reducido solo al imprimir — en pantalla
+                       el recibo se ve exactamente igual que antes. */
+                    .recibo-ticket .recibo-linea-punteada { margin: 5px 0 !important; }
+                    .recibo-ticket .recibo-dato { margin-bottom: 1px !important; }
+                    .recibo-ticket .recibo-item { margin-bottom: 2px !important; }
+                    .recibo-ticket .recibo-logo { margin-bottom: 2px !important; }
+                    .recibo-ticket .recibo-credito-badge { margin: 4px 0 !important; padding: 3px 0 !important; }
+                    .recibo-ticket .factura-row { padding: 1px 0 !important; }
                 }
             `;
             doc.head.appendChild(style);
