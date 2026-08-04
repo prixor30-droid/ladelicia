@@ -778,11 +778,20 @@ def render_venta_canal(cfg, mostrar_creditos=True):
     if disponible < cant:
         st.markdown(f'<div class="alert-low">{ICO_WARN} Solo hay {disponible} bolsas disponibles de {sabor}.</div>', unsafe_allow_html=True)
 
+    etiqueta_elegida = None
     if sabor in PRECIOS_RAPIDOS:
         opciones_p = [e if e.strip().startswith("$") else f"{e} — {fmt(p)}" for e, p in PRECIOS_RAPIDOS[sabor]]
         precios_p  = [p for _, p in PRECIOS_RAPIDOS[sabor]]
-        sel_p = st.radio("Precio", opciones_p, horizontal=True, key=f"venta_precio_radio_{sabor}")
-        precio_elegido = precios_p[opciones_p.index(sel_p)]
+        etiquetas_p = [e for e, _ in PRECIOS_RAPIDOS[sabor]]
+        # El primer producto no tiene de dónde heredar precio — de ahí en adelante, cada
+        # sabor nuevo arranca con el mismo nivel de precio (Mayorista/Frecuente/etc.) que
+        # el último producto agregado, en vez de siempre volver a "Mayorista".
+        ultimo_tier = st.session_state.get("venta_ultimo_tier_precio")
+        idx_default = etiquetas_p.index(ultimo_tier) if ultimo_tier in etiquetas_p else 0
+        sel_p = st.radio("Precio", opciones_p, horizontal=True, index=idx_default, key=f"venta_precio_radio_{sabor}")
+        idx_sel = opciones_p.index(sel_p)
+        precio_elegido = precios_p[idx_sel]
+        etiqueta_elegida = etiquetas_p[idx_sel]
     else:
         precio_elegido = PRODUCTOS[sabor]
 
@@ -790,6 +799,8 @@ def render_venta_canal(cfg, mostrar_creditos=True):
     if col_add.button("➕ Agregar", key="venta_btn_add", disabled=(disponible < cant)):
         st.session_state[key_carrito][sabor] = en_carrito + cant
         st.session_state[key_precios][sabor] = precio_elegido
+        if etiqueta_elegida:
+            st.session_state["venta_ultimo_tier_precio"] = etiqueta_elegida
         st.rerun()
     if col_clr.button("🗑️ Vaciar", key="venta_btn_clr"):
         st.session_state[key_carrito] = {}
@@ -3649,7 +3660,7 @@ elif st.session_state.vista == "materia_prima":
 
 elif st.session_state.vista == "caja" and st.session_state.es_admin:
     st.markdown(f'<div class="section-label">{ICO_DOLLAR} Caja</div>', unsafe_allow_html=True)
-    tab_caja1, tab_caja2, tab_caja3, tab_caja4, tab_caja5, tab_caja6 = st.tabs(["📊 Resumen", "➕ Ingreso / Egreso", "📋 Historial", "🧮 Arqueo de caja", "🎯 Reservas", "💰 Caja real"])
+    tab_caja1, tab_caja2, tab_caja3, tab_caja4, tab_caja5, tab_caja6, tab_caja7 = st.tabs(["📊 Resumen", "➕ Ingreso / Egreso", "📋 Historial", "🧮 Arqueo de caja", "🎯 Reservas", "💰 Caja real", "💼 Anticipos"])
 
     # Fechas del período
     hoy_caja = datetime.now(COL_TZ).date()
@@ -3738,9 +3749,59 @@ elif st.session_state.vista == "caja" and st.session_state.es_admin:
             )
 
     with tab_caja2:
-        tipo_mov = st.radio("Tipo de movimiento", ["📤 Egreso (gasto)", "📥 Ingreso (dinero existente)"], key="tipo_mov_caja")
+        tipo_mov = st.radio("Tipo de movimiento", ["📤 Egreso (gasto)", "📥 Ingreso (dinero existente)", "💼 Anticipo"], key="tipo_mov_caja")
 
-        if tipo_mov == "📤 Egreso (gasto)":
+        if tipo_mov == "💼 Anticipo":
+            st.markdown('<div class="section-label">Registrar anticipo</div>', unsafe_allow_html=True)
+            st.caption("Para plata que le das a alguien por adelantado (ej. combustible) y todavía no sabes el valor exacto del gasto — baja la caja de una vez, y luego se ajusta en 💼 Anticipos → Legalizar cuando esa persona traiga la factura.")
+            concepto_an = st.text_input("Concepto", placeholder="Ej: Anticipo a Javier para combustible", key="concepto_an")
+            cat_an = st.selectbox("Categoría", ["Servicios", "Arriendo", "Transporte", "Combustible", "Mantenimiento", "Salario", "Otro"], key="cat_an")
+            tipo_an_label = st.radio(
+                "¿Este gasto es de producción o administrativo/ventas?",
+                ["🏭 Costo de producción (planta)", "🏢 Gasto operativo (admin/ventas)"],
+                key="tipo_an"
+            )
+            tipo_an = "costo" if "producción" in tipo_an_label else "gasto"
+            responsable_an = st.text_input("Responsable", placeholder="Ej: Javier", key="responsable_an")
+            valor_an = st.number_input("Valor del anticipo ($)", min_value=0, value=0, step=1000, key="valor_an")
+
+            if st.button("✅ Registrar anticipo", key="btn_an"):
+                if not concepto_an.strip():
+                    st.markdown(f'<div class="alert-low">{ICO_WARN} Escribe el concepto.</div>', unsafe_allow_html=True)
+                elif not responsable_an.strip():
+                    st.markdown(f'<div class="alert-low">{ICO_WARN} Escribe el responsable.</div>', unsafe_allow_html=True)
+                elif valor_an == 0:
+                    st.markdown(f'<div class="alert-low">{ICO_WARN} Ingresa el valor.</div>', unsafe_allow_html=True)
+                else:
+                    caja_egreso_id_an = None
+                    try:
+                        r_eg_an = requests.post(
+                            f"{SUPABASE_URL}/rest/v1/caja_egresos", headers=HEADERS, timeout=10,
+                            json={"fecha": fecha_hoy(), "hora": ahora(), "concepto": concepto_an.strip(),
+                                  "valor": float(valor_an), "categoria": cat_an, "tipo": tipo_an, "empleado": None}
+                        )
+                        if r_eg_an.ok:
+                            data_eg_an = r_eg_an.json()
+                            caja_egreso_id_an = data_eg_an[0]["id"] if data_eg_an else None
+                        else:
+                            st.error(f"Error al registrar el egreso en caja: {r_eg_an.status_code} — {r_eg_an.text}")
+                    except Exception as e:
+                        st.error(f"Error: {e}")
+                        caja_egreso_id_an = "error"
+
+                    if caja_egreso_id_an and caja_egreso_id_an != "error":
+                        ok_an = sb_post("anticipos", {
+                            "fecha": fecha_hoy(), "hora": ahora(), "concepto": concepto_an.strip(),
+                            "categoria": cat_an, "tipo": tipo_an, "valor_anticipo": float(valor_an),
+                            "responsable": responsable_an.strip(), "caja_egreso_id": caja_egreso_id_an,
+                            "estado": "pendiente", "usuario": st.session_state.admin_actual,
+                        })
+                        if ok_an:
+                            st.markdown(f'<div class="success-toast">{ICO_CHECK} Anticipo registrado — caja descontada.</div>', unsafe_allow_html=True)
+                            time.sleep(0.3)
+                            st.rerun()
+
+        elif tipo_mov == "📤 Egreso (gasto)":
             st.markdown('<div class="section-label">Registrar egreso / gasto</div>', unsafe_allow_html=True)
             concepto_eg = st.text_input("Concepto", placeholder="Ej: Pago arriendo, gas, luz...", key="concepto_eg")
             cat_eg = st.selectbox("Categoría", ["Servicios", "Arriendo", "Transporte", "Mantenimiento", "Salario", "Otro"], key="cat_eg")
@@ -4118,6 +4179,91 @@ elif st.session_state.vista == "caja" and st.session_state.es_admin:
             if not recibido_carro_cr:
                 pendientes_msg.append(f"Carro ({fmt(total_carro_cr)})")
             st.caption(f"⏳ Todavía no contado aquí: {', '.join(pendientes_msg)} — pero sí cuenta en \"Efectivo esperado\" de Arqueo de caja, que asume que ya se recibió todo el día.")
+
+    with tab_caja7:
+        st.markdown('<div class="section-label">💼 Anticipos pendientes por legalizar</div>', unsafe_allow_html=True)
+        raw_ant_pend = sb_get("anticipos", "select=*&estado=eq.pendiente&order=fecha.desc") or []
+        if not raw_ant_pend:
+            st.info("No hay anticipos pendientes.")
+        else:
+            total_ant_pend = sum(float(r["valor_anticipo"]) for r in raw_ant_pend)
+            st.markdown(f'<div class="warn-box">{ICO_CARD} Total en anticipos sin legalizar: <b>{fmt(total_ant_pend)}</b></div>', unsafe_allow_html=True)
+
+            ids_ant = {
+                f'{r["fecha"]} — {r["responsable"]} — {r["concepto"]} ({fmt(r["valor_anticipo"])})': r
+                for r in raw_ant_pend
+            }
+            sel_ant = st.selectbox("Anticipo a legalizar", ["— Selecciona —"] + list(ids_ant.keys()), key="sel_ant_legalizar")
+            if sel_ant != "— Selecciona —":
+                ant_sel = ids_ant[sel_ant]
+                st.markdown(
+                    f'<div class="factura-box">'
+                    f'<div class="factura-row"><span>Responsable</span><span>{ant_sel["responsable"]}</span></div>'
+                    f'<div class="factura-row"><span>Concepto</span><span>{ant_sel["concepto"]}</span></div>'
+                    f'<div class="factura-row"><span>Categoría</span><span>{ant_sel["categoria"]}</span></div>'
+                    f'<div class="factura-total"><span>Valor del anticipo</span><span>{fmt(ant_sel["valor_anticipo"])}</span></div>'
+                    f'</div>',
+                    unsafe_allow_html=True
+                )
+                valor_fact_ant = st.number_input(
+                    "Valor de la factura ($)", min_value=0, value=int(ant_sel["valor_anticipo"]), step=1000, key="valor_fact_ant"
+                )
+                soporte_ant = st.text_input("Soporte / N° de factura (opcional)", placeholder="Ej: Factura N° 4521", key="soporte_ant")
+                diferencia_ant = float(ant_sel["valor_anticipo"]) - float(valor_fact_ant)
+                if diferencia_ant > 0:
+                    st.markdown(f'<div class="info-box">{ICO_DOLLAR} Sobra — se devuelve a caja: <b>{fmt(diferencia_ant)}</b></div>', unsafe_allow_html=True)
+                elif diferencia_ant < 0:
+                    st.markdown(f'<div class="warn-box">{ICO_CLIPBOARD} Faltó — sale de caja un complemento de: <b>{fmt(abs(diferencia_ant))}</b></div>', unsafe_allow_html=True)
+                else:
+                    st.markdown(f'<div class="info-box">{ICO_CHECK} El valor de la factura coincide exacto con el anticipo.</div>', unsafe_allow_html=True)
+
+                if st.button("✅ Legalizar anticipo", key="btn_legalizar_ant"):
+                    if ant_sel.get("caja_egreso_id"):
+                        sb_patch("caja_egresos", f"id=eq.{ant_sel['caja_egreso_id']}", {"valor": float(valor_fact_ant)})
+                    if diferencia_ant > 0:
+                        sb_post("caja_ingresos", {
+                            "fecha": fecha_hoy(), "hora": ahora(),
+                            "concepto": f"Devolución anticipo — {ant_sel['responsable']}",
+                            "valor": diferencia_ant, "categoria": "Devolución de anticipo",
+                        })
+                    elif diferencia_ant < 0:
+                        sb_post("caja_egresos", {
+                            "fecha": fecha_hoy(), "hora": ahora(),
+                            "concepto": f"{ant_sel['concepto']} — complemento anticipo",
+                            "valor": abs(diferencia_ant), "categoria": ant_sel["categoria"],
+                            "tipo": ant_sel["tipo"], "empleado": None,
+                        })
+                    sb_patch("anticipos", f"id=eq.{ant_sel['id']}", {
+                        "estado": "legalizado", "valor_factura": float(valor_fact_ant),
+                        "diferencia": diferencia_ant, "soporte": soporte_ant.strip() or None,
+                        "fecha_legalizacion": fecha_hoy(), "hora_legalizacion": ahora(),
+                        "usuario_legalizacion": st.session_state.admin_actual,
+                    })
+                    st.markdown(f'<div class="success-toast">{ICO_CHECK} Anticipo legalizado.</div>', unsafe_allow_html=True)
+                    time.sleep(0.3)
+                    st.rerun()
+
+        st.markdown('<div class="section-label">🕒 Historial de anticipos legalizados</div>', unsafe_allow_html=True)
+        col_hant1, col_hant2 = st.columns(2)
+        f_ini_hant = col_hant1.date_input("Desde", value=datetime.now(COL_TZ).date().replace(day=1), key="f_ini_hist_ant", format="DD/MM/YYYY")
+        f_fin_hant = col_hant2.date_input("Hasta", value=datetime.now(COL_TZ).date(), key="f_fin_hist_ant", format="DD/MM/YYYY")
+        raw_ant_hist = sb_get(
+            "anticipos",
+            f"select=*&estado=eq.legalizado&fecha_legalizacion=gte.{f_ini_hant}&fecha_legalizacion=lte.{f_fin_hant}&order=fecha_legalizacion.desc"
+        ) or []
+        if not raw_ant_hist:
+            st.caption("No hay anticipos legalizados en ese rango.")
+        else:
+            df_ant_hist = pd.DataFrame([{
+                "Fecha legalización": r["fecha_legalizacion"],
+                "Responsable": r["responsable"],
+                "Concepto": r["concepto"],
+                "Anticipo": fmt(r["valor_anticipo"]),
+                "Factura": fmt(r["valor_factura"]),
+                "Diferencia": fmt(r["diferencia"]),
+                "Soporte": r.get("soporte") or "—",
+            } for r in raw_ant_hist])
+            tabla_view(df_ant_hist)
 
 elif st.session_state.vista == "resumen" and st.session_state.es_admin:
     sub_r1, sub_r2, sub_r3, sub_r5, sub_r4, sub_r6 = st.tabs(["Hoy", "Por fechas", "📅 Mes", "💳 Créditos pagados", "💾 Exportar", "📋 Créditos pendientes"])
