@@ -2158,7 +2158,7 @@ else:
 if st.session_state.vista != "menu":
     if st.session_state.vista == "recibo":
         vista_volver = st.session_state.get("vista_anterior", "resumen")
-        texto_volver = f"← Volver"
+        texto_volver = "← Volver"
     else:
         vista_volver = "menu"
         texto_volver = "← Volver al menú"
@@ -4137,12 +4137,12 @@ elif st.session_state.vista == "caja" and st.session_state.es_admin:
 
         col_cr1, col_cr2 = st.columns(2)
         opcion_recibido_fab_cr = col_cr1.radio(
-            f"¿Ya recibiste el efectivo de Fábrica de hoy?",
+            "¿Ya recibiste el efectivo de Fábrica de hoy?",
             ["❌ Todavía no", "✅ Ya lo recibí"], key="recibido_fab_arq"
         )
         recibido_fab_cr = opcion_recibido_fab_cr.startswith("✅")
         opcion_recibido_carro_cr = col_cr2.radio(
-            f"¿Ya recibiste el efectivo de Edison y Javier (Carro) de hoy?",
+            "¿Ya recibiste el efectivo de Edison y Javier (Carro) de hoy?",
             ["❌ Todavía no", "✅ Ya lo recibí"], key="recibido_carro_arq"
         )
         recibido_carro_cr = opcion_recibido_carro_cr.startswith("✅")
@@ -5664,11 +5664,17 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
         venta_cantidad_map_inv = {}
         venta_total_map_inv = {}
         for r in raw_vent_inv:
-            if r.get("canal") not in CANALES_VENTA_REAL:
-                continue
-            salidas_map_inv[r["sabor"]] = salidas_map_inv.get(r["sabor"], 0) + float(r["cantidad"])
-            venta_cantidad_map_inv[r["sabor"]] = venta_cantidad_map_inv.get(r["sabor"], 0) + float(r["cantidad"])
-            venta_total_map_inv[r["sabor"]] = venta_total_map_inv.get(r["sabor"], 0) + float(r.get("total", 0) or 0)
+            canal_r_inv = r.get("canal")
+            if canal_r_inv in CANALES_VENTA_REAL:
+                salidas_map_inv[r["sabor"]] = salidas_map_inv.get(r["sabor"], 0) + float(r["cantidad"])
+                venta_cantidad_map_inv[r["sabor"]] = venta_cantidad_map_inv.get(r["sabor"], 0) + float(r["cantidad"])
+                venta_total_map_inv[r["sabor"]] = venta_total_map_inv.get(r["sabor"], 0) + float(r.get("total", 0) or 0)
+            elif canal_r_inv in ("Regalo", "Regalo Fábrica"):
+                # Los regalos sí salen físicamente del stock, pero no son venta — no deben
+                # sumarse a "Total venta"/"Precio de venta" (son $0, distorsionarían el
+                # promedio ponderado). Solo restan de Salidas para que el Saldo cuadre con
+                # el stock real durante el mes, no solo al cerrarlo.
+                salidas_map_inv[r["sabor"]] = salidas_map_inv.get(r["sabor"], 0) + float(r["cantidad"])
         # Las devoluciones vuelven al inventario sin pasar por Producción — se restan
         # de Salidas para que el Saldo calculado sí las refleje.
         for r in raw_dev_inv:
