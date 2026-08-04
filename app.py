@@ -189,7 +189,7 @@ FOSFORO_SABORES = {"Fósforo 70g (x10)", "Fósforo 140g", "Fósforo 250g", "Fós
 
 # Canales que cuentan como venta real (para Salidas / Total venta del reporte de
 # inventario) — excluye "Regalo"/"Regalo Fábrica" (total=0, no es venta).
-CANALES_VENTA_REAL = ("Fábrica", "Carro", "Cambio")
+CANALES_VENTA_REAL = ("Fábrica", "Carro", "Cambio", "Cambio Fábrica", "Cambio Carro")
 
 # Saborizantes de Materia Prima — a nivel módulo porque tanto la vista de Materia
 # Prima como el reporte de Contador (Inventario a corte) necesitan la lista.
@@ -490,7 +490,11 @@ def calcular_cobros_periodo(f_ini, f_fin):
     f_ini_d = f_ini if isinstance(f_ini, date) else date.fromisoformat(str(f_ini))
     f_fin_d = f_fin if isinstance(f_fin, date) else date.fromisoformat(str(f_fin))
 
-    raw_ventas = sb_get("ventas", f"select=*&fecha=gte.{f_ini}&fecha=lte.{f_fin}") or []
+    # order= explícito: "facturas" toma solo la PRIMERA fila por factura_id (abajo) como
+    # representativa del canal/abono original — sin orden, Postgres podría devolver una
+    # fila "Cambio" antes que la venta original si esta se reescribió (MVCC), haciendo
+    # que la factura se cuente con el canal equivocado o desaparezca de los totales.
+    raw_ventas = sb_get("ventas", f"select=*&fecha=gte.{f_ini}&fecha=lte.{f_fin}&order=id.asc") or []
     raw_pg = sb_get("pagos_credito", "select=fecha,monto,tipo,factura_id,canal") or []
 
     # Cuánto de cada factura se cobró DESPUÉS de la venta (vía "Cobrar" en créditos
@@ -726,11 +730,13 @@ def _recargar_factura(key_factura, fac):
 
 def _stock_carro_actual():
     """Bolsas disponibles en el carro ambulante, por sabor: cargado - vendido - devuelto."""
-    with ThreadPoolExecutor(max_workers=3) as ex:
+    with ThreadPoolExecutor(max_workers=4) as ex:
         f_cg  = ex.submit(sb_get, "cargues",      "select=sabor,cantidad")
         f_vc  = ex.submit(sb_get, "ventas",        "select=sabor,cantidad&canal=in.(Carro,Cambio,Regalo)")
+        # "Cambio Carro" aparte porque el espacio en el valor no es seguro dentro de un in.() en la URL.
+        f_vc2 = ex.submit(sb_get, "ventas",        f"select=sabor,cantidad&canal=eq.{requests.utils.quote('Cambio Carro')}")
         f_dev = ex.submit(sb_get, "devoluciones",  "select=sabor,cantidad")
-    raw_cg, raw_vc, raw_dev = f_cg.result(), f_vc.result(), f_dev.result()
+    raw_cg, raw_vc, raw_dev = f_cg.result(), (f_vc.result() or []) + (f_vc2.result() or []), f_dev.result()
     stock = {}
     for r in (raw_cg or []):
         stock[r["sabor"]] = stock.get(r["sabor"], 0) + r["cantidad"]
@@ -932,7 +938,7 @@ def render_venta_canal(cfg, mostrar_creditos=True):
 
             if st.button("🔁 Registrar cambio", key="venta_btn_cambio"):
                 sb_post("ventas", {
-                    "fecha": fecha_hoy(), "hora": ahora(), "canal": "Cambio",
+                    "fecha": fecha_hoy(), "hora": ahora(), "canal": f"Cambio {canal}",
                     "vendedor": fac["vendedor"], "sabor": sabor_out,
                     "cantidad": -cant_out, "total": -valor_out,
                     "cliente": fac["cliente"], "factura_id": fac["id"],
@@ -941,7 +947,7 @@ def render_venta_canal(cfg, mostrar_creditos=True):
                 if mutar_stock:
                     agregar_stock(sabor_out, cant_out)
                 sb_post("ventas", {
-                    "fecha": fecha_hoy(), "hora": ahora(), "canal": "Cambio",
+                    "fecha": fecha_hoy(), "hora": ahora(), "canal": f"Cambio {canal}",
                     "vendedor": fac["vendedor"], "sabor": sabor_in,
                     "cantidad": cant_in, "total": valor_in,
                     "cliente": fac["cliente"], "factura_id": fac["id"],
@@ -969,7 +975,7 @@ def render_venta_canal(cfg, mostrar_creditos=True):
 
                 if st.button("➕ Agregar a la factura", key="venta_btn_add_fac"):
                     sb_post("ventas", {
-                        "fecha": fecha_hoy(), "hora": ahora(), "canal": "Cambio",
+                        "fecha": fecha_hoy(), "hora": ahora(), "canal": f"Cambio {canal}",
                         "vendedor": fac["vendedor"], "sabor": sabor_add,
                         "cantidad": cant_add, "total": precio_add,
                         "cliente": fac["cliente"], "factura_id": fac["id"],
@@ -2736,7 +2742,7 @@ elif st.session_state.vista == "fabrica":
         # Visible para todos (no solo admin) — Sofía y Andrea lo necesitan para
         # saber cuánto entregar al final del día.
         cobros_fab_dia = calcular_cobros_periodo(fecha_hoy(), fecha_hoy())
-        raw_vf = [r for r in cobros_fab_dia["raw_ventas"] if r.get("canal") in ("Fábrica", "Cambio")]
+        raw_vf = [r for r in cobros_fab_dia["raw_ventas"] if r.get("canal") in ("Fábrica", "Cambio Fábrica")]
         cobro_creditos_fab_hoy = cobros_fab_dia["cobro_creditos_por_canal"].get("Fábrica", 0.0)
         if not raw_vf and not cobro_creditos_fab_hoy:
             st.info("Aún no hay ventas hoy.")
@@ -2747,7 +2753,7 @@ elif st.session_state.vista == "fabrica":
                 if r["total"] > 0:
                     v = r["vendedor"]
                     por_vendedor[v] = por_vendedor.get(v, 0) + r["total"]
-            facturas_fab_dia = {fid: f for fid, f in cobros_fab_dia["facturas"].items() if f["canal"] in ("Fábrica", "Cambio")}
+            facturas_fab_dia = {fid: f for fid, f in cobros_fab_dia["facturas"].items() if f["canal"] in ("Fábrica", "Cambio Fábrica")}
             cobrado_ventas_fab_dia = sum(f["abono"] for f in facturas_fab_dia.values())
             cobrado_fab_dia = cobrado_ventas_fab_dia + cobro_creditos_fab_hoy
             credito_fab_dia = sum(f["saldo"] for f in facturas_fab_dia.values())
@@ -2891,7 +2897,7 @@ elif st.session_state.vista == "recibo":
 
                     if st.button("🔁 Registrar cambio", key="edit_btn_cambio"):
                         sb_post("ventas", {
-                            "fecha": fecha_hoy(), "hora": ahora(), "canal": "Cambio",
+                            "fecha": fecha_hoy(), "hora": ahora(), "canal": f"Cambio {cfg_edit['canal']}",
                             "vendedor": vendedor_recibo, "sabor": sabor_out,
                             "cantidad": -cant_out, "total": -valor_out,
                             "cliente": cliente_recibo, "factura_id": fid_recibo,
@@ -2900,7 +2906,7 @@ elif st.session_state.vista == "recibo":
                         if cfg_edit["mutar_stock"]:
                             agregar_stock(sabor_out, cant_out)
                         sb_post("ventas", {
-                            "fecha": fecha_hoy(), "hora": ahora(), "canal": "Cambio",
+                            "fecha": fecha_hoy(), "hora": ahora(), "canal": f"Cambio {cfg_edit['canal']}",
                             "vendedor": vendedor_recibo, "sabor": sabor_in,
                             "cantidad": cant_in, "total": valor_in,
                             "cliente": cliente_recibo, "factura_id": fid_recibo,
@@ -2932,7 +2938,7 @@ elif st.session_state.vista == "recibo":
 
                         if st.button("➕ Agregar a la factura", key="edit_btn_add"):
                             sb_post("ventas", {
-                                "fecha": fecha_hoy(), "hora": ahora(), "canal": "Cambio",
+                                "fecha": fecha_hoy(), "hora": ahora(), "canal": f"Cambio {cfg_edit['canal']}",
                                 "vendedor": vendedor_recibo, "sabor": sabor_add,
                                 "cantidad": cant_add, "total": precio_add,
                                 "cliente": cliente_recibo, "factura_id": fid_recibo,
@@ -2959,7 +2965,7 @@ elif st.session_state.vista == "recibo":
 
                     if st.button("➖ Quitar de la factura", key="edit_btn_quitar"):
                         sb_post("ventas", {
-                            "fecha": fecha_hoy(), "hora": ahora(), "canal": "Cambio",
+                            "fecha": fecha_hoy(), "hora": ahora(), "canal": f"Cambio {cfg_edit['canal']}",
                             "vendedor": vendedor_recibo, "sabor": sabor_quitar,
                             "cantidad": -cant_quitar, "total": -valor_quitar,
                             "cliente": cliente_recibo, "factura_id": fid_recibo,
@@ -2990,9 +2996,12 @@ elif st.session_state.vista == "recibo":
                         sabor = r.get("sabor", "")
                         canal_r = r.get("canal", "")
                         if cant > 0 and sabor:
-                            # Fábrica: devolver al inventario general
+                            # Fábrica: devolver al inventario general — incluye tanto las líneas
+                            # originales (canal "Fábrica") como las agregadas/cambiadas después
+                            # desde el recibo (canal "Cambio"), que también mutaron stock si la
+                            # factura es de Fábrica.
                             # Carro: NO tocar inventario general (el stock ya estaba descontado en el cargue)
-                            if canal_r in ("Fábrica",):
+                            if cfg_edit["mutar_stock"] and canal_r in ("Fábrica", "Cambio", "Cambio Fábrica"):
                                 agregar_stock(sabor, cant)
                     # Eliminar todos los registros de la factura
                     sb_delete("ventas", f"factura_id=eq.{fid_recibo}")
@@ -5084,7 +5093,10 @@ elif st.session_state.vista == "nomina" and st.session_state.es_admin:
                 fecha_pago_edit = st.date_input(
                     "Fecha de pago", value=datetime.strptime(pago_edit["fecha_pago"], "%Y-%m-%d").date(), key="fecha_pago_edit", format="DD/MM/YYYY"
                 )
-                total_edit = monto_base_edit + bono_edit
+                adelanto_edit = float(pago_edit.get("adelantos") or 0)
+                total_edit = monto_base_edit + bono_edit - adelanto_edit
+                if adelanto_edit:
+                    st.caption(f"Se resta el adelanto ya descontado de esta quincena: {fmt(adelanto_edit)}")
                 st.markdown(f'<div class="info-box">{ICO_DOLLAR} Nuevo total: <b>{fmt(total_edit)}</b></div>', unsafe_allow_html=True)
                 if not pago_edit.get("caja_egreso_id"):
                     st.caption("⚠️ Este pago es anterior a que Nómina quedara enlazada con Caja (o es un bono retroactivo) — al guardar solo se actualiza el historial, no toca ningún egreso de Caja. Si ya se había descontado, ajústalo tú a mano en Caja → Historial.")
