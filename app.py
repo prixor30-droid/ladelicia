@@ -1077,12 +1077,12 @@ def render_recibo(registros):
     es_credito_r = saldo_r > 0
 
     items_partes = []
-    for s, c in items_finales.items():
+    for idx, (s, c) in enumerate(items_finales.items(), start=1):
         total_item = totales_cons[s]
         precio_unit = fmt(total_item / c) if c else fmt(0)
         items_partes.append(
             '<div class="recibo-item">'
-            f'<div class="recibo-item-nombre">{s}</div>'
+            f'<div class="recibo-item-nombre">{idx}. {s}</div>'
             '<div class="recibo-item-detalle">'
             f'<span>{c} × {precio_unit}</span>'
             f'<span>{fmt(total_item)}</span>'
@@ -1094,6 +1094,7 @@ def render_recibo(registros):
         '<div class="recibo-wrap"><div class="recibo-ticket">',
         f'<div class="recibo-logo">{logo_recibo_html}</div>',
         '<div class="recibo-titulo">Productos La Delicia</div>',
+        '<div class="recibo-nit">NIT: 37005108-4</div>',
         '<div class="recibo-sub">Factura de venta</div>',
         f'<div class="recibo-sub">No. FV-{fid}</div>',
     ]
@@ -1639,18 +1640,19 @@ label,.stSelectbox label,.stNumberInput label,.stDateInput label,.stTextInput la
 .tabla-reporte tbody tr.fila-total td{background:#DCEEFB;font-weight:700;}
 .tabla-reporte tbody tr.fila-etiqueta td{font-weight:600;text-align:left;}
 .recibo-wrap{display:flex;justify-content:center;padding:20px 0;}
-.recibo-ticket{background:#FFFFFF;width:100%;max-width:380px;padding:24px 20px;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,0.12);font-family:'Courier New',monospace;}
+.recibo-ticket{background:#FFFFFF;width:100%;max-width:380px;padding:24px 20px;border-radius:4px;box-shadow:0 4px 20px rgba(0,0,0,0.12);font-family:'Segoe UI',Arial,Helvetica,sans-serif;border:1px solid #E0E0E0;}
 .recibo-logo{text-align:center;margin-bottom:6px;}
 .recibo-logo img{height:auto !important;max-height:70px !important;max-width:100% !important;}
-.recibo-titulo{text-align:center;font-weight:700;font-size:1rem;color:#0D1B2A;}
-.recibo-sub{text-align:center;font-size:0.78rem;color:#1565C0;}
-.recibo-linea-punteada{border-top:1.5px dashed #BBDEFB;margin:12px 0;}
-.recibo-dato{font-size:0.82rem;color:#0D1B2A;margin-bottom:4px;}
-.recibo-item{margin-bottom:8px;}
-.recibo-item-nombre{font-size:0.85rem;font-weight:600;color:#0D1B2A;}
-.recibo-item-detalle{display:flex;justify-content:space-between;font-size:0.8rem;color:#1565C0;}
-.recibo-total-row{display:flex;justify-content:space-between;font-size:1.05rem;font-weight:700;color:#1B9E5A;}
-.recibo-footer{text-align:center;font-size:0.8rem;color:#1565C0;font-style:italic;}
+.recibo-titulo{text-align:center;font-weight:800;font-size:1.05rem;color:#0D1B2A;text-transform:uppercase;letter-spacing:0.5px;}
+.recibo-sub{text-align:center;font-size:0.74rem;color:#455A64;}
+.recibo-nit{text-align:center;font-size:0.72rem;color:#455A64;margin-bottom:2px;}
+.recibo-linea-punteada{border-top:1.5px dashed #9AA5B1;margin:12px 0;}
+.recibo-dato{font-size:0.8rem;color:#263238;margin-bottom:4px;}
+.recibo-item{margin-bottom:7px;padding-bottom:6px;border-bottom:1px dotted #E0E0E0;}
+.recibo-item-nombre{font-size:0.8rem;font-weight:600;color:#0D1B2A;text-transform:uppercase;}
+.recibo-item-detalle{display:flex;justify-content:space-between;font-size:0.78rem;color:#455A64;}
+.recibo-total-row{display:flex;justify-content:space-between;font-size:1.05rem;font-weight:800;color:#0D1B2A;border-top:2px solid #0D1B2A;border-bottom:2px solid #0D1B2A;padding:6px 0;margin:6px 0;}
+.recibo-footer{text-align:center;font-size:0.75rem;color:#78909C;font-style:normal;}
 .recibo-credito-badge{background:#000000;color:#FFFFFF;text-align:center;font-weight:700;font-size:0.85rem;letter-spacing:1.5px;padding:6px 0;margin:10px 0;border-radius:3px;}
 .recibo-credito-linea{display:flex;justify-content:space-between;font-size:0.82rem;font-weight:700;color:#0D1B2A;border-top:1.5px solid #000000;border-bottom:1.5px solid #000000;padding:3px 0;margin-bottom:2px;}
 div[data-testid="stRadio"] > div{display:flex;flex-wrap:wrap;gap:8px;}
