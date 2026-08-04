@@ -3042,7 +3042,8 @@ elif st.session_state.vista == "materia_prima":
             "precio_total": float(precio_mp), "abono": float(abono_mp),
             "saldo": float(saldo_mp), "estado": "pagado" if saldo_mp == 0 else "pendiente",
             "precio_unitario": float(precio_unit_mp),
-            "numero_factura": numero_factura_mp.strip() or None
+            "numero_factura": numero_factura_mp.strip() or None,
+            "fue_credito": saldo_mp > 0,
         }
         h = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}",
              "Content-Type": "application/json", "Prefer": "return=minimal"}
@@ -3566,7 +3567,7 @@ elif st.session_state.vista == "materia_prima":
         f_ini_hcp = col_hcp1.date_input("Desde", value=datetime.now(COL_TZ).date().replace(day=1), key="f_ini_hist_cred_mp", format="DD/MM/YYYY")
         f_fin_hcp = col_hcp2.date_input("Hasta", value=datetime.now(COL_TZ).date(), key="f_fin_hist_cred_mp", format="DD/MM/YYYY")
 
-        raw_pagados_mp = sb_get("materia_prima", f"select=*&estado=eq.pagado&abono=gt.0&fecha=gte.{f_ini_hcp}&fecha=lte.{f_fin_hcp}&order=fecha.desc") or []
+        raw_pagados_mp = sb_get("materia_prima", f"select=*&estado=eq.pagado&fue_credito=eq.true&fecha=gte.{f_ini_hcp}&fecha=lte.{f_fin_hcp}&order=fecha.desc") or []
         if not raw_pagados_mp:
             st.caption("No hay créditos pagados en ese rango.")
         else:
