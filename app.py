@@ -1082,7 +1082,10 @@ def render_recibo(registros):
         precio_unit = fmt(total_item / c) if c else fmt(0)
         items_partes.append(
             '<div class="recibo-item">'
-            f'<div class="recibo-item-nombre">{idx}. {s}</div>'
+            '<div class="recibo-item-nombre">'
+            f'<span class="recibo-item-numero">{idx}</span>'
+            f'<span>{s}</span>'
+            '</div>'
             '<div class="recibo-item-detalle">'
             f'<span>{c} × {precio_unit}</span>'
             f'<span>{fmt(total_item)}</span>'
@@ -1649,7 +1652,8 @@ label,.stSelectbox label,.stNumberInput label,.stDateInput label,.stTextInput la
 .recibo-linea-punteada{border-top:1.5px dashed #9AA5B1;margin:12px 0;}
 .recibo-dato{font-size:0.8rem;color:#263238;margin-bottom:4px;}
 .recibo-item{margin-bottom:7px;padding-bottom:6px;border-bottom:1px dotted #E0E0E0;}
-.recibo-item-nombre{font-size:0.8rem;font-weight:600;color:#0D1B2A;text-transform:uppercase;}
+.recibo-item-nombre{font-size:0.8rem;font-weight:600;color:#0D1B2A;text-transform:uppercase;display:flex;align-items:center;gap:6px;}
+.recibo-item-numero{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;width:17px;height:17px;border-radius:50%;background:#0D1B2A;color:#FFFFFF;font-size:0.68rem;font-weight:700;text-transform:none;}
 .recibo-item-detalle{display:flex;justify-content:space-between;font-size:0.78rem;color:#455A64;}
 .recibo-total-row{display:flex;justify-content:space-between;font-size:1.05rem;font-weight:800;color:#0D1B2A;border-top:2px solid #0D1B2A;border-bottom:2px solid #0D1B2A;padding:6px 0;margin:6px 0;}
 .recibo-footer{text-align:center;font-size:0.75rem;color:#78909C;font-style:normal;}
@@ -3963,6 +3967,50 @@ elif st.session_state.vista == "caja" and st.session_state.es_admin:
                 tabla_view(pd.DataFrame(movimientos))
         else:
             st.info("No hay movimientos en ese período.")
+
+        # Borrar un ingreso o egreso manual mal registrado — solo estos dos (no ventas,
+        # créditos ni pagos de materia prima, que tienen su propio flujo de borrado en
+        # otros módulos). Confirmación en dos pasos para evitar borrados accidentales.
+        # Se excluyen los egresos ya ligados a un anticipo, para no dejarlo huérfano.
+        raw_antic_lig = sb_get("anticipos", "select=caja_egreso_id") or []
+        ids_antic_ligados = {r["caja_egreso_id"] for r in raw_antic_lig if r.get("caja_egreso_id")}
+
+        registros_borrables = (
+            [{"tipo": "ingreso", "tabla": "caja_ingresos", **r} for r in raw_ing_h]
+            + [{"tipo": "egreso", "tabla": "caja_egresos", **r} for r in raw_eg_h if r["id"] not in ids_antic_ligados]
+        )
+        registros_borrables.sort(key=lambda r: (r["fecha"], r.get("hora", "")), reverse=True)
+
+        if registros_borrables:
+            st.markdown('<div class="section-label">🗑️ Borrar un ingreso o egreso mal registrado</div>', unsafe_allow_html=True)
+            ids_mov = {
+                f'{"📥" if r["tipo"] == "ingreso" else "📤"} {r["fecha"]} {r.get("hora", "")} — {r["concepto"]} ({fmt(r["valor"])})': r
+                for r in registros_borrables
+            }
+            sel_mov_del = st.selectbox("Selecciona el movimiento a borrar", ["— Selecciona —"] + list(ids_mov.keys()), key="sel_mov_del")
+            if sel_mov_del != "— Selecciona —":
+                reg_mov = ids_mov[sel_mov_del]
+                confirmando_mov = st.session_state.get("confirmar_borrar_mov") == sel_mov_del
+                if not confirmando_mov:
+                    if st.button("🗑️ Borrar este movimiento", key="btn_borrar_mov"):
+                        st.session_state["confirmar_borrar_mov"] = sel_mov_del
+                        st.rerun()
+                else:
+                    st.markdown(
+                        f'<div class="alert-low">{ICO_WARN} ¿Borrar por completo este {reg_mov["tipo"]} de '
+                        f'<b>{fmt(reg_mov["valor"])}</b> — "{reg_mov["concepto"]}"? Esto no se puede deshacer.</div>',
+                        unsafe_allow_html=True
+                    )
+                    col_si_mov, col_no_mov = st.columns(2)
+                    if col_si_mov.button("🗑️ Sí, borrar", key="btn_borrar_mov_si"):
+                        sb_delete(reg_mov["tabla"], f"id=eq.{reg_mov['id']}")
+                        st.session_state["confirmar_borrar_mov"] = None
+                        st.markdown(f'<div class="success-toast">{ICO_CHECK} Movimiento borrado.</div>', unsafe_allow_html=True)
+                        time.sleep(0.3)
+                        st.rerun()
+                    if col_no_mov.button("✗ Cancelar", key="btn_borrar_mov_no"):
+                        st.session_state["confirmar_borrar_mov"] = None
+                        st.rerun()
 
     with tab_caja4:
         st.markdown('<div class="section-label">Arqueo de caja</div>', unsafe_allow_html=True)
