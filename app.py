@@ -468,7 +468,7 @@ def _ingreso_creditos_mes_anterior(primer_dia_mes, ultimo_dia_mes):
             total += float(r["monto"])
     return total
 
-def calcular_cobros_periodo(f_ini, f_fin):
+def calcular_cobros_periodo(f_ini, f_fin, solo_efectivo=False):
     """Dinero realmente cobrado entre f_ini y f_fin — ventas nuevas del período
     MÁS créditos viejos (de cualquier fecha) que se cobraron dentro del período.
     Fetea todos los canales; cada llamador filtra/suma por canal si lo necesita.
@@ -480,6 +480,12 @@ def calcular_cobros_periodo(f_ini, f_fin):
     primero, y las demás quedaron desactualizadas hasta que se reportó el bug —
     por eso ahora viven en un solo lugar.
 
+    solo_efectivo=True descarta los pagos marcados como "Nequi" (medio_pago),
+    dejando solo lo que entró en efectivo físico — lo usan Arqueo y Caja real,
+    que necesitan comparar contra plata física, no contra el total del negocio.
+    Los demás llamadores (Resumen, Caja→Resumen) dejan el default False porque
+    ahí sí importa el total del negocio, sea efectivo o Nequi.
+
     Devuelve:
       raw_ventas: filas crudas de 'ventas' en el rango (una por producto vendido)
       facturas: {factura_id: {"canal", "abono" (ya sin lo cobrado después), "saldo"}},
@@ -490,12 +496,15 @@ def calcular_cobros_periodo(f_ini, f_fin):
     f_ini_d = f_ini if isinstance(f_ini, date) else date.fromisoformat(str(f_ini))
     f_fin_d = f_fin if isinstance(f_fin, date) else date.fromisoformat(str(f_fin))
 
+    def _es_efectivo(r):
+        return (r.get("medio_pago") or "Efectivo") == "Efectivo"
+
     # order= explícito: "facturas" toma solo la PRIMERA fila por factura_id (abajo) como
     # representativa del canal/abono original — sin orden, Postgres podría devolver una
     # fila "Cambio" antes que la venta original si esta se reescribió (MVCC), haciendo
     # que la factura se cuente con el canal equivocado o desaparezca de los totales.
     raw_ventas = sb_get("ventas", f"select=*&fecha=gte.{f_ini}&fecha=lte.{f_fin}&order=id.asc") or []
-    raw_pg = sb_get("pagos_credito", "select=fecha,monto,tipo,factura_id,canal") or []
+    raw_pg = sb_get("pagos_credito", "select=fecha,monto,tipo,factura_id,canal,medio_pago") or []
 
     # Cuánto de cada factura se cobró DESPUÉS de la venta (vía "Cobrar" en créditos
     # pendientes) — se resta del abono actual para no contar ese dinero dos veces:
@@ -504,6 +513,8 @@ def calcular_cobros_periodo(f_ini, f_fin):
     # pudo haber ocurrido antes o después del rango que se está consultando.
     cobrado_despues = {}
     for r in raw_pg:
+        if solo_efectivo and not _es_efectivo(r):
+            continue
         if r.get("tipo") == "venta" and r.get("factura_id"):
             fid = r["factura_id"]
             cobrado_despues[fid] = cobrado_despues.get(fid, 0) + float(r["monto"])
@@ -512,7 +523,10 @@ def calcular_cobros_periodo(f_ini, f_fin):
     for r in raw_ventas:
         fid = r.get("factura_id", "")
         if fid and fid not in facturas:
-            abono_inicial = max(0.0, float(r.get("abono", 0) or 0) - cobrado_despues.get(fid, 0))
+            abono_bruto = float(r.get("abono", 0) or 0)
+            if solo_efectivo and not _es_efectivo(r):
+                abono_bruto = 0.0
+            abono_inicial = max(0.0, abono_bruto - cobrado_despues.get(fid, 0))
             facturas[fid] = {
                 "canal": r.get("canal", ""),
                 "abono": abono_inicial,
@@ -521,6 +535,8 @@ def calcular_cobros_periodo(f_ini, f_fin):
 
     cobro_creditos_por_canal = {}
     for r in raw_pg:
+        if solo_efectivo and not _es_efectivo(r):
+            continue
         if f_ini_d <= date.fromisoformat(r["fecha"]) <= f_fin_d:
             c = r.get("canal", "")
             cobro_creditos_por_canal[c] = cobro_creditos_por_canal.get(c, 0.0) + float(r["monto"])
@@ -619,6 +635,9 @@ def mostrar_creditos_pendientes(canal):
             "Abono ($)", min_value=0, max_value=int(saldo),
             value=int(saldo), step=1000, key=f"abono_pend_{key}"
         )
+        medio_cobro = contenedor_creditos.radio(
+            "Medio de pago", ["💵 Efectivo", "📱 Nequi"], horizontal=True, key=f"medio_cobro_{key}"
+        )
         confirmando_cobro = st.session_state.get("confirmar_cobro") == key
         if not confirmando_cobro:
             if col_b.button("✅ Cobrar", key=f"btn_cobrar_{key}") and nuevo_abono > 0:
@@ -639,11 +658,12 @@ def mostrar_creditos_pendientes(canal):
                     ok_cobro = _registrar_pago_credito_cas(datos["ref"], nuevo_abono)
                     id_factura, id_credito = None, datos["ref"]
                 if ok_cobro:
+                    medio_cobro_val = "Efectivo" if "Efectivo" in medio_cobro else "Nequi"
                     sb_post("pagos_credito", {
                         "fecha": fecha_hoy(), "hora": ahora(), "tipo": datos["tipo"],
                         "factura_id": id_factura, "credito_id": id_credito,
                         "cliente": datos["cliente"], "canal": canal, "vendedor": datos["vendedor"],
-                        "monto": float(nuevo_abono),
+                        "monto": float(nuevo_abono), "medio_pago": medio_cobro_val,
                     })
                 st.session_state["confirmar_cobro"] = None
                 time.sleep(0.3)
@@ -857,6 +877,7 @@ def render_venta_canal(cfg, mostrar_creditos=True):
             st.session_state["venta_abono"] = int(total_venta)
             st.session_state["venta_abono_total_ref"] = total_venta
         abono = st.number_input("Abono del cliente ($)", min_value=0, value=int(total_venta), step=1000, key="venta_abono")
+        medio_venta = st.radio("Medio de pago", ["💵 Efectivo", "📱 Nequi"], horizontal=True, key="venta_medio_pago")
         if abono > 0:
             if abono >= total_venta:
                 st.markdown(f'<div class="info-box">{ICO_DOLLAR} Total: <b>{fmt(total_venta)}</b> · Devolver: <b>{fmt(abono - total_venta)}</b></div>', unsafe_allow_html=True)
@@ -883,6 +904,7 @@ def render_venta_canal(cfg, mostrar_creditos=True):
                     fid = str(uuid.uuid4())[:8].upper()
                     total_confirmado = 0
                     abono_val = int(st.session_state.get("venta_abono", 0))
+                    medio_venta_val = "Efectivo" if "Efectivo" in medio_venta else "Nequi"
                     for s, c in carrito.items():
                         precio_final = st.session_state[key_precios].get(s, PRODUCTOS[s])
                         subtotal = precio_final * c
@@ -891,12 +913,13 @@ def render_venta_canal(cfg, mostrar_creditos=True):
                             "fecha": fecha_hoy(), "hora": ahora(), "canal": canal,
                             "vendedor": vendedor, "sabor": s, "cantidad": c,
                             "total": subtotal, "cliente": cliente.strip(),
-                            "factura_id": fid, "abono": abono_val, "saldo": 0
+                            "factura_id": fid, "abono": abono_val, "saldo": 0,
+                            "medio_pago": medio_venta_val,
                         })
                         if mutar_stock:
                             restar_stock(s, c)
                     saldo_final = max(0, total_confirmado - abono_val)
-                    sb_patch("ventas", f"factura_id=eq.{fid}", {"abono": abono_val, "saldo": saldo_final})
+                    sb_patch("ventas", f"factura_id=eq.{fid}", {"abono": abono_val, "saldo": saldo_final, "medio_pago": medio_venta_val})
                     st.session_state[key_factura] = {
                         "id": fid, "cliente": cliente.strip(), "vendedor": vendedor,
                         "items": dict(carrito), "precios": dict(st.session_state[key_precios]),
@@ -3008,7 +3031,7 @@ elif st.session_state.vista == "materia_prima":
 
     UMBRAL_ROLLO_AGOTADO = 1.0  # kg — por debajo de esto se considera que el rollo se acabó
 
-    def registrar_entrada_mp(nombre_sel, unidad_sel, cant_mp, prov_mp, precio_mp, abono_mp, saldo_mp, precio_unit_mp=0, fecha_mp=None, es_stock_existente=False, numero_factura_mp=""):
+    def registrar_entrada_mp(nombre_sel, unidad_sel, cant_mp, prov_mp, precio_mp, abono_mp, saldo_mp, precio_unit_mp=0, fecha_mp=None, es_stock_existente=False, numero_factura_mp="", medio_pago_abono_mp="Efectivo"):
         if not es_stock_existente:
             if not prov_mp.strip():
                 st.markdown(f'<div class="alert-low">{ICO_WARN} Escribe el nombre del proveedor.</div>', unsafe_allow_html=True)
@@ -3025,6 +3048,7 @@ elif st.session_state.vista == "materia_prima":
             "precio_unitario": float(precio_unit_mp),
             "numero_factura": numero_factura_mp.strip() or None,
             "fue_credito": saldo_mp > 0,
+            "medio_pago_abono": medio_pago_abono_mp,
         }
         h = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}",
              "Content-Type": "application/json", "Prefer": "return=minimal"}
@@ -3126,9 +3150,13 @@ elif st.session_state.vista == "materia_prima":
                         st.markdown(f'<div class="warn-box">{ICO_CLIPBOARD} Debe: <b>{fmt(saldo_mp)}</b></div>', unsafe_allow_html=True)
                     else:
                         st.markdown(f'<div class="warn-box">{ICO_CLIPBOARD} Fiado: <b>{fmt(precio_mp)}</b></div>', unsafe_allow_html=True)
+            medio_pago_abono_mp_val = "Efectivo"
+            if not ya_tengo_mp and abono_mp > 0:
+                medio_pago_abono_mp_sel = st.radio("Medio de pago del abono", ["💵 Efectivo", "📱 Nequi"], horizontal=True, key="medio_pago_abono_mp")
+                medio_pago_abono_mp_val = "Efectivo" if "Efectivo" in medio_pago_abono_mp_sel else "Nequi"
             col1, col2 = st.columns(2)
             if col1.button("✅ Registrar", key="btn_mp"):
-                if registrar_entrada_mp(nombre_sel, unidad_sel, cant_mp, prov_mp, precio_mp, abono_mp, saldo_mp, precio_unit_mp, fecha_mp, es_stock_existente=ya_tengo_mp, numero_factura_mp=numero_factura_mp):
+                if registrar_entrada_mp(nombre_sel, unidad_sel, cant_mp, prov_mp, precio_mp, abono_mp, saldo_mp, precio_unit_mp, fecha_mp, es_stock_existente=ya_tengo_mp, numero_factura_mp=numero_factura_mp, medio_pago_abono_mp=medio_pago_abono_mp_val):
                     st.session_state.ok_mp = True
                     st.session_state.insumo_sel = None
                     st.session_state.categoria_mp = None
@@ -3526,7 +3554,12 @@ elif st.session_state.vista == "materia_prima":
                 )
                 col_a, col_b = st.columns([3, 1])
                 nv = col_a.number_input("Abono ($)", min_value=0, max_value=int(saldo_f), value=int(saldo_f), step=1000, key=f"abono_pend_mp_{state_key}_{prov_sel_cred}_{clave}")
+                medio_pago_mp = st.radio(
+                    "Medio de pago", ["💵 Efectivo", "📱 Nequi"], horizontal=True,
+                    key=f"medio_pago_mp_{state_key}_{prov_sel_cred}_{clave}"
+                )
                 if col_b.button("✅ Pagar", key=f"btn_pagar_mp_{state_key}_{prov_sel_cred}_{clave}"):
+                    medio_pago_mp_val = "Efectivo" if "Efectivo" in medio_pago_mp else "Nequi"
                     restante = nv
                     for r in lineas:
                         if restante <= 0:
@@ -3536,7 +3569,11 @@ elif st.session_state.vista == "materia_prima":
                             continue
                         pago_r = min(restante, saldo_r)
                         nuevo_saldo = saldo_r - pago_r
-                        sb_patch("materia_prima", f"id=eq.{r['id']}", {"abono": float(r["abono"]) + pago_r, "saldo": nuevo_saldo, "estado": "pagado" if nuevo_saldo == 0 else "pendiente"})
+                        sb_patch("materia_prima", f"id=eq.{r['id']}", {
+                            "abono": float(r["abono"]) + pago_r, "saldo": nuevo_saldo,
+                            "estado": "pagado" if nuevo_saldo == 0 else "pendiente",
+                            "medio_pago_abono": medio_pago_mp_val,
+                        })
                         restante -= pago_r
                     time.sleep(0.3); st.rerun()
 
@@ -3780,6 +3817,7 @@ elif st.session_state.vista == "caja" and st.session_state.es_admin:
             tipo_an = "costo" if "producción" in tipo_an_label else "gasto"
             responsable_an = st.text_input("Responsable", placeholder="Ej: Javier", key="responsable_an")
             valor_an = st.number_input("Valor del anticipo ($)", min_value=0, value=0, step=1000, key="valor_an")
+            medio_an = st.radio("Medio de pago", ["💵 Efectivo", "📱 Nequi"], horizontal=True, key="medio_an")
 
             if st.button("✅ Registrar anticipo", key="btn_an"):
                 if not concepto_an.strip():
@@ -3789,12 +3827,14 @@ elif st.session_state.vista == "caja" and st.session_state.es_admin:
                 elif valor_an == 0:
                     st.markdown(f'<div class="alert-low">{ICO_WARN} Ingresa el valor.</div>', unsafe_allow_html=True)
                 else:
+                    medio_an_val = "Efectivo" if "Efectivo" in medio_an else "Nequi"
                     caja_egreso_id_an = None
                     try:
                         r_eg_an = requests.post(
                             f"{SUPABASE_URL}/rest/v1/caja_egresos", headers=HEADERS, timeout=10,
                             json={"fecha": fecha_hoy(), "hora": ahora(), "concepto": concepto_an.strip(),
-                                  "valor": float(valor_an), "categoria": cat_an, "tipo": tipo_an, "empleado": None}
+                                  "valor": float(valor_an), "categoria": cat_an, "tipo": tipo_an, "empleado": None,
+                                  "medio_pago": medio_an_val}
                         )
                         if r_eg_an.ok:
                             data_eg_an = r_eg_an.json()
@@ -3832,6 +3872,7 @@ elif st.session_state.vista == "caja" and st.session_state.es_admin:
             if cat_eg == "Salario":
                 empleado_eg = st.text_input("Nombre del empleado", placeholder="Ej: Juan Pérez", key="empleado_eg")
             valor_eg = st.number_input("Valor ($)", min_value=0, value=0, step=1000, key="valor_eg")
+            medio_eg = st.radio("Medio de pago", ["💵 Efectivo", "📱 Nequi"], horizontal=True, key="medio_eg")
 
             if st.button("✅ Registrar egreso", key="btn_eg"):
                 if not concepto_eg.strip():
@@ -3845,7 +3886,8 @@ elif st.session_state.vista == "caja" and st.session_state.es_admin:
                          "Content-Type": "application/json", "Prefer": "return=minimal"}
                     data_eg = {"fecha": fecha_hoy(), "hora": ahora(),
                                "concepto": concepto_eg.strip(), "valor": float(valor_eg), "categoria": cat_eg,
-                               "tipo": tipo_eg, "empleado": empleado_eg.strip() or None}
+                               "tipo": tipo_eg, "empleado": empleado_eg.strip() or None,
+                               "medio_pago": "Efectivo" if "Efectivo" in medio_eg else "Nequi"}
                     try:
                         r_eg = requests.post(f"{SUPABASE_URL}/rest/v1/caja_egresos", headers=h, json=data_eg, timeout=10)
                         if r_eg.ok:
@@ -3862,6 +3904,7 @@ elif st.session_state.vista == "caja" and st.session_state.es_admin:
             concepto_in = st.text_input("Concepto", placeholder="Ej: Efectivo en caja al iniciar", key="concepto_in")
             cat_in = st.selectbox("Categoría", ["Dinero existente en caja", "Aporte / capital", "Otro ingreso"], key="cat_in")
             valor_in = st.number_input("Valor ($)", min_value=0, value=0, step=1000, key="valor_in")
+            medio_in = st.radio("Medio de pago", ["💵 Efectivo", "📱 Nequi"], horizontal=True, key="medio_in")
 
             if st.button("✅ Registrar ingreso", key="btn_in"):
                 if not concepto_in.strip():
@@ -3872,7 +3915,8 @@ elif st.session_state.vista == "caja" and st.session_state.es_admin:
                     h = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}",
                          "Content-Type": "application/json", "Prefer": "return=minimal"}
                     data_in = {"fecha": fecha_hoy(), "hora": ahora(),
-                               "concepto": concepto_in.strip(), "valor": float(valor_in), "categoria": cat_in}
+                               "concepto": concepto_in.strip(), "valor": float(valor_in), "categoria": cat_in,
+                               "medio_pago": "Efectivo" if "Efectivo" in medio_in else "Nequi"}
                     try:
                         r_in = requests.post(f"{SUPABASE_URL}/rest/v1/caja_ingresos", headers=h, json=data_in, timeout=10)
                         if r_in.ok:
@@ -4020,25 +4064,44 @@ elif st.session_state.vista == "caja" and st.session_state.es_admin:
         fecha_arq_str = str(fecha_arq)
 
         with ThreadPoolExecutor(max_workers=3) as ex:
-            f_cobros_a = ex.submit(calcular_cobros_periodo, fecha_arq_str, fecha_arq_str)
-            f_mp_a = ex.submit(sb_get, "materia_prima", f"select=abono&fecha=eq.{fecha_arq_str}")
-            f_ing_a = ex.submit(sb_get, "caja_ingresos", f"select=valor&fecha=eq.{fecha_arq_str}")
+            f_cobros_a = ex.submit(calcular_cobros_periodo, fecha_arq_str, fecha_arq_str, solo_efectivo=True)
+            f_cobros_a_todo = ex.submit(calcular_cobros_periodo, fecha_arq_str, fecha_arq_str)
+            f_mp_a = ex.submit(sb_get, "materia_prima", f"select=abono,medio_pago_abono&fecha=eq.{fecha_arq_str}")
+            f_ing_a = ex.submit(sb_get, "caja_ingresos", f"select=valor,medio_pago&fecha=eq.{fecha_arq_str}")
         cobros_a = f_cobros_a.result()
+        cobros_a_todo = f_cobros_a_todo.result()
         raw_mp_a = f_mp_a.result() or []
         raw_ing_a = f_ing_a.result() or []
-        raw_eg_a = sb_get("caja_egresos", f"select=valor&fecha=eq.{fecha_arq_str}") or []
+        raw_eg_a = sb_get("caja_egresos", f"select=valor,medio_pago&fecha=eq.{fecha_arq_str}") or []
 
+        # Solo cuenta lo que entró/salió en EFECTIVO — lo pagado/cobrado por Nequi
+        # no es plata física, así que no debe afectar el "esperado" del cajón.
         ingresos_ventas_a = sum(f["abono"] for f in cobros_a["facturas"].values() if f["canal"] in ("Fábrica", "Carro"))
         ingresos_cobro_creditos_a = (
             cobros_a["cobro_creditos_por_canal"].get("Fábrica", 0.0)
             + cobros_a["cobro_creditos_por_canal"].get("Carro", 0.0)
         )
-        ingresos_manuales_a = sum(float(r["valor"]) for r in raw_ing_a)
+        ingresos_manuales_a = sum(float(r["valor"]) for r in raw_ing_a if (r.get("medio_pago") or "Efectivo") == "Efectivo")
         total_ingresos_a = ingresos_ventas_a + ingresos_cobro_creditos_a + ingresos_manuales_a
 
-        egresos_mp_a = sum(float(r["abono"]) for r in raw_mp_a)
-        egresos_gastos_a = sum(float(r["valor"]) for r in raw_eg_a)
+        egresos_mp_a = sum(float(r["abono"]) for r in raw_mp_a if (r.get("medio_pago_abono") or "Efectivo") == "Efectivo")
+        egresos_gastos_a = sum(float(r["valor"]) for r in raw_eg_a if (r.get("medio_pago") or "Efectivo") == "Efectivo")
         total_egresos_a = egresos_mp_a + egresos_gastos_a
+
+        # Aparte, solo informativo: cuánto se movió por Nequi ese día (todo − efectivo),
+        # para que puedas cruzarlo contra la app de Nequi sin hacer cuentas a mano.
+        ingresos_nequi_a = (
+            sum(f["abono"] for f in cobros_a_todo["facturas"].values() if f["canal"] in ("Fábrica", "Carro"))
+            + cobros_a_todo["cobro_creditos_por_canal"].get("Fábrica", 0.0)
+            + cobros_a_todo["cobro_creditos_por_canal"].get("Carro", 0.0)
+            + sum(float(r["valor"]) for r in raw_ing_a)
+            - total_ingresos_a
+        )
+        egresos_nequi_a = (
+            sum(float(r["abono"]) for r in raw_mp_a) + sum(float(r["valor"]) for r in raw_eg_a) - total_egresos_a
+        )
+        if ingresos_nequi_a > 0 or egresos_nequi_a > 0:
+            st.caption(f"📱 Por Nequi ese día (no incluido arriba): ingresos {fmt(ingresos_nequi_a)} · egresos {fmt(egresos_nequi_a)}")
 
         # El efectivo con el que se abrió caja ese día se sugiere con lo contado en
         # el último arqueo anterior — así no hay que acordarse del número a mano.
@@ -4179,14 +4242,15 @@ elif st.session_state.vista == "caja" and st.session_state.es_admin:
 
         fecha_cr = fecha_hoy()
         with ThreadPoolExecutor(max_workers=3) as ex:
-            f_cobros_cr = ex.submit(calcular_cobros_periodo, fecha_cr, fecha_cr)
-            f_mp_cr = ex.submit(sb_get, "materia_prima", f"select=abono&fecha=eq.{fecha_cr}")
-            f_ing_cr = ex.submit(sb_get, "caja_ingresos", f"select=valor&fecha=eq.{fecha_cr}")
+            f_cobros_cr = ex.submit(calcular_cobros_periodo, fecha_cr, fecha_cr, solo_efectivo=True)
+            f_mp_cr = ex.submit(sb_get, "materia_prima", f"select=abono,medio_pago_abono&fecha=eq.{fecha_cr}")
+            f_ing_cr = ex.submit(sb_get, "caja_ingresos", f"select=valor,medio_pago&fecha=eq.{fecha_cr}")
         cobros_cr = f_cobros_cr.result()
         raw_mp_cr = f_mp_cr.result() or []
         raw_ing_cr = f_ing_cr.result() or []
-        raw_eg_cr = sb_get("caja_egresos", f"select=valor&fecha=eq.{fecha_cr}") or []
+        raw_eg_cr = sb_get("caja_egresos", f"select=valor,medio_pago&fecha=eq.{fecha_cr}") or []
 
+        # Solo efectivo — igual que en Arqueo, lo de Nequi no es plata física.
         total_fab_cr = (
             sum(f["abono"] for f in cobros_cr["facturas"].values() if f["canal"] == "Fábrica")
             + cobros_cr["cobro_creditos_por_canal"].get("Fábrica", 0.0)
@@ -4195,8 +4259,11 @@ elif st.session_state.vista == "caja" and st.session_state.es_admin:
             sum(f["abono"] for f in cobros_cr["facturas"].values() if f["canal"] == "Carro")
             + cobros_cr["cobro_creditos_por_canal"].get("Carro", 0.0)
         )
-        ingresos_manuales_cr = sum(float(r["valor"]) for r in raw_ing_cr)
-        total_egresos_cr = sum(float(r["abono"]) for r in raw_mp_cr) + sum(float(r["valor"]) for r in raw_eg_cr)
+        ingresos_manuales_cr = sum(float(r["valor"]) for r in raw_ing_cr if (r.get("medio_pago") or "Efectivo") == "Efectivo")
+        total_egresos_cr = (
+            sum(float(r["abono"]) for r in raw_mp_cr if (r.get("medio_pago_abono") or "Efectivo") == "Efectivo")
+            + sum(float(r["valor"]) for r in raw_eg_cr if (r.get("medio_pago") or "Efectivo") == "Efectivo")
+        )
 
         raw_arq_prev_cr = sb_get("arqueos_caja", f"select=fecha,efectivo_contado&fecha=lt.{fecha_cr}&order=fecha.desc&limit=1") or []
         efectivo_inicial_cr = float(raw_arq_prev_cr[0]["efectivo_contado"]) if raw_arq_prev_cr else 0.0
