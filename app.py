@@ -1077,13 +1077,13 @@ def render_recibo(registros):
     es_credito_r = saldo_r > 0
 
     items_partes = []
-    for idx, (s, c) in enumerate(items_finales.items(), start=1):
+    for s, c in items_finales.items():
         total_item = totales_cons[s]
         precio_unit = fmt(total_item / c) if c else fmt(0)
         items_partes.append(
             '<div class="recibo-item">'
             '<div class="recibo-item-nombre">'
-            f'<span class="recibo-item-numero">{idx}</span>'
+            '<span class="recibo-item-numero"></span>'
             f'<span>{s}</span>'
             '</div>'
             '<div class="recibo-item-detalle">'
@@ -1653,7 +1653,7 @@ label,.stSelectbox label,.stNumberInput label,.stDateInput label,.stTextInput la
 .recibo-dato{font-size:0.8rem;color:#263238;margin-bottom:4px;}
 .recibo-item{margin-bottom:7px;padding-bottom:6px;border-bottom:1px dotted #E0E0E0;}
 .recibo-item-nombre{font-size:0.8rem;font-weight:600;color:#0D1B2A;text-transform:uppercase;display:flex;align-items:center;gap:6px;}
-.recibo-item-numero{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;width:17px;height:17px;border-radius:50%;background:#0D1B2A;color:#FFFFFF;font-size:0.68rem;font-weight:700;text-transform:none;}
+.recibo-item-numero{display:inline-block;flex-shrink:0;width:8px;height:8px;border-radius:50%;background:#000000;}
 .recibo-item-detalle{display:flex;justify-content:space-between;font-size:0.78rem;color:#455A64;}
 .recibo-total-row{display:flex;justify-content:space-between;font-size:1.05rem;font-weight:800;color:#0D1B2A;border-top:2px solid #0D1B2A;border-bottom:2px solid #0D1B2A;padding:6px 0;margin:6px 0;}
 .recibo-footer{text-align:center;font-size:0.75rem;color:#78909C;font-style:normal;}
