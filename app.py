@@ -4035,6 +4035,23 @@ elif st.session_state.vista == "caja" and st.session_state.es_admin:
             else:
                 st.caption("Todavía no hay movimientos manuales hoy.")
 
+        with st.expander("📥 Dinero existente que ya ingresé"):
+            st.caption("Solo lectura. Solo lo registrado como Ingreso (dinero existente / aporte / otro) — sin mezclar con ventas.")
+            col_di1, col_di2 = st.columns(2)
+            f_ini_di = col_di1.date_input("Desde", value=primer_dia_caja, key="f_ini_di", format="DD/MM/YYYY")
+            f_fin_di = col_di2.date_input("Hasta", value=hoy_caja, key="f_fin_di", format="DD/MM/YYYY")
+            raw_di = sb_get("caja_ingresos", f"select=fecha,hora,concepto,categoria,valor,medio_pago&fecha=gte.{f_ini_di}&fecha=lte.{f_fin_di}&order=fecha.desc,hora.desc") or []
+            if raw_di:
+                df_di = pd.DataFrame([{
+                    "Fecha": r["fecha"], "Hora": r.get("hora", ""), "Concepto": r["concepto"],
+                    "Categoría": r.get("categoria", ""), "Medio": r.get("medio_pago", "Efectivo"),
+                    "Valor": fmt(r["valor"]),
+                } for r in raw_di])
+                tabla_view(df_di)
+                st.caption(f"Total en el rango: {fmt(sum(float(r['valor']) for r in raw_di))}")
+            else:
+                st.caption("No hay ingresos de dinero existente en ese rango de fechas.")
+
     with tab_caja3:
         st.markdown('<div class="section-label">Historial de movimientos</div>', unsafe_allow_html=True)
         col_h1, col_h2 = st.columns(2)
