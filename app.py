@@ -1802,6 +1802,9 @@ div[data-testid="stRadio"] input[type="radio"]{accent-color:#1565C0;}
 .st-key-liq_emp_sel div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked) p,
 .st-key-liq_emp_sel div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked) span{color:#FFFFFF !important;}
 .calc-box{background:#FFFFFF;border-radius:14px;padding:14px;margin-bottom:14px;box-shadow:0 2px 10px rgba(21,101,192,0.10);}
+.calc-box-lg{background:#FFFFFF;border-radius:14px;padding:22px 16px;margin-bottom:14px;text-align:center;box-shadow:0 2px 10px rgba(21,101,192,0.10);}
+.calc-box-lg .cb-lbl{font-size:1rem;color:#1565C0;font-weight:600;}
+.calc-box-lg .cb-val{font-size:2.3rem;font-weight:800;color:#1B9E5A;line-height:1.2;}
 .main-btn{background:#F0F7FF;border:1px solid #BBDEFB;border-radius:14px;padding:20px 16px;margin-bottom:10px;cursor:pointer;display:flex;align-items:center;gap:14px;}
 .main-btn-icon{font-size:2rem;}
 .main-btn-text{font-size:1.1rem;font-weight:700;color:#0D1B2A;}
@@ -3864,7 +3867,11 @@ elif st.session_state.vista == "caja" and st.session_state.es_admin:
         recibido_fab_ie = st.session_state.get("recibido_fab_arq", "❌ Todavía no").startswith("✅")
         recibido_carro_ie = st.session_state.get("recibido_carro_arq", "❌ Todavía no").startswith("✅")
         datos_cr_ie = calcular_caja_real_hoy(recibido_fab_ie, recibido_carro_ie)
-        st.markdown(f'<div class="calc-box">{ICO_DOLLAR} Caja real ahora mismo: <b>{fmt(datos_cr_ie["caja_real"])}</b></div>', unsafe_allow_html=True)
+        st.markdown(
+            f'<div class="calc-box-lg"><div class="cb-lbl">{ICO_DOLLAR} Caja real ahora mismo</div>'
+            f'<div class="cb-val">{fmt(datos_cr_ie["caja_real"])}</div></div>',
+            unsafe_allow_html=True
+        )
         st.caption("Se actualiza solo al registrar un movimiento. Desglose completo (y marcar qué ya recibiste de Fábrica/Carro) en 💰 Caja real.")
 
         tipo_mov = st.radio("Tipo de movimiento", ["📤 Egreso (gasto)", "📥 Ingreso (dinero existente)", "💼 Anticipo"], key="tipo_mov_caja")
