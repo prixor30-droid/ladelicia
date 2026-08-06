@@ -4019,16 +4019,22 @@ elif st.session_state.vista == "caja" and st.session_state.es_admin:
         raw_antic_lig = sb_get("anticipos", "select=caja_egreso_id") or []
         ids_antic_ligados = {r["caja_egreso_id"] for r in raw_antic_lig if r.get("caja_egreso_id")}
 
+        # OJO: "tipo_mov" (no "tipo") para el rótulo ingreso/egreso — caja_egresos ya
+        # trae su propia columna "tipo" (costo/gasto, ver [[fabrica_egresos_clasificados]]);
+        # si se llamara igual, el **r de abajo la pisaría silenciosamente.
         registros_borrables = (
-            [{"tipo": "ingreso", "tabla": "caja_ingresos", **r} for r in raw_ing_h]
-            + [{"tipo": "egreso", "tabla": "caja_egresos", **r} for r in raw_eg_h if r["id"] not in ids_antic_ligados]
+            [{"tipo_mov": "ingreso", "tabla": "caja_ingresos", **r} for r in raw_ing_h]
+            + [{"tipo_mov": "egreso", "tabla": "caja_egresos", **r} for r in raw_eg_h if r["id"] not in ids_antic_ligados]
         )
         registros_borrables.sort(key=lambda r: (r["fecha"], r.get("hora", "")), reverse=True)
 
         if registros_borrables:
             st.markdown('<div class="section-label">🗑️ Borrar un ingreso o egreso mal registrado</div>', unsafe_allow_html=True)
+            # El ID se agrega al final del rótulo para que sea único: si dos movimientos
+            # tienen el mismo concepto/valor/hora, un rótulo repetido hacía que el borrado
+            # pareciera "no funcionar" — en realidad borraba el otro registro gemelo.
             ids_mov = {
-                f'{"📥" if r["tipo"] == "ingreso" else "📤"} {r["fecha"]} {r.get("hora", "")} — {r["concepto"]} ({fmt(r["valor"])})': r
+                f'{"📥" if r["tipo_mov"] == "ingreso" else "📤"} {r["fecha"]} {r.get("hora", "")} — {r["concepto"]} ({fmt(r["valor"])}) · #{r["id"]}': r
                 for r in registros_borrables
             }
             sel_mov_del = st.selectbox("Selecciona el movimiento a borrar", ["— Selecciona —"] + list(ids_mov.keys()), key="sel_mov_del")
@@ -4041,15 +4047,32 @@ elif st.session_state.vista == "caja" and st.session_state.es_admin:
                         st.rerun()
                 else:
                     st.markdown(
-                        f'<div class="alert-low">{ICO_WARN} ¿Borrar por completo este {reg_mov["tipo"]} de '
+                        f'<div class="alert-low">{ICO_WARN} ¿Borrar por completo este {reg_mov["tipo_mov"]} de '
                         f'<b>{fmt(reg_mov["valor"])}</b> — "{reg_mov["concepto"]}"? Esto no se puede deshacer.</div>',
                         unsafe_allow_html=True
                     )
                     col_si_mov, col_no_mov = st.columns(2)
                     if col_si_mov.button("🗑️ Sí, borrar", key="btn_borrar_mov_si"):
-                        sb_delete(reg_mov["tabla"], f"id=eq.{reg_mov['id']}")
+                        # sb_delete solo confirma que la petición no falló — con
+                        # Prefer: return=representation, Supabase también devuelve 200 OK
+                        # con lista vacía si el filtro no encontró ninguna fila (ID ya
+                        # borrado, o de otra fecha por desfase de horario). Por eso acá se
+                        # revisa la respuesta real en vez de confiar en el booleano, para no
+                        # mostrar "borrado" en verde cuando en realidad no se borró nada.
+                        borrado_ok = False
+                        try:
+                            r_del_mov = requests.delete(
+                                f"{SUPABASE_URL}/rest/v1/{reg_mov['tabla']}?id=eq.{reg_mov['id']}",
+                                headers=HEADERS, timeout=10
+                            )
+                            borrado_ok = r_del_mov.ok and len(r_del_mov.json()) > 0
+                        except requests.RequestException:
+                            borrado_ok = False
                         st.session_state["confirmar_borrar_mov"] = None
-                        st.markdown(f'<div class="success-toast">{ICO_CHECK} Movimiento borrado.</div>', unsafe_allow_html=True)
+                        if borrado_ok:
+                            st.markdown(f'<div class="success-toast">{ICO_CHECK} Movimiento borrado.</div>', unsafe_allow_html=True)
+                        else:
+                            st.error("⚠️ No se pudo borrar este movimiento (puede que ya no exista). Actualiza la página e intenta de nuevo.")
                         time.sleep(0.3)
                         st.rerun()
                     if col_no_mov.button("✗ Cancelar", key="btn_borrar_mov_no"):
