@@ -549,11 +549,12 @@ def calcular_cobros_periodo(f_ini, f_fin, solo_efectivo=False):
     }
 
 def calcular_caja_real_hoy(recibido_fab=False, recibido_carro=False):
-    """Cuánta plata física hay HOY en caja — misma fórmula que usa 💰 Caja real
-    (Caja→tab_caja6). Se sacó a función aparte para poder mostrar el mismo número
-    también en ➕ Ingreso/Egreso (resumen rápido al registrar un movimiento) sin
-    copiar y pegar el cálculo dos veces — ver la nota de arriba en
-    calcular_cobros_periodo sobre por qué eso ya causó bugs antes.
+    """Cuánta plata física hay HOY en caja. Vive en ➕ Ingreso/Egreso (tab_caja2)
+    junto con los radios "¿ya recibiste...?" — antes era una pestaña aparte
+    (💰 Caja real) pero se fusionó ahí para no saltar de pestaña al registrar un
+    movimiento. Queda como función aparte igual, por si se vuelve a necesitar en
+    otro lado — ver la nota de arriba en calcular_cobros_periodo sobre por qué
+    copiar y pegar este tipo de cálculo ya causó bugs antes.
 
     recibido_fab/recibido_carro: si ya se recibió físicamente el efectivo de
     Fábrica/Carro de hoy (viene de los radios de la pestaña Caja real, en
@@ -3767,10 +3768,9 @@ elif st.session_state.vista == "materia_prima":
 
 elif st.session_state.vista == "caja" and st.session_state.es_admin:
     st.markdown(f'<div class="section-label">{ICO_DOLLAR} Caja</div>', unsafe_allow_html=True)
-    # Orden visual de las pestañas != orden de las variables: "Caja real" se
-    # movió justo después de "Ingreso/Egreso" (más cerca del flujo diario) sin
-    # tener que mover el bloque de código, que sigue viviendo en tab_caja6.
-    tab_caja1, tab_caja2, tab_caja6, tab_caja3, tab_caja4, tab_caja5, tab_caja7 = st.tabs(["📊 Resumen", "➕ Ingreso / Egreso", "💰 Caja real", "📋 Historial", "🧮 Arqueo de caja", "🎯 Reservas", "💼 Anticipos"])
+    # "Caja real" ya no es pestaña aparte — se fusionó dentro de "Ingreso/Egreso"
+    # (tab_caja2) para no tener que saltar de pestaña al registrar un movimiento.
+    tab_caja1, tab_caja2, tab_caja3, tab_caja4, tab_caja5, tab_caja7 = st.tabs(["📊 Resumen", "➕ Ingreso / Egreso", "📋 Historial", "🧮 Arqueo de caja", "🎯 Reservas", "💼 Anticipos"])
 
     # Fechas del período
     hoy_caja = datetime.now(COL_TZ).date()
@@ -3859,20 +3859,37 @@ elif st.session_state.vista == "caja" and st.session_state.es_admin:
             )
 
     with tab_caja2:
-        # Resumen rápido de plata disponible — para no tener que saltar a 💰 Caja
-        # real solo para ver si un egreso recién registrado ya se descontó. Usa
-        # el mismo cálculo (calcular_caja_real_hoy) que esa pestaña; lee los radios
-        # "¿ya recibiste...?" desde session_state en vez de crearlos de nuevo acá
-        # (dos widgets con la misma key en pestañas distintas revientan Streamlit).
-        recibido_fab_ie = st.session_state.get("recibido_fab_arq", "❌ Todavía no").startswith("✅")
-        recibido_carro_ie = st.session_state.get("recibido_carro_arq", "❌ Todavía no").startswith("✅")
-        datos_cr_ie = calcular_caja_real_hoy(recibido_fab_ie, recibido_carro_ie)
+        st.markdown('<div class="section-label">💰 Caja real ahora mismo</div>', unsafe_allow_html=True)
+        col_cr1, col_cr2 = st.columns(2)
+        opcion_recibido_fab_cr = col_cr1.radio(
+            "¿Ya recibiste el efectivo de Fábrica de hoy?",
+            ["❌ Todavía no", "✅ Ya lo recibí"], key="recibido_fab_arq"
+        )
+        recibido_fab_cr = opcion_recibido_fab_cr.startswith("✅")
+        opcion_recibido_carro_cr = col_cr2.radio(
+            "¿Ya recibiste el efectivo de Edison y Javier (Carro) de hoy?",
+            ["❌ Todavía no", "✅ Ya lo recibí"], key="recibido_carro_arq"
+        )
+        recibido_carro_cr = opcion_recibido_carro_cr.startswith("✅")
+
+        datos_cr = calcular_caja_real_hoy(recibido_fab_cr, recibido_carro_cr)
+
+        color_fab_cr = "metric-green" if recibido_fab_cr else "metric-yellow"
+        color_carro_cr = "metric-green" if recibido_carro_cr else "metric-yellow"
+        st.markdown(f"""
+        <div class="metric-row">
+            <div class="metric-box {color_fab_cr}"><div class="val">{fmt(datos_cr["total_fab"])}</div><div class="lbl">Fábrica {"✅" if recibido_fab_cr else "⏳"}</div></div>
+            <div class="metric-box {color_carro_cr}"><div class="val">{fmt(datos_cr["total_carro"])}</div><div class="lbl">Carro {"✅" if recibido_carro_cr else "⏳"}</div></div>
+            <div class="metric-box metric-blue"><div class="val">{fmt(datos_cr["efectivo_inicial"] + datos_cr["ingresos_manuales"])}</div><div class="lbl">Base + manuales</div></div>
+            <div class="metric-box metric-red"><div class="val">{fmt(datos_cr["total_egresos"])}</div><div class="lbl">Egresos hoy</div></div>
+        </div>
+        """, unsafe_allow_html=True)
+
         st.markdown(
             f'<div class="calc-box-lg"><div class="cb-lbl">{ICO_DOLLAR} Caja real ahora mismo</div>'
-            f'<div class="cb-val">{fmt(datos_cr_ie["caja_real"])}</div></div>',
+            f'<div class="cb-val">{fmt(datos_cr["caja_real"])}</div></div>',
             unsafe_allow_html=True
         )
-        st.caption("Se actualiza solo al registrar un movimiento. Desglose completo (y marcar qué ya recibiste de Fábrica/Carro) en 💰 Caja real.")
 
         tipo_mov = st.radio("Tipo de movimiento", ["📤 Egreso (gasto)", "📥 Ingreso (dinero existente)", "💼 Anticipo"], key="tipo_mov_caja")
 
@@ -4348,45 +4365,6 @@ elif st.session_state.vista == "caja" and st.session_state.es_admin:
             tabla_view(df_res)
         else:
             st.caption("Aún no hay movimientos de reserva.")
-
-    with tab_caja6:
-        st.markdown('<div class="section-label">💰 Caja real ahora mismo</div>', unsafe_allow_html=True)
-        st.caption("Vista rápida de cuánta plata hay físicamente en la caja de HOY, sin contar lo que Fábrica o Carro (Edison y Javier) todavía no han entregado. Solo es para mirar — no se guarda nada aquí (eso se hace en 🧮 Arqueo de caja).")
-
-        col_cr1, col_cr2 = st.columns(2)
-        opcion_recibido_fab_cr = col_cr1.radio(
-            "¿Ya recibiste el efectivo de Fábrica de hoy?",
-            ["❌ Todavía no", "✅ Ya lo recibí"], key="recibido_fab_arq"
-        )
-        recibido_fab_cr = opcion_recibido_fab_cr.startswith("✅")
-        opcion_recibido_carro_cr = col_cr2.radio(
-            "¿Ya recibiste el efectivo de Edison y Javier (Carro) de hoy?",
-            ["❌ Todavía no", "✅ Ya lo recibí"], key="recibido_carro_arq"
-        )
-        recibido_carro_cr = opcion_recibido_carro_cr.startswith("✅")
-
-        datos_cr = calcular_caja_real_hoy(recibido_fab_cr, recibido_carro_cr)
-
-        color_fab_cr = "metric-green" if recibido_fab_cr else "metric-yellow"
-        color_carro_cr = "metric-green" if recibido_carro_cr else "metric-yellow"
-        st.markdown(f"""
-        <div class="metric-row">
-            <div class="metric-box {color_fab_cr}"><div class="val">{fmt(datos_cr["total_fab"])}</div><div class="lbl">Fábrica {"✅ recibido" if recibido_fab_cr else "⏳ pendiente"}</div></div>
-            <div class="metric-box {color_carro_cr}"><div class="val">{fmt(datos_cr["total_carro"])}</div><div class="lbl">Carro {"✅ recibido" if recibido_carro_cr else "⏳ pendiente"}</div></div>
-            <div class="metric-box metric-blue"><div class="val">{fmt(datos_cr["efectivo_inicial"] + datos_cr["ingresos_manuales"])}</div><div class="lbl">Base + ingresos manuales</div></div>
-            <div class="metric-box metric-red"><div class="val">{fmt(datos_cr["total_egresos"])}</div><div class="lbl">Egresos de hoy</div></div>
-        </div>
-        """, unsafe_allow_html=True)
-
-        st.markdown(f'<div class="calc-box">{ICO_DOLLAR} Caja real ahora mismo: <b>{fmt(datos_cr["caja_real"])}</b></div>', unsafe_allow_html=True)
-
-        if not recibido_fab_cr or not recibido_carro_cr:
-            pendientes_msg = []
-            if not recibido_fab_cr:
-                pendientes_msg.append(f"Fábrica ({fmt(datos_cr['total_fab'])})")
-            if not recibido_carro_cr:
-                pendientes_msg.append(f"Carro ({fmt(datos_cr['total_carro'])})")
-            st.caption(f"⏳ Todavía no contado aquí: {', '.join(pendientes_msg)} — pero sí cuenta en \"Efectivo esperado\" de Arqueo de caja, que asume que ya se recibió todo el día.")
 
     with tab_caja7:
         st.markdown('<div class="section-label">💼 Anticipos pendientes por legalizar</div>', unsafe_allow_html=True)
