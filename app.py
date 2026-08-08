@@ -4205,7 +4205,12 @@ elif st.session_state.vista == "caja" and st.session_state.es_admin:
 
     with tab_caja4:
         st.markdown('<div class="section-label">Arqueo de caja</div>', unsafe_allow_html=True)
-        st.caption("Compara el efectivo que el sistema esperaba tener contra lo que contaste físicamente, para detectar si falta o sobra plata.")
+        st.caption("Compara lo que el sistema esperaba tener contra lo que contaste/viste realmente, para detectar si falta o sobra plata.")
+
+        modo_arqueo = st.radio("Tipo de arqueo", ["💵 Efectivo", "📱 Nequi"], horizontal=True, key="modo_arqueo")
+        es_nequi_arq = modo_arqueo.startswith("📱")
+        tabla_arq = "arqueos_nequi" if es_nequi_arq else "arqueos_caja"
+        etiqueta_saldo = "Saldo Nequi" if es_nequi_arq else "Efectivo"
 
         fecha_arq = st.date_input("Fecha del arqueo", value=hoy_caja, max_value=hoy_caja, key="fecha_arqueo", format="DD/MM/YYYY")
         fecha_arq_str = str(fecha_arq)
@@ -4221,60 +4226,66 @@ elif st.session_state.vista == "caja" and st.session_state.es_admin:
         raw_ing_a = f_ing_a.result() or []
         raw_eg_a = sb_get("caja_egresos", f"select=valor,medio_pago&fecha=eq.{fecha_arq_str}") or []
 
-        # Solo cuenta lo que entró/salió en EFECTIVO — lo pagado/cobrado por Nequi
-        # no es plata física, así que no debe afectar el "esperado" del cajón.
+        # Efectivo: solo lo que entró/salió físicamente. Nequi: se saca como el
+        # complemento (todo − efectivo), no hace falta un segundo filtro aparte.
         ingresos_ventas_a = sum(f["abono"] for f in cobros_a["facturas"].values() if f["canal"] in ("Fábrica", "Carro"))
         ingresos_cobro_creditos_a = (
             cobros_a["cobro_creditos_por_canal"].get("Fábrica", 0.0)
             + cobros_a["cobro_creditos_por_canal"].get("Carro", 0.0)
         )
         ingresos_manuales_a = sum(float(r["valor"]) for r in raw_ing_a if (r.get("medio_pago") or "Efectivo") == "Efectivo")
-        total_ingresos_a = ingresos_ventas_a + ingresos_cobro_creditos_a + ingresos_manuales_a
+        total_ingresos_efectivo_a = ingresos_ventas_a + ingresos_cobro_creditos_a + ingresos_manuales_a
 
         egresos_mp_a = sum(float(r["abono"]) for r in raw_mp_a if (r.get("medio_pago_abono") or "Efectivo") == "Efectivo")
         egresos_gastos_a = sum(float(r["valor"]) for r in raw_eg_a if (r.get("medio_pago") or "Efectivo") == "Efectivo")
-        total_egresos_a = egresos_mp_a + egresos_gastos_a
+        total_egresos_efectivo_a = egresos_mp_a + egresos_gastos_a
 
-        # Aparte, solo informativo: cuánto se movió por Nequi ese día (todo − efectivo),
-        # para que puedas cruzarlo contra la app de Nequi sin hacer cuentas a mano.
-        ingresos_nequi_a = (
+        total_ingresos_nequi_a = (
             sum(f["abono"] for f in cobros_a_todo["facturas"].values() if f["canal"] in ("Fábrica", "Carro"))
             + cobros_a_todo["cobro_creditos_por_canal"].get("Fábrica", 0.0)
             + cobros_a_todo["cobro_creditos_por_canal"].get("Carro", 0.0)
             + sum(float(r["valor"]) for r in raw_ing_a)
-            - total_ingresos_a
+            - total_ingresos_efectivo_a
         )
-        egresos_nequi_a = (
-            sum(float(r["abono"]) for r in raw_mp_a) + sum(float(r["valor"]) for r in raw_eg_a) - total_egresos_a
+        total_egresos_nequi_a = (
+            sum(float(r["abono"]) for r in raw_mp_a) + sum(float(r["valor"]) for r in raw_eg_a) - total_egresos_efectivo_a
         )
-        if ingresos_nequi_a > 0 or egresos_nequi_a > 0:
-            st.caption(f"📱 Por Nequi ese día (no incluido arriba): ingresos {fmt(ingresos_nequi_a)} · egresos {fmt(egresos_nequi_a)}")
 
-        # El efectivo con el que se abrió caja ese día se sugiere con lo contado en
-        # el último arqueo anterior — así no hay que acordarse del número a mano.
-        raw_arq_prev = sb_get("arqueos_caja", f"select=fecha,efectivo_contado&fecha=lt.{fecha_arq_str}&order=fecha.desc&limit=1") or []
+        if es_nequi_arq:
+            total_ingresos_a = total_ingresos_nequi_a
+            total_egresos_a = total_egresos_nequi_a
+        else:
+            total_ingresos_a = total_ingresos_efectivo_a
+            total_egresos_a = total_egresos_efectivo_a
+            if total_ingresos_nequi_a > 0 or total_egresos_nequi_a > 0:
+                st.caption(f"📱 Por Nequi ese día (no incluido arriba — cámbiate al modo Nequi para arquearlo): ingresos {fmt(total_ingresos_nequi_a)} · egresos {fmt(total_egresos_nequi_a)}")
+
+        # El saldo con el que se abrió ese día se sugiere con lo contado en el
+        # último arqueo anterior DE ESTE MISMO TIPO — así no hay que acordarse a mano.
+        raw_arq_prev = sb_get(tabla_arq, f"select=fecha,efectivo_contado&fecha=lt.{fecha_arq_str}&order=fecha.desc&limit=1") or []
         efectivo_inicial_sugerido = float(raw_arq_prev[0]["efectivo_contado"]) if raw_arq_prev else 0.0
 
         efectivo_inicial_a = st.number_input(
-            "Efectivo con el que abriste caja ese día ($)",
-            min_value=0, value=int(efectivo_inicial_sugerido), step=1000, key="efectivo_inicial_arqueo",
-            help="Se sugiere con lo contado en el último arqueo anterior. Ajústalo si es distinto."
+            f"{etiqueta_saldo} con el que abriste ese día ($)",
+            min_value=0, value=int(efectivo_inicial_sugerido), step=1000, key=f"saldo_inicial_arqueo_{tabla_arq}",
+            help="Se sugiere con lo contado en el último arqueo anterior de este mismo tipo. Ajústalo si es distinto."
         )
 
         efectivo_esperado_a = efectivo_inicial_a + total_ingresos_a - total_egresos_a
         st.markdown(
             f'<div class="factura-box">'
-            f'<div class="factura-row"><span>Efectivo inicial</span><span>{fmt(efectivo_inicial_a)}</span></div>'
+            f'<div class="factura-row"><span>{etiqueta_saldo} inicial</span><span>{fmt(efectivo_inicial_a)}</span></div>'
             f'<div class="factura-row"><span>{ICO_DOLLAR} Ingresos del día</span><span>{fmt(total_ingresos_a)}</span></div>'
             f'<div class="factura-row"><span>{ICO_NOTE} Egresos del día</span><span>{fmt(total_egresos_a)}</span></div>'
-            f'<div class="factura-total"><span>Efectivo esperado</span><span>{fmt(efectivo_esperado_a)}</span></div>'
+            f'<div class="factura-total"><span>{etiqueta_saldo} esperado</span><span>{fmt(efectivo_esperado_a)}</span></div>'
             f'</div>',
             unsafe_allow_html=True
         )
 
+        etiqueta_contado = "Saldo Nequi real, según la app de Nequi ($)" if es_nequi_arq else "Efectivo contado físicamente ($)"
         efectivo_contado_a = st.number_input(
-            "Efectivo contado físicamente ($)",
-            min_value=0, value=max(0, int(efectivo_esperado_a)), step=1000, key="efectivo_contado_arqueo"
+            etiqueta_contado,
+            min_value=0, value=max(0, int(efectivo_esperado_a)), step=1000, key=f"saldo_contado_arqueo_{tabla_arq}"
         )
         diferencia_a = efectivo_contado_a - efectivo_esperado_a
 
@@ -4285,10 +4296,10 @@ elif st.session_state.vista == "caja" and st.session_state.es_admin:
         else:
             st.markdown(f'<div class="warn-box">{ICO_WARN} Sobra <b>{fmt(diferencia_a)}</b></div>', unsafe_allow_html=True)
 
-        empleado_arq = st.selectbox("¿Quién hace este arqueo?", EMPLEADOS, key="empleado_arqueo")
+        empleado_arq = st.selectbox("¿Quién hace este arqueo?", EMPLEADOS, key=f"empleado_arqueo_{tabla_arq}")
 
-        if st.button("💾 Guardar arqueo", key="btn_guardar_arqueo"):
-            ok_arq = sb_post("arqueos_caja", {
+        if st.button("💾 Guardar arqueo", key=f"btn_guardar_arqueo_{tabla_arq}"):
+            ok_arq = sb_post(tabla_arq, {
                 "fecha": fecha_arq_str, "hora": ahora(), "empleado": empleado_arq,
                 "efectivo_inicial": float(efectivo_inicial_a), "ingresos_dia": float(total_ingresos_a),
                 "egresos_dia": float(total_egresos_a), "efectivo_esperado": float(efectivo_esperado_a),
@@ -4304,7 +4315,7 @@ elif st.session_state.vista == "caja" and st.session_state.es_admin:
         f_ini_ra = col_ra1.date_input("Desde", value=hoy_caja.replace(day=1), key="arq_resumen_ini", format="DD/MM/YYYY")
         f_fin_ra = col_ra2.date_input("Hasta", value=hoy_caja, key="arq_resumen_fin", format="DD/MM/YYYY")
 
-        raw_arq_rango = sb_get("arqueos_caja", f"select=diferencia&fecha=gte.{f_ini_ra}&fecha=lte.{f_fin_ra}") or []
+        raw_arq_rango = sb_get(tabla_arq, f"select=diferencia&fecha=gte.{f_ini_ra}&fecha=lte.{f_fin_ra}") or []
         total_sobra_ra = sum(float(r["diferencia"]) for r in raw_arq_rango if float(r["diferencia"]) > 0)
         total_falta_ra = sum(-float(r["diferencia"]) for r in raw_arq_rango if float(r["diferencia"]) < 0)
         neto_ra = total_sobra_ra - total_falta_ra
@@ -4322,7 +4333,7 @@ elif st.session_state.vista == "caja" and st.session_state.es_admin:
             st.caption("No hay arqueos guardados en ese rango.")
 
         st.markdown('<div class="section-label">Últimos arqueos</div>', unsafe_allow_html=True)
-        raw_hist_arq = sb_get("arqueos_caja", "select=fecha,empleado,efectivo_esperado,efectivo_contado,diferencia&order=fecha.desc&limit=30") or []
+        raw_hist_arq = sb_get(tabla_arq, "select=fecha,empleado,efectivo_esperado,efectivo_contado,diferencia&order=fecha.desc&limit=30") or []
         if raw_hist_arq:
             df_hist_arq = pd.DataFrame([{
                 "Fecha": r["fecha"], "Quién": r.get("empleado") or "—",
