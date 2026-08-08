@@ -2684,19 +2684,37 @@ elif st.session_state.vista == "carro":
                 f'<div class="factura-row"><span>{ICO_CARD} Cobrado en créditos viejos</span><span><b>{fmt(cobro_creditos_carro_hoy)}</b></span></div>'
                 if cobro_creditos_carro_hoy > 0 else ""
             )
+
+            # "Total a entregar" debe ser solo lo físico — lo cobrado por Nequi ya
+            # quedó en la cuenta, no es plata que Edison/Javier tengan en el bolsillo.
+            cobros_carro_dia_ef = calcular_cobros_periodo(fecha_hoy(), fecha_hoy(), solo_efectivo=True)
+            facturas_carro_dia_ef = {fid: f for fid, f in cobros_carro_dia_ef["facturas"].items() if f["canal"] == "Carro"}
+            cobrado_efectivo_carro_dia = (
+                sum(f["abono"] for f in facturas_carro_dia_ef.values())
+                + cobros_carro_dia_ef["cobro_creditos_por_canal"].get("Carro", 0.0)
+            )
+            cobrado_nequi_carro_dia = cobrado_carro_dia - cobrado_efectivo_carro_dia
+            fila_nequi_carro = (
+                f'<div class="factura-row"><span>📱 Nequi (ya en la cuenta)</span><span><b>{fmt(cobrado_nequi_carro_dia)}</b></span></div>'
+                if cobrado_nequi_carro_dia > 0 else ""
+            )
+
             st.markdown('<div class="section-label">Resumen del día — Javier & Edison</div>', unsafe_allow_html=True)
             st.markdown(
                 f'<div class="factura-box">'
                 f'<div class="factura-row"><span>{ICO_CART} Bolsas vendidas hoy</span><span><b>{bolsas_carro_dia}</b></span></div>'
                 f'<div class="factura-row"><span>{ICO_DOLLAR} Cobrado (ventas de hoy)</span><span><b>{fmt(cobrado_ventas_carro_dia)}</b></span></div>'
                 f'{fila_credito_viejo_carro}'
+                f'{fila_nequi_carro}'
                 f'<div class="factura-row"><span>{ICO_CLIPBOARD} Dejado en crédito</span><span><b>{fmt(credito_carro_dia)}</b></span></div>'
-                f'<div class="factura-total"><span>{ICO_DOLLAR} Total a entregar</span><span>{fmt(cobrado_carro_dia)}</span></div>'
+                f'<div class="factura-total"><span>{ICO_DOLLAR} Total a entregar en efectivo</span><span>{fmt(cobrado_efectivo_carro_dia)}</span></div>'
                 f'</div>',
                 unsafe_allow_html=True
             )
             if cobro_creditos_carro_hoy > 0:
-                st.markdown(f'<div class="warn-box">{ICO_CARD} Ojo: de los {fmt(cobrado_carro_dia)} a entregar, <b>{fmt(cobro_creditos_carro_hoy)}</b> son de créditos viejos que cobraron hoy, no de ventas nuevas — no lo olviden.</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="warn-box">{ICO_CARD} Ojo: de lo cobrado hoy, <b>{fmt(cobro_creditos_carro_hoy)}</b> son de créditos viejos que cobraron hoy, no de ventas nuevas — no lo olviden.</div>', unsafe_allow_html=True)
+            if cobrado_nequi_carro_dia > 0:
+                st.markdown(f'<div class="info-box">📱 {fmt(cobrado_nequi_carro_dia)} se cobraron por Nequi — ya están en la cuenta, no hace falta entregarlos en físico.</div>', unsafe_allow_html=True)
 
     with sub6:
         mostrar_creditos_pendientes("Carro")
@@ -2801,6 +2819,21 @@ elif st.session_state.vista == "fabrica":
                 f'<div class="factura-row"><span>{ICO_CARD} Cobrado en créditos viejos</span><span><b>{fmt(cobro_creditos_fab_hoy)}</b></span></div>'
                 if cobro_creditos_fab_hoy > 0 else ""
             )
+
+            # "Total a entregar" debe ser solo lo físico — lo cobrado por Nequi ya
+            # quedó en la cuenta, no es plata que Sofía/Andrea tengan en el cajón.
+            cobros_fab_dia_ef = calcular_cobros_periodo(fecha_hoy(), fecha_hoy(), solo_efectivo=True)
+            facturas_fab_dia_ef = {fid: f for fid, f in cobros_fab_dia_ef["facturas"].items() if f["canal"] in ("Fábrica", "Cambio Fábrica")}
+            cobrado_efectivo_fab_dia = (
+                sum(f["abono"] for f in facturas_fab_dia_ef.values())
+                + cobros_fab_dia_ef["cobro_creditos_por_canal"].get("Fábrica", 0.0)
+            )
+            cobrado_nequi_fab_dia = cobrado_fab_dia - cobrado_efectivo_fab_dia
+            fila_nequi_fab = (
+                f'<div class="factura-row"><span>📱 Nequi (ya en la cuenta)</span><span><b>{fmt(cobrado_nequi_fab_dia)}</b></span></div>'
+                if cobrado_nequi_fab_dia > 0 else ""
+            )
+
             filas_v = "".join(
                 f'<div class="factura-row"><span>{ICO_USER} {v}</span><span><b>{fmt(t)}</b></span></div>'
                 for v, t in por_vendedor.items()
@@ -2811,13 +2844,16 @@ elif st.session_state.vista == "fabrica":
                 f'<div class="factura-row"><span>{ICO_CART} Bolsas vendidas hoy</span><span><b>{bolsas_fab_dia}</b></span></div>'
                 f'<div class="factura-row"><span>{ICO_DOLLAR} Cobrado (ventas de hoy)</span><span><b>{fmt(cobrado_ventas_fab_dia)}</b></span></div>'
                 f'{fila_credito_viejo_fab}'
+                f'{fila_nequi_fab}'
                 f'<div class="factura-row"><span>{ICO_CLIPBOARD} Dejado en crédito</span><span><b>{fmt(credito_fab_dia)}</b></span></div>'
-                f'<div class="factura-total"><span>{ICO_DOLLAR} Total a entregar</span><span>{fmt(cobrado_fab_dia)}</span></div>'
+                f'<div class="factura-total"><span>{ICO_DOLLAR} Total a entregar en efectivo</span><span>{fmt(cobrado_efectivo_fab_dia)}</span></div>'
                 f'</div>',
                 unsafe_allow_html=True
             )
             if cobro_creditos_fab_hoy > 0:
-                st.markdown(f'<div class="warn-box">{ICO_CARD} Ojo: de los {fmt(cobrado_fab_dia)} a entregar, <b>{fmt(cobro_creditos_fab_hoy)}</b> son de créditos viejos que cobraron hoy, no de ventas nuevas — no lo olviden.</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="warn-box">{ICO_CARD} Ojo: de lo cobrado hoy, <b>{fmt(cobro_creditos_fab_hoy)}</b> son de créditos viejos que cobraron hoy, no de ventas nuevas — no lo olviden.</div>', unsafe_allow_html=True)
+            if cobrado_nequi_fab_dia > 0:
+                st.markdown(f'<div class="info-box">📱 {fmt(cobrado_nequi_fab_dia)} se cobraron por Nequi — ya están en la cuenta, no hace falta entregarlos en físico.</div>', unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # VISTA: RESUMEN (solo admin)
@@ -4613,10 +4649,23 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
             # para que el neto de aquí coincida con el "Saldo caja" de allá.
             raw_mp_r = sb_get("materia_prima", f"select=abono&fecha=gte.{f_ini}&fecha=lte.{f_fin}") or []
             raw_eg_r = sb_get("caja_egresos", f"select=valor&fecha=gte.{f_ini}&fecha=lte.{f_fin}") or []
-            raw_ing_man_r = sb_get("caja_ingresos", f"select=valor&fecha=gte.{f_ini}&fecha=lte.{f_fin}") or []
+            raw_ing_man_r = sb_get("caja_ingresos", f"select=valor,medio_pago&fecha=gte.{f_ini}&fecha=lte.{f_fin}") or []
             egresos_r = sum(float(r["abono"]) for r in raw_mp_r) + sum(float(r["valor"]) for r in raw_eg_r)
             ingresos_manuales_r = sum(float(r["valor"]) for r in raw_ing_man_r)
             neto_r = total_cobrado_r + ingresos_manuales_r - egresos_r
+
+            # Desglose Efectivo/Nequi del rango — mismo truco del complemento que
+            # usan Arqueo de caja y Resumen → Hoy.
+            cobros_rango_ef = calcular_cobros_periodo(f_ini, f_fin, solo_efectivo=True)
+            facturas_rango_ef = cobros_rango_ef["facturas"]
+            cobrado_efectivo_r = (
+                sum(f["abono"] for f in facturas_rango_ef.values() if f["canal"] in ("Fábrica", "Carro"))
+                + cobros_rango_ef["cobro_creditos_por_canal"].get("Fábrica", 0.0)
+                + cobros_rango_ef["cobro_creditos_por_canal"].get("Carro", 0.0)
+            )
+            ingresos_man_efectivo_r = sum(float(r["valor"]) for r in raw_ing_man_r if (r.get("medio_pago") or "Efectivo") == "Efectivo")
+            total_efectivo_r = cobrado_efectivo_r + ingresos_man_efectivo_r
+            total_nequi_r = (total_cobrado_r + ingresos_manuales_r) - total_efectivo_r
 
             st.markdown(f"""
             <div class="metric-row">
@@ -4627,10 +4676,15 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
             </div>""", unsafe_allow_html=True)
             st.markdown(f"""
             <div class="metric-row">
+                <div class="metric-box metric-blue"><div class="val">{fmt(total_efectivo_r)}</div><div class="lbl">💵 Efectivo</div></div>
+                <div class="metric-box metric-yellow"><div class="val">{fmt(total_nequi_r)}</div><div class="lbl">📱 Nequi (cuenta bancaria)</div></div>
+            </div>""", unsafe_allow_html=True)
+            st.markdown(f"""
+            <div class="metric-row">
                 <div class="metric-box metric-blue"><div class="val">{bolsas_r}</div><div class="lbl">Bolsas</div></div>
                 <div class="metric-box metric-yellow"><div class="val">{dias_r}</div><div class="lbl">Días</div></div>
             </div>""", unsafe_allow_html=True)
-            st.caption("💰 \"Cobrado\" es el dinero que efectivamente entró. Los créditos sin pagar se muestran aparte.")
+            st.caption("💰 \"Cobrado\" es el dinero que efectivamente entró. Los créditos sin pagar se muestran aparte. Efectivo/Nequi es ese mismo total repartido según cómo se cobró.")
 
             color_neto_r = "metric-green" if neto_r >= 0 else "metric-red"
             st.markdown(f"""
@@ -4759,6 +4813,19 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
             <div class="metric-row">
                 <div class="metric-box metric-green"><div class="val">{fmt(ingresos_totales_mes)}</div><div class="lbl">Ingresos totales (ventas + todo lo cobrado en créditos)</div></div>
             </div>""", unsafe_allow_html=True)
+
+            # Desglose Efectivo/Nequi de "Ingresos totales" — mismo truco del
+            # complemento que usan Arqueo de caja y Resumen → Hoy/Por fechas.
+            cobros_mes_ef = calcular_cobros_periodo(primer_dia, ultimo_dia, solo_efectivo=True)
+            ingresos_ventas_mes_ef = sum(f["abono"] for f in cobros_mes_ef["facturas"].values())
+            total_efectivo_mes = ingresos_ventas_mes_ef + cobros_mes_ef["cobro_creditos_total"]
+            total_nequi_mes = ingresos_totales_mes - total_efectivo_mes
+            st.markdown(f"""
+            <div class="metric-row">
+                <div class="metric-box metric-blue"><div class="val">{fmt(total_efectivo_mes)}</div><div class="lbl">💵 Efectivo</div></div>
+                <div class="metric-box metric-yellow"><div class="val">{fmt(total_nequi_mes)}</div><div class="lbl">📱 Nequi (cuenta bancaria)</div></div>
+            </div>""", unsafe_allow_html=True)
+            st.caption("Reparto de \"Ingresos totales\" según cómo se cobró — no incluye ingresos manuales (dinero existente/aportes).")
 
             color_neto_mes = "metric-green" if neto_mes >= 0 else "metric-red"
             st.markdown(f"""
