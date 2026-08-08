@@ -4501,10 +4501,24 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
             # para que el neto de aquí coincida con el "Saldo caja" de allá.
             raw_mp_hoy = sb_get("materia_prima", f"select=abono&fecha=eq.{fecha_hoy()}") or []
             raw_eg_hoy = sb_get("caja_egresos", f"select=valor&fecha=eq.{fecha_hoy()}") or []
-            raw_ing_man_hoy = sb_get("caja_ingresos", f"select=valor&fecha=eq.{fecha_hoy()}") or []
+            raw_ing_man_hoy = sb_get("caja_ingresos", f"select=valor,medio_pago&fecha=eq.{fecha_hoy()}") or []
             egresos_hoy = sum(float(r["abono"]) for r in raw_mp_hoy) + sum(float(r["valor"]) for r in raw_eg_hoy)
             ingresos_manuales_hoy = sum(float(r["valor"]) for r in raw_ing_man_hoy)
             neto_hoy = total_cobrado_hoy + ingresos_manuales_hoy - egresos_hoy
+
+            # Desglose Efectivo/Nequi: lo cobrado por Nequi entra al banco, no a la
+            # caja física — se saca por complemento (todo − efectivo), mismo truco
+            # que ya usa Arqueo de caja, en vez de otra consulta aparte.
+            cobros_hoy_ef = calcular_cobros_periodo(fecha_hoy(), fecha_hoy(), solo_efectivo=True)
+            facturas_hoy_ef = cobros_hoy_ef["facturas"]
+            cobrado_efectivo_hoy = (
+                sum(f["abono"] for f in facturas_hoy_ef.values() if f["canal"] in ("Fábrica", "Carro"))
+                + cobros_hoy_ef["cobro_creditos_por_canal"].get("Fábrica", 0.0)
+                + cobros_hoy_ef["cobro_creditos_por_canal"].get("Carro", 0.0)
+            )
+            ingresos_man_efectivo_hoy = sum(float(r["valor"]) for r in raw_ing_man_hoy if (r.get("medio_pago") or "Efectivo") == "Efectivo")
+            total_efectivo_hoy = cobrado_efectivo_hoy + ingresos_man_efectivo_hoy
+            total_nequi_hoy = (total_cobrado_hoy + ingresos_manuales_hoy) - total_efectivo_hoy
 
             # Bolsas regaladas hoy, valoradas al precio normal — no mueven caja (total=0
             # en la venta), así que sin esto el costo de lo regalado no se veía en ninguna parte.
@@ -4520,6 +4534,13 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
                 <div class="metric-box metric-red"><div class="val">{fmt(pendiente_hoy)}</div><div class="lbl">Pendiente en créditos</div></div>
             </div>""", unsafe_allow_html=True)
             st.caption("💰 \"Total cobrado\" incluye ventas de hoy y créditos viejos cobrados hoy. Los créditos sin pagar aparecen aparte, en \"Pendiente en créditos\".")
+
+            st.markdown(f"""
+            <div class="metric-row">
+                <div class="metric-box metric-blue"><div class="val">{fmt(total_efectivo_hoy)}</div><div class="lbl">💵 Efectivo</div></div>
+                <div class="metric-box metric-yellow"><div class="val">{fmt(total_nequi_hoy)}</div><div class="lbl">📱 Nequi (cuenta bancaria)</div></div>
+            </div>""", unsafe_allow_html=True)
+            st.caption("Del total cobrado + ingresos manuales de hoy, esto es lo que quedó en efectivo físico vs. lo que entró a la cuenta de Nequi.")
 
             color_neto_hoy = "metric-green" if neto_hoy >= 0 else "metric-red"
             st.markdown(f"""
