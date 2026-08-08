@@ -243,7 +243,7 @@ EMPAQUES_INFO = [
     ("Mega Familiar",      "📦", "kg", "emp"),
     ("Fósforo 70g emp",    "📦", "kg", "emp"),
     ("Fósforo 140g emp",   "📦", "kg", "emp"),
-    ("Funda Endocenar",    "📦", "kg", "emp"),
+    ("Funda Endocenar",    "📦", "unidad", "emp"),
 ]
 EMPAQUES_NOMBRES = [n for n, _, _, _ in EMPAQUES_INFO]
 EMPAQUES_UNIDAD = {n: u for n, _, u, _ in EMPAQUES_INFO}
@@ -1427,6 +1427,27 @@ def agregar_stock(sabor, cantidad):
 def restar_stock(sabor, cantidad):
     _ajustar_stock_cas(sabor, -cantidad)
 
+def _ajustar_funda_endocenar(sabor, delta_cantidad, fecha=None, hora=None, motivo=None):
+    """Los sabores 'de docena' (los que NO están en UNIDADES_POR_BOLSA — BBQ, Limón,
+    Carita Feliz, etc., ver esa constante) consumen 1 Funda Endocenar por cada unidad
+    registrada en Producción — se descuenta sola, sin que nadie tenga que ir a
+    Salida a mano. delta_cantidad positivo = se consumió (producción nueva);
+    negativo = se devuelve (edición a la baja o eliminación de un registro de
+    Producción) — se guarda tal cual en salidas_mp, mismo patrón que las filas de
+    cantidad negativa que ya usa 'ventas' para reversar un Cambio.
+    Sabores que no son de docena (Mega, Megaton, Fósforo, Papa suelta) no la usan.
+    Ojo: "Fósforo 250g" no está en UNIDADES_POR_BOLSA (vacío ya existente en ese
+    dict), por eso FOSFORO_SABORES se excluye aparte — si solo se mirara
+    UNIDADES_POR_BOLSA, ese sabor se habría tratado como "de docena" por error."""
+    if sabor in UNIDADES_POR_BOLSA or sabor in FOSFORO_SABORES or delta_cantidad == 0:
+        return
+    sb_post("salidas_mp", {
+        "fecha": str(fecha) if fecha else fecha_hoy(), "hora": hora or ahora(),
+        "insumo": "Funda Endocenar", "categoria": "emp",
+        "cantidad": float(delta_cantidad), "unidad": "unidad",
+        "motivo": motivo or "Automático — producción",
+    })
+
 def set_stock(sabor, cantidad):
     q = requests.utils.quote(sabor)
     sb_patch("inventario", f"sabor=eq.{q}", {"stock": cantidad})
@@ -2307,6 +2328,7 @@ elif st.session_state.vista == "produccion":
             "empleado": empleado, "sabor": sabor, "cantidad": cantidad
         })
         agregar_stock(sabor, cantidad)
+        _ajustar_funda_endocenar(sabor, cantidad, motivo=f"Producción — {sabor}")
         st.session_state.ok_prod = True
         st.session_state.confirmar_prod = "❌ No confirmado"
 
@@ -2386,6 +2408,8 @@ elif st.session_state.vista == "produccion":
                 if sabor_new != sabor_orig:
                     restar_stock(sabor_orig, cant_orig)
                     agregar_stock(sabor_new, cant_new)
+                    _ajustar_funda_endocenar(sabor_orig, -cant_orig, motivo="Edición de producción (cambio de sabor)")
+                    _ajustar_funda_endocenar(sabor_new, cant_new, motivo="Edición de producción (cambio de sabor)")
                     cambios["sabor"] = sabor_new
                     cambios["cantidad"] = cant_new
                 elif cant_new != cant_orig:
@@ -2394,6 +2418,7 @@ elif st.session_state.vista == "produccion":
                         agregar_stock(sabor_orig, diff)
                     else:
                         restar_stock(sabor_orig, abs(diff))
+                    _ajustar_funda_endocenar(sabor_orig, diff, motivo="Edición de producción (cantidad)")
                     cambios["cantidad"] = cant_new
 
                 if cambios:
@@ -2413,6 +2438,7 @@ elif st.session_state.vista == "produccion":
             reg_del = ids_prod[sel_del]
             sb_delete("produccion", f"id=eq.{reg_del['id']}")
             restar_stock(reg_del["sabor"], reg_del["cantidad"])
+            _ajustar_funda_endocenar(reg_del["sabor"], -reg_del["cantidad"], motivo="Eliminación de producción")
             _registrar_auditoria_stock(
                 "produccion", reg_del["id"], "Eliminar",
                 f"{reg_del['sabor']} — {reg_del['cantidad']} bolsas ({reg_del['fecha']} {reg_del['hora']})",
@@ -3345,9 +3371,28 @@ elif st.session_state.vista == "materia_prima":
             unidades_sal = {n: u for n,_,u,_ in SABORIZANTES_INFO}
             cat_key = "sab"
         else:
-            opciones_sal = [n for n,_,_,_ in EMPAQUES_INFO]
+            # Funda Endocenar no se pesa por rollo — se cuenta por unidad y se
+            # descuenta sola desde Producción (1 por cada docena producida de un
+            # sabor "de docena"), por eso no aparece en este radio de pesaje manual.
+            opciones_sal = [n for n,_,_,_ in EMPAQUES_INFO if n != "Funda Endocenar"]
             unidades_sal = {n: u for n,_,u,_ in EMPAQUES_INFO}
             cat_key = "emp"
+
+            _q_fe = requests.utils.quote("Funda Endocenar")
+            raw_ent_fe = sb_get("materia_prima", f"select=cantidad&insumo=eq.{_q_fe}") or []
+            raw_sal_fe = sb_get("salidas_mp", f"select=cantidad&insumo=eq.{_q_fe}") or []
+            stock_fe = max(0.0, sum(float(r["cantidad"]) for r in raw_ent_fe) - sum(float(r["cantidad"]) for r in raw_sal_fe))
+            with st.expander(f"📦 Funda Endocenar — stock: {stock_fe:.0f} unidades (se descuenta sola desde Producción)"):
+                st.caption("1 unidad por cada docena producida de un sabor \"de docena\" — no hay que registrar su salida acá. Para sumarle stock (comprar más), usa la pestaña Entrada como con cualquier otro insumo.")
+                raw_hist_fe = sb_get("salidas_mp", f"select=fecha,hora,cantidad,motivo&insumo=eq.{_q_fe}&order=fecha.desc,hora.desc&limit=15") or []
+                if raw_hist_fe:
+                    df_hist_fe = pd.DataFrame([{
+                        "Fecha": r["fecha"], "Hora": r.get("hora", ""),
+                        "Unidades": r["cantidad"], "Motivo": r.get("motivo") or "—",
+                    } for r in raw_hist_fe])
+                    tabla_view(df_hist_fe)
+                else:
+                    st.caption("Aún no hay consumo registrado.")
 
         if cat_key == "emp":
             st.caption("Pesa el rollo antes y después de producir. La próxima vez que uses ese mismo rollo, el peso inicial ya viene precargado con el último peso registrado — no hace falta pesarlo de nuevo hasta que se acabe.")
