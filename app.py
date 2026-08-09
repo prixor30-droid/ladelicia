@@ -1,5 +1,6 @@
 import streamlit as st
 import streamlit.components.v1 as components
+from streamlit_cookies_controller import CookieController
 import pandas as pd
 import base64
 import hashlib
@@ -2140,6 +2141,8 @@ for k, v in defaults.items():
 # ══════════════════════════════════════════════════════════════════════════════
 ADMINS = dict(st.secrets["admins"])
 NOMBRES_ADMIN = dict(st.secrets["admin_nombres"])
+PIN_EMPLEADOS_HASH = dict(st.secrets.get("acceso_general", {})).get("pin", "")
+DIEZ_ANIOS_SEG = 10 * 365 * 24 * 60 * 60
 
 def check_login(usuario, pw):
     u = usuario.lower().strip()
@@ -2147,8 +2150,36 @@ def check_login(usuario, pw):
         return hashlib.sha256(pw.encode()).hexdigest() == ADMINS[u]
     return False
 
+def check_pin_empleados(pin):
+    return bool(PIN_EMPLEADOS_HASH) and hashlib.sha256(pin.encode()).hexdigest() == PIN_EMPLEADOS_HASH
+
 if "admin_actual" not in st.session_state:
     st.session_state.admin_actual = None
+if "es_empleado" not in st.session_state:
+    st.session_state.es_empleado = False
+
+# Cookie del navegador (10 años) para no pedir login otra vez cada vez que se
+# abre la app en el mismo celular/tablet — ni para admin ni para el PIN de
+# empleados. Se guarda el HASH (nunca la clave ni el PIN en texto plano).
+#
+# _cookies_ya_cargadas: la PRIMERA vez que corre el script en una sesión nueva,
+# el componente todavía no tuvo tiempo de leer las cookies reales del navegador
+# y devuelve el valor por defecto ({}) — si en ese mismo instante decidiéramos
+# "no hay sesión guardada", SIEMPRE pediría PIN/login aunque la cookie exista.
+# Por eso se guarda esta bandera ANTES de instanciar el controller: si es la
+# primera carga, más abajo se espera un instante (sin mostrar el PIN todavía)
+# a que llegue el valor real, en vez de decidir con el placeholder vacío.
+_cookies_ya_cargadas = "cookies" in st.session_state
+cookies = CookieController()
+if not st.session_state.es_admin:
+    _cookie_admin_user = cookies.get("fabrica_admin_user")
+    _cookie_admin_hash = cookies.get("fabrica_admin_hash")
+    if _cookie_admin_user and _cookie_admin_hash and ADMINS.get(_cookie_admin_user) == _cookie_admin_hash:
+        st.session_state.es_admin = True
+        st.session_state.admin_actual = _cookie_admin_user
+if not st.session_state.es_admin and not st.session_state.es_empleado:
+    if PIN_EMPLEADOS_HASH and cookies.get("fabrica_pin_hash") == PIN_EMPLEADOS_HASH:
+        st.session_state.es_empleado = True
 
 # ══════════════════════════════════════════════════════════════════════════════
 # HEADER — el logo fijo en la esquina sale SIEMPRE, en todas las páginas. El header
@@ -2254,8 +2285,16 @@ if not st.session_state.es_admin:
         p = cp.text_input("Contraseña", type="password", placeholder="Contraseña", key="lp", label_visibility="collapsed")
         if st.button("Entrar", key="btn_login"):
             if check_login(u, p):
+                usuario_login = u.lower().strip()
                 st.session_state.es_admin = True
-                st.session_state.admin_actual = u.lower().strip()
+                st.session_state.admin_actual = usuario_login
+                cookies.set("fabrica_admin_user", usuario_login, max_age=DIEZ_ANIOS_SEG)
+                cookies.set("fabrica_admin_hash", ADMINS[usuario_login], max_age=DIEZ_ANIOS_SEG)
+                # La pausa es necesaria: un st.rerun() pegado al set() corta el mensaje
+                # al componente antes de que el navegador alcance a guardar la cookie de
+                # verdad — sin esto, quedaba "logueado" solo en esta sesión pero al
+                # recargar la página la cookie nunca había llegado a existir.
+                time.sleep(0.4)
                 st.rerun()
             else:
                 st.markdown(f'<div class="alert-low">{ICO_WARN} Usuario o contraseña incorrectos.</div>', unsafe_allow_html=True)
@@ -2266,7 +2305,44 @@ else:
         st.session_state.es_admin = False
         st.session_state.admin_actual = None
         st.session_state.vista = "menu"
+        cookies.remove("fabrica_admin_user")
+        cookies.remove("fabrica_admin_hash")
+        time.sleep(0.4)
         st.rerun()
+
+if st.session_state.es_empleado and not st.session_state.es_admin:
+    st.markdown(f'<div class="info-box">{ICO_CHECK} PIN activo en este dispositivo</div>', unsafe_allow_html=True)
+    if st.button("🔒 Olvidar PIN en este dispositivo", key="btn_logout_pin"):
+        st.session_state.es_empleado = False
+        cookies.remove("fabrica_pin_hash")
+        time.sleep(0.4)
+        st.rerun()
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ACCESO EMPLEADOS — PIN compartido, se pide UNA sola vez apenas se abre la app
+# (no por cada botón/vista) — antes de esto todo estaba abierto sin ningún
+# control. Bloquea absolutamente todo lo de abajo (incluido el menú) hasta que
+# se ingrese el PIN o se entre como admin; usa st.stop() para cortar acá y no
+# tener que meter todo el despachador de vistas de abajo dentro de un if/else
+# gigante.
+# ══════════════════════════════════════════════════════════════════════════════
+if not st.session_state.es_admin and not st.session_state.es_empleado:
+    if not _cookies_ya_cargadas:
+        # Primera carga de esta sesión — todavía no sabemos si ya había una cookie
+        # guardada. Se corta acá sin mostrar el PIN; en cuanto el componente traiga
+        # el valor real del navegador, Streamlit vuelve a correr el script solo.
+        st.stop()
+    st.markdown('<div class="section-label">🔒 Ingresa el PIN para continuar</div>', unsafe_allow_html=True)
+    pin_ingresado = st.text_input("PIN", type="password", key="pin_empleado_input", label_visibility="collapsed", placeholder="PIN")
+    if st.button("Entrar", key="btn_pin_empleado", use_container_width=True):
+        if check_pin_empleados(pin_ingresado):
+            st.session_state.es_empleado = True
+            cookies.set("fabrica_pin_hash", PIN_EMPLEADOS_HASH, max_age=DIEZ_ANIOS_SEG)
+            time.sleep(0.4)
+            st.rerun()
+        else:
+            st.markdown(f'<div class="alert-low">{ICO_WARN} PIN incorrecto.</div>', unsafe_allow_html=True)
+    st.stop()
 
 # ══════════════════════════════════════════════════════════════════════════════
 # NAVEGACIÓN — botón atrás
