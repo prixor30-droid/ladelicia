@@ -3724,9 +3724,22 @@ elif st.session_state.vista == "materia_prima":
             # lista genérica aquí permitía borrar una salida de rollo sin esa reconciliación,
             # dejando un "rollo activo" fantasma con un peso que ya no está respaldado por
             # ningún registro (encontrado 2026-07-20).
-            st.markdown(f'<div class="section-label">🕒 Últimas salidas — {cat_sal}</div>', unsafe_allow_html=True)
-            raw_hist_sal = sb_get("salidas_mp", f"select=*&categoria=eq.{cat_key}&order=fecha.desc,hora.desc&limit=20") or []
+            #
+            # Filtrada por el insumo seleccionado arriba + rango de fechas (antes mostraba
+            # las últimas 20 de TODA la categoría sin fecha, mezclando insumos — nunca iba a
+            # coincidir con el total de Historial, que sí filtra por insumo y fecha. Bug
+            # reportado 2026-08-13.
+            st.markdown(f'<div class="section-label">🕒 Salidas de {insumo_sal}</div>', unsafe_allow_html=True)
+            col_hs1, col_hs2 = st.columns(2)
+            f_ini_hist_sal = col_hs1.date_input("Desde", value=datetime.now(COL_TZ).date().replace(day=1), key=f"f_ini_hist_sal_{cat_key}", format="DD/MM/YYYY")
+            f_fin_hist_sal = col_hs2.date_input("Hasta", value=datetime.now(COL_TZ).date(), key=f"f_fin_hist_sal_{cat_key}", format="DD/MM/YYYY")
+            raw_hist_sal = sb_get(
+                "salidas_mp",
+                f"select=*&insumo=eq.{requests.utils.quote(insumo_sal)}&fecha=gte.{f_ini_hist_sal}&fecha=lte.{f_fin_hist_sal}&order=fecha.desc,hora.desc"
+            ) or []
             if raw_hist_sal:
+                total_hist_sal = sum(float(r["cantidad"]) for r in raw_hist_sal)
+                st.caption(f"Total en el rango: {total_hist_sal:.3f} {unidad_sal}")
                 df_hist_sal = pd.DataFrame([{
                     "Fecha": r["fecha"], "Hora": r.get("hora", ""),
                     "Insumo": r["insumo"],
@@ -3748,7 +3761,7 @@ elif st.session_state.vista == "materia_prima":
                         st.markdown(f'<div class="success-toast">{ICO_CHECK} Salida eliminada — el stock queda disponible de nuevo.</div>', unsafe_allow_html=True)
                         time.sleep(0.3); st.rerun()
             else:
-                st.caption("Aún no hay salidas registradas.")
+                st.caption("No hay salidas de este insumo en ese rango.")
 
     with tab_mp3:
         raw_pend = sb_get("materia_prima", "select=*&estado=eq.pendiente&order=fecha.desc") or []
