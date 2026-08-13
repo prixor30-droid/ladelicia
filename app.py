@@ -240,8 +240,8 @@ EMPAQUES_INFO = [
     ("Almuerzo Pollo emp", "📦", "kg", "emp"),
     ("Almuerzo Picante emp","📦", "kg", "emp"),
     ("Picante emp",        "📦", "kg", "emp"),
-    ("Mega emp",           "📦", "kg", "emp"),
-    ("Mega Familiar",      "📦", "kg", "emp"),
+    ("Mega emp",           "📦", "unidad", "emp"),
+    ("Mega Familiar",      "📦", "unidad", "emp"),
     ("Fósforo 70g emp",    "📦", "kg", "emp"),
     ("Fósforo 140g emp",   "📦", "kg", "emp"),
     ("Funda Endocenar",    "📦", "unidad", "emp"),
@@ -1513,6 +1513,26 @@ def _ajustar_funda_endocenar(sabor, delta_cantidad, fecha=None, hora=None, motiv
         "motivo": motivo or "Automático — producción",
     })
 
+# Mega y Megaton no son "de docena" (1 unidad producida = 1 bolsa, ver
+# UNIDADES_POR_BOLSA) y no usan Funda Endocenar — cada uno tiene su propio
+# empaque, también por unidad, que se descuenta 1 a 1 con lo producido.
+EMPAQUE_AUTOMATICO_POR_SABOR = {"Mega": "Mega emp", "Megaton": "Mega Familiar"}
+
+def _ajustar_empaque_unitario(sabor, delta_cantidad, fecha=None, hora=None, motivo=None):
+    """Mismo patrón que _ajustar_funda_endocenar (ver esa función para el porqué del
+    signo de delta_cantidad y el guardado en salidas_mp) pero para Mega/Megaton: 1
+    unidad de su propio empaque (EMPAQUE_AUTOMATICO_POR_SABOR) por cada unidad
+    producida — sin multiplicador de docena, porque para estos sabores ya es 1:1."""
+    insumo_emp = EMPAQUE_AUTOMATICO_POR_SABOR.get(sabor)
+    if not insumo_emp or delta_cantidad == 0:
+        return
+    sb_post("salidas_mp", {
+        "fecha": str(fecha) if fecha else fecha_hoy(), "hora": hora or ahora(),
+        "insumo": insumo_emp, "categoria": "emp",
+        "cantidad": float(delta_cantidad), "unidad": "unidad",
+        "motivo": motivo or "Automático — producción",
+    })
+
 def set_stock(sabor, cantidad):
     q = requests.utils.quote(sabor)
     sb_patch("inventario", f"sabor=eq.{q}", {"stock": cantidad})
@@ -2469,6 +2489,7 @@ elif st.session_state.vista == "produccion":
         })
         agregar_stock(sabor, cantidad)
         _ajustar_funda_endocenar(sabor, cantidad, motivo=f"Producción — {sabor}")
+        _ajustar_empaque_unitario(sabor, cantidad, motivo=f"Producción — {sabor}")
         st.session_state.ok_prod = True
         st.session_state.confirmar_prod = "❌ No confirmado"
 
@@ -2550,6 +2571,8 @@ elif st.session_state.vista == "produccion":
                     agregar_stock(sabor_new, cant_new)
                     _ajustar_funda_endocenar(sabor_orig, -cant_orig, motivo="Edición de producción (cambio de sabor)")
                     _ajustar_funda_endocenar(sabor_new, cant_new, motivo="Edición de producción (cambio de sabor)")
+                    _ajustar_empaque_unitario(sabor_orig, -cant_orig, motivo="Edición de producción (cambio de sabor)")
+                    _ajustar_empaque_unitario(sabor_new, cant_new, motivo="Edición de producción (cambio de sabor)")
                     cambios["sabor"] = sabor_new
                     cambios["cantidad"] = cant_new
                 elif cant_new != cant_orig:
@@ -2559,6 +2582,7 @@ elif st.session_state.vista == "produccion":
                     else:
                         restar_stock(sabor_orig, abs(diff))
                     _ajustar_funda_endocenar(sabor_orig, diff, motivo="Edición de producción (cantidad)")
+                    _ajustar_empaque_unitario(sabor_orig, diff, motivo="Edición de producción (cantidad)")
                     cambios["cantidad"] = cant_new
 
                 if cambios:
@@ -2579,6 +2603,7 @@ elif st.session_state.vista == "produccion":
             sb_delete("produccion", f"id=eq.{reg_del['id']}")
             restar_stock(reg_del["sabor"], reg_del["cantidad"])
             _ajustar_funda_endocenar(reg_del["sabor"], -reg_del["cantidad"], motivo="Eliminación de producción")
+            _ajustar_empaque_unitario(reg_del["sabor"], -reg_del["cantidad"], motivo="Eliminación de producción")
             _registrar_auditoria_stock(
                 "produccion", reg_del["id"], "Eliminar",
                 f"{reg_del['sabor']} — {reg_del['cantidad']} bolsas ({reg_del['fecha']} {reg_del['hora']})",
@@ -3511,28 +3536,36 @@ elif st.session_state.vista == "materia_prima":
             unidades_sal = {n: u for n,_,u,_ in SABORIZANTES_INFO}
             cat_key = "sab"
         else:
-            # Funda Endocenar no se pesa por rollo — se cuenta por unidad y se
-            # descuenta sola desde Producción (1 por cada docena producida de un
-            # sabor "de docena"), por eso no aparece en este radio de pesaje manual.
-            opciones_sal = [n for n,_,_,_ in EMPAQUES_INFO if n != "Funda Endocenar"]
+            # Empaques que se descuentan solos desde Producción (no se pesan por rollo
+            # ni se registran a mano acá): Funda Endocenar (1 por docena de un sabor
+            # "de docena") y el empaque propio de Mega/Megaton (1 por unidad producida,
+            # ver EMPAQUE_AUTOMATICO_POR_SABOR) — por eso no aparecen en el radio de
+            # pesaje manual de abajo.
+            EMPAQUES_AUTOMATICOS = {
+                "Funda Endocenar": "1 unidad por cada docena producida de un sabor \"de docena\"",
+                "Mega emp": "1 unidad por cada Mega producida",
+                "Mega Familiar": "1 unidad por cada Megaton producida",
+            }
+            opciones_sal = [n for n,_,_,_ in EMPAQUES_INFO if n not in EMPAQUES_AUTOMATICOS]
             unidades_sal = {n: u for n,_,u,_ in EMPAQUES_INFO}
             cat_key = "emp"
 
-            _q_fe = requests.utils.quote("Funda Endocenar")
-            raw_ent_fe = sb_get("materia_prima", f"select=cantidad&insumo=eq.{_q_fe}") or []
-            raw_sal_fe = sb_get("salidas_mp", f"select=cantidad&insumo=eq.{_q_fe}") or []
-            stock_fe = max(0.0, sum(float(r["cantidad"]) for r in raw_ent_fe) - sum(float(r["cantidad"]) for r in raw_sal_fe))
-            with st.expander(f"📦 Funda Endocenar — stock: {stock_fe:.0f} unidades (se descuenta sola desde Producción)"):
-                st.caption("1 unidad por cada docena producida de un sabor \"de docena\" — no hay que registrar su salida acá. Para sumarle stock (comprar más), usa la pestaña Entrada como con cualquier otro insumo.")
-                raw_hist_fe = sb_get("salidas_mp", f"select=fecha,hora,cantidad,motivo&insumo=eq.{_q_fe}&order=fecha.desc,hora.desc&limit=15") or []
-                if raw_hist_fe:
-                    df_hist_fe = pd.DataFrame([{
-                        "Fecha": r["fecha"], "Hora": r.get("hora", ""),
-                        "Unidades": r["cantidad"], "Motivo": r.get("motivo") or "—",
-                    } for r in raw_hist_fe])
-                    tabla_view(df_hist_fe)
-                else:
-                    st.caption("Aún no hay consumo registrado.")
+            for insumo_auto, explicacion_auto in EMPAQUES_AUTOMATICOS.items():
+                _q_auto = requests.utils.quote(insumo_auto)
+                raw_ent_auto = sb_get("materia_prima", f"select=cantidad&insumo=eq.{_q_auto}") or []
+                raw_sal_auto = sb_get("salidas_mp", f"select=cantidad&insumo=eq.{_q_auto}") or []
+                stock_auto = max(0.0, sum(float(r["cantidad"]) for r in raw_ent_auto) - sum(float(r["cantidad"]) for r in raw_sal_auto))
+                with st.expander(f"📦 {insumo_auto} — stock: {stock_auto:.0f} unidades (se descuenta solo desde Producción)"):
+                    st.caption(f"{explicacion_auto} — no hay que registrar su salida acá. Para sumarle stock (comprar más), usa la pestaña Entrada como con cualquier otro insumo.")
+                    raw_hist_auto = sb_get("salidas_mp", f"select=fecha,hora,cantidad,motivo&insumo=eq.{_q_auto}&order=fecha.desc,hora.desc&limit=15") or []
+                    if raw_hist_auto:
+                        df_hist_auto = pd.DataFrame([{
+                            "Fecha": r["fecha"], "Hora": r.get("hora", ""),
+                            "Unidades": r["cantidad"], "Motivo": r.get("motivo") or "—",
+                        } for r in raw_hist_auto])
+                        tabla_view(df_hist_auto)
+                    else:
+                        st.caption("Aún no hay consumo registrado.")
 
         if cat_key == "emp":
             st.caption("Pesa el rollo antes y después de producir. La próxima vez que uses ese mismo rollo, el peso inicial ya viene precargado con el último peso registrado — no hace falta pesarlo de nuevo hasta que se acabe.")
