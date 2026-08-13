@@ -549,6 +549,70 @@ def calcular_cobros_periodo(f_ini, f_fin, solo_efectivo=False):
         "cobro_creditos_total": sum(cobro_creditos_por_canal.values()),
     }
 
+def calcular_egresos_mp_periodo(f_ini, f_fin, solo_efectivo=False):
+    """Plata que salió de caja hacia proveedores de materia prima dentro de
+    [f_ini, f_fin]: el abono inicial de las entradas registradas ese día MÁS
+    los pagos hechos ese día a créditos viejos (que pudieron originarse en
+    cualquier fecha anterior). Mismo patrón que calcular_cobros_periodo (ver
+    esa función) — antes un abono a un crédito de materia prima solo quedaba
+    guardado en el campo 'abono' de la fila original, así que quedaba "pegado"
+    a la fecha de esa entrada en vez de a la fecha real del pago, y por eso no
+    se reflejaba en la Caja del día en que realmente se pagó (bug reportado
+    2026-08-13). Necesita la tabla 'pagos_credito_mp' (ver add_pagos_credito_mp.sql).
+
+    Devuelve:
+      total: $ egresado en el rango
+      detalle: [{"fecha","hora","insumo","proveedor","monto","medio_pago"}, ...]
+    """
+    def _es_efectivo(medio):
+        return (medio or "Efectivo") == "Efectivo"
+
+    raw_mp = sb_get("materia_prima", f"select=id,fecha,hora,insumo,proveedor,abono,medio_pago_abono&fecha=gte.{f_ini}&fecha=lte.{f_fin}") or []
+    raw_pg = sb_get("pagos_credito_mp", "select=fecha,hora,materia_prima_id,insumo,proveedor,monto,medio_pago") or []
+
+    # Cuánto de cada fila ya se pagó DESPUÉS de la entrada original (vía "Pagar" en
+    # créditos pendientes) — se resta del abono actual para no contar ese dinero dos
+    # veces: una en la fecha de la entrada y otra en la fecha real del pago. Se
+    # necesita el histórico completo (sin filtrar por fecha) porque el pago pudo
+    # haber ocurrido antes o después del rango que se está consultando.
+    pagado_despues = {}
+    for r in raw_pg:
+        mid = r.get("materia_prima_id")
+        if mid:
+            pagado_despues[mid] = pagado_despues.get(mid, 0) + float(r["monto"])
+
+    detalle = []
+    for r in raw_mp:
+        abono_bruto = float(r.get("abono", 0) or 0)
+        abono_inicial = max(0.0, abono_bruto - pagado_despues.get(r["id"], 0))
+        if abono_inicial <= 0:
+            continue
+        medio = r.get("medio_pago_abono") or "Efectivo"
+        if solo_efectivo and not _es_efectivo(medio):
+            continue
+        detalle.append({
+            "fecha": r["fecha"], "hora": r.get("hora", ""),
+            "insumo": r["insumo"], "proveedor": r.get("proveedor", ""),
+            "monto": abono_inicial, "medio_pago": medio,
+        })
+
+    f_ini_d = f_ini if isinstance(f_ini, date) else date.fromisoformat(str(f_ini))
+    f_fin_d = f_fin if isinstance(f_fin, date) else date.fromisoformat(str(f_fin))
+    for r in raw_pg:
+        fecha_pg = date.fromisoformat(r["fecha"])
+        if not (f_ini_d <= fecha_pg <= f_fin_d):
+            continue
+        medio = r.get("medio_pago") or "Efectivo"
+        if solo_efectivo and not _es_efectivo(medio):
+            continue
+        detalle.append({
+            "fecha": r["fecha"], "hora": r.get("hora", ""),
+            "insumo": r.get("insumo", ""), "proveedor": r.get("proveedor", ""),
+            "monto": float(r["monto"]), "medio_pago": medio,
+        })
+
+    return {"total": sum(d["monto"] for d in detalle), "detalle": detalle}
+
 def calcular_caja_real_hoy(recibido_fab=False, recibido_carro=False):
     """Cuánta plata física hay HOY en caja. Vive en ➕ Ingreso/Egreso (tab_caja2)
     junto con los radios "¿ya recibiste...?" — antes era una pestaña aparte
@@ -564,10 +628,10 @@ def calcular_caja_real_hoy(recibido_fab=False, recibido_carro=False):
     fecha_cr = fecha_hoy()
     with ThreadPoolExecutor(max_workers=3) as ex:
         f_cobros_cr = ex.submit(calcular_cobros_periodo, fecha_cr, fecha_cr, solo_efectivo=True)
-        f_mp_cr = ex.submit(sb_get, "materia_prima", f"select=abono,medio_pago_abono&fecha=eq.{fecha_cr}")
+        f_mp_cr = ex.submit(calcular_egresos_mp_periodo, fecha_cr, fecha_cr, True)
         f_ing_cr = ex.submit(sb_get, "caja_ingresos", f"select=valor,medio_pago&fecha=eq.{fecha_cr}")
     cobros_cr = f_cobros_cr.result()
-    raw_mp_cr = f_mp_cr.result() or []
+    egresos_mp_cr = f_mp_cr.result()["total"]
     raw_ing_cr = f_ing_cr.result() or []
     raw_eg_cr = sb_get("caja_egresos", f"select=valor,medio_pago&fecha=eq.{fecha_cr}") or []
 
@@ -581,7 +645,7 @@ def calcular_caja_real_hoy(recibido_fab=False, recibido_carro=False):
     )
     ingresos_manuales_cr = sum(float(r["valor"]) for r in raw_ing_cr if (r.get("medio_pago") or "Efectivo") == "Efectivo")
     total_egresos_cr = (
-        sum(float(r["abono"]) for r in raw_mp_cr if (r.get("medio_pago_abono") or "Efectivo") == "Efectivo")
+        egresos_mp_cr
         + sum(float(r["valor"]) for r in raw_eg_cr if (r.get("medio_pago") or "Efectivo") == "Efectivo")
     )
 
@@ -3786,6 +3850,13 @@ elif st.session_state.vista == "materia_prima":
                             "estado": "pagado" if nuevo_saldo == 0 else "pendiente",
                             "medio_pago_abono": medio_pago_mp_val,
                         })
+                        # Con fecha de HOY (no la de la entrada original) — así Caja lo ve
+                        # como egreso del día en que realmente se pagó. Ver calcular_egresos_mp_periodo.
+                        sb_post("pagos_credito_mp", {
+                            "fecha": fecha_hoy(), "hora": ahora(), "materia_prima_id": r["id"],
+                            "insumo": r["insumo"], "proveedor": prov_sel_cred,
+                            "monto": float(pago_r), "medio_pago": medio_pago_mp_val,
+                        })
                         restante -= pago_r
                     time.sleep(0.3); st.rerun()
 
@@ -3942,10 +4013,10 @@ elif st.session_state.vista == "caja" and st.session_state.es_admin:
         # INGRESOS — ventas pagadas (total - saldo = abonado) y cobros de créditos
         with ThreadPoolExecutor(max_workers=3) as ex:
             f_cobros = ex.submit(calcular_cobros_periodo, f_ini_caja, f_fin_caja)
-            f_mp = ex.submit(sb_get, "materia_prima", f"select=fecha,insumo,proveedor,precio_total,abono&fecha=gte.{f_ini_caja}&fecha=lte.{f_fin_caja}&order=fecha.desc")
+            f_mp = ex.submit(calcular_egresos_mp_periodo, f_ini_caja, f_fin_caja)
             f_ing = ex.submit(sb_get, "caja_ingresos", f"select=*&fecha=gte.{f_ini_caja}&fecha=lte.{f_fin_caja}&order=fecha.desc")
         cobros_caja = f_cobros.result()
-        raw_mp_pagos = f_mp.result() or []
+        egresos_mp_dict = f_mp.result()
         raw_egresos = sb_get("caja_egresos", f"select=*&fecha=gte.{f_ini_caja}&fecha=lte.{f_fin_caja}&order=fecha.desc") or []
         raw_ingresos_manuales = f_ing.result() or []
 
@@ -3960,7 +4031,7 @@ elif st.session_state.vista == "caja" and st.session_state.es_admin:
         total_ingresos = ingresos_ventas + ingresos_cobro_creditos + ingresos_manuales
 
         # Egresos: pagos de materia prima + gastos varios
-        egresos_mp = sum(float(r["abono"]) for r in raw_mp_pagos)
+        egresos_mp = egresos_mp_dict["total"]
         egresos_gastos = sum(float(r["valor"]) for r in raw_egresos)
         total_egresos = egresos_mp + egresos_gastos
 
@@ -4266,14 +4337,14 @@ elif st.session_state.vista == "caja" and st.session_state.es_admin:
                 "Ingreso": fmt(r["valor"]), "Egreso": "—"
             })
 
-        # Egresos materia prima
-        raw_mp_h = sb_get("materia_prima", f"select=fecha,hora,insumo,proveedor,abono&fecha=gte.{f_ini_h}&fecha=lte.{f_fin_h}&abono=gt.0&order=fecha.desc") or []
-        for r in raw_mp_h:
+        # Egresos materia prima — abono inicial de entradas nuevas + pagos de créditos
+        # viejos, cada uno en su fecha real (ver calcular_egresos_mp_periodo).
+        for r in calcular_egresos_mp_periodo(f_ini_h, f_fin_h)["detalle"]:
             movimientos.append({
                 "Fecha": r["fecha"], "Hora": r.get("hora",""),
                 "Concepto": f'{r["insumo"]} — {r["proveedor"]}',
                 "Categoría": "Pago MP",
-                "Ingreso": "—", "Egreso": fmt(r["abono"])
+                "Ingreso": "—", "Egreso": fmt(r["monto"])
             })
 
         # Egresos gastos varios
@@ -4375,11 +4446,13 @@ elif st.session_state.vista == "caja" and st.session_state.es_admin:
         with ThreadPoolExecutor(max_workers=3) as ex:
             f_cobros_a = ex.submit(calcular_cobros_periodo, fecha_arq_str, fecha_arq_str, solo_efectivo=True)
             f_cobros_a_todo = ex.submit(calcular_cobros_periodo, fecha_arq_str, fecha_arq_str)
-            f_mp_a = ex.submit(sb_get, "materia_prima", f"select=abono,medio_pago_abono&fecha=eq.{fecha_arq_str}")
+            f_mp_a = ex.submit(calcular_egresos_mp_periodo, fecha_arq_str, fecha_arq_str, True)
+            f_mp_a_todo = ex.submit(calcular_egresos_mp_periodo, fecha_arq_str, fecha_arq_str)
             f_ing_a = ex.submit(sb_get, "caja_ingresos", f"select=valor,medio_pago&fecha=eq.{fecha_arq_str}")
         cobros_a = f_cobros_a.result()
         cobros_a_todo = f_cobros_a_todo.result()
-        raw_mp_a = f_mp_a.result() or []
+        egresos_mp_a_val = f_mp_a.result()["total"]
+        egresos_mp_a_todo_val = f_mp_a_todo.result()["total"]
         raw_ing_a = f_ing_a.result() or []
         raw_eg_a = sb_get("caja_egresos", f"select=valor,medio_pago&fecha=eq.{fecha_arq_str}") or []
 
@@ -4393,7 +4466,7 @@ elif st.session_state.vista == "caja" and st.session_state.es_admin:
         ingresos_manuales_a = sum(float(r["valor"]) for r in raw_ing_a if (r.get("medio_pago") or "Efectivo") == "Efectivo")
         total_ingresos_efectivo_a = ingresos_ventas_a + ingresos_cobro_creditos_a + ingresos_manuales_a
 
-        egresos_mp_a = sum(float(r["abono"]) for r in raw_mp_a if (r.get("medio_pago_abono") or "Efectivo") == "Efectivo")
+        egresos_mp_a = egresos_mp_a_val
         egresos_gastos_a = sum(float(r["valor"]) for r in raw_eg_a if (r.get("medio_pago") or "Efectivo") == "Efectivo")
         total_egresos_efectivo_a = egresos_mp_a + egresos_gastos_a
 
@@ -4405,7 +4478,7 @@ elif st.session_state.vista == "caja" and st.session_state.es_admin:
             - total_ingresos_efectivo_a
         )
         total_egresos_nequi_a = (
-            sum(float(r["abono"]) for r in raw_mp_a) + sum(float(r["valor"]) for r in raw_eg_a) - total_egresos_efectivo_a
+            egresos_mp_a_todo_val + sum(float(r["valor"]) for r in raw_eg_a) - total_egresos_efectivo_a
         )
 
         if es_nequi_arq:
@@ -4656,10 +4729,10 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
 
             # Egresos + ingresos manuales de hoy, mismo criterio que Caja→Resumen,
             # para que el neto de aquí coincida con el "Saldo caja" de allá.
-            raw_mp_hoy = sb_get("materia_prima", f"select=abono&fecha=eq.{fecha_hoy()}") or []
+            egresos_mp_hoy = calcular_egresos_mp_periodo(fecha_hoy(), fecha_hoy())["total"]
             raw_eg_hoy = sb_get("caja_egresos", f"select=valor&fecha=eq.{fecha_hoy()}") or []
             raw_ing_man_hoy = sb_get("caja_ingresos", f"select=valor,medio_pago&fecha=eq.{fecha_hoy()}") or []
-            egresos_hoy = sum(float(r["abono"]) for r in raw_mp_hoy) + sum(float(r["valor"]) for r in raw_eg_hoy)
+            egresos_hoy = egresos_mp_hoy + sum(float(r["valor"]) for r in raw_eg_hoy)
             ingresos_manuales_hoy = sum(float(r["valor"]) for r in raw_ing_man_hoy)
             neto_hoy = total_cobrado_hoy + ingresos_manuales_hoy - egresos_hoy
 
@@ -4768,10 +4841,10 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
 
             # Egresos + ingresos manuales del rango, mismo criterio que Caja→Resumen,
             # para que el neto de aquí coincida con el "Saldo caja" de allá.
-            raw_mp_r = sb_get("materia_prima", f"select=abono&fecha=gte.{f_ini}&fecha=lte.{f_fin}") or []
+            egresos_mp_r = calcular_egresos_mp_periodo(f_ini, f_fin)["total"]
             raw_eg_r = sb_get("caja_egresos", f"select=valor&fecha=gte.{f_ini}&fecha=lte.{f_fin}") or []
             raw_ing_man_r = sb_get("caja_ingresos", f"select=valor,medio_pago&fecha=gte.{f_ini}&fecha=lte.{f_fin}") or []
-            egresos_r = sum(float(r["abono"]) for r in raw_mp_r) + sum(float(r["valor"]) for r in raw_eg_r)
+            egresos_r = egresos_mp_r + sum(float(r["valor"]) for r in raw_eg_r)
             ingresos_manuales_r = sum(float(r["valor"]) for r in raw_ing_man_r)
             neto_r = total_cobrado_r + ingresos_manuales_r - egresos_r
 
@@ -4907,10 +4980,10 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
             # para que el neto de aquí coincida con el "Saldo caja" de allá — por eso
             # usa cobro_creditos_mes completo (todo crédito cobrado, cualquier origen),
             # no el total_cobrado_mes recortado que se muestra arriba para la contadora.
-            raw_mp_mes = sb_get("materia_prima", f"select=abono&fecha=gte.{primer_dia}&fecha=lte.{ultimo_dia}") or []
+            egresos_mp_mes = calcular_egresos_mp_periodo(primer_dia, ultimo_dia)["total"]
             raw_eg_mes = sb_get("caja_egresos", f"select=valor&fecha=gte.{primer_dia}&fecha=lte.{ultimo_dia}") or []
             raw_ing_man_mes = sb_get("caja_ingresos", f"select=valor&fecha=gte.{primer_dia}&fecha=lte.{ultimo_dia}") or []
-            egresos_mes = sum(float(r["abono"]) for r in raw_mp_mes) + sum(float(r["valor"]) for r in raw_eg_mes)
+            egresos_mes = egresos_mp_mes + sum(float(r["valor"]) for r in raw_eg_mes)
             ingresos_manuales_mes = sum(float(r["valor"]) for r in raw_ing_man_mes)
             neto_mes = ingresos_ventas_mes + cobro_creditos_mes + ingresos_manuales_mes - egresos_mes
 
@@ -5974,13 +6047,14 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
         raw_egresos_clas = sb_get(
             "caja_egresos", f"select=categoria,tipo,valor&fecha=gte.{primer_dia_egr}&fecha=lte.{ultimo_dia_egr}"
         ) or []
-        raw_mp_clas = sb_get(
-            "materia_prima", f"select=insumo,abono&fecha=gte.{primer_dia_egr}&fecha=lte.{ultimo_dia_egr}&abono=gt.0"
-        ) or []
+        # Egresos reales de materia prima en el rango — abono inicial de entradas
+        # nuevas + pagos de créditos viejos, cada uno en su fecha real de pago
+        # (ver calcular_egresos_mp_periodo).
+        raw_mp_clas = calcular_egresos_mp_periodo(primer_dia_egr, ultimo_dia_egr)["detalle"]
 
         mp_insumos_total = mp_sab_total = mp_emp_total = 0.0
         for r in raw_mp_clas:
-            ab = float(r.get("abono", 0) or 0)
+            ab = float(r.get("monto", 0) or 0)
             ins = r.get("insumo")
             if ins in INSUMOS_NOMBRES:
                 mp_insumos_total += ab
