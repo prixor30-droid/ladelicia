@@ -708,12 +708,25 @@ def calcular_flujo_caja_diario(f_ini, f_fin):
     }).set_index("Fecha")
 
 def obtener_mermas_periodo(f_ini, f_fin):
-    """Mermas/desperdicio registradas entre f_ini y f_fin (tabla 'mermas', ver
-    add_mermas.sql), separadas por tipo."""
-    raw = sb_get("mermas", f"select=*&fecha=gte.{f_ini}&fecha=lte.{f_fin}&order=fecha.desc") or []
+    """Mermas/desperdicio registradas entre f_ini y f_fin, de las DOS tablas que
+    existen para esto — 'mermas_stock' (producto terminado, ya existía desde antes:
+    Producción → 🗑️ Registrar producto dañado) y 'mermas_mp' (insumos, ver
+    add_mermas.sql) — normalizadas a la misma forma de fila para que el resto del
+    código (Panel, historial) no tenga que distinguir de dónde vino cada una.
+    """
+    raw_pt = sb_get("mermas_stock", f"select=*&fecha=gte.{f_ini}&fecha=lte.{f_fin}&order=fecha.desc") or []
+    raw_mp = sb_get("mermas_mp",    f"select=*&fecha=gte.{f_ini}&fecha=lte.{f_fin}&order=fecha.desc") or []
     return {
-        "producto_terminado": [r for r in raw if r["tipo"] == "producto_terminado"],
-        "materia_prima": [r for r in raw if r["tipo"] == "materia_prima"],
+        "producto_terminado": [{
+            "fecha": r["fecha"], "hora": r.get("hora", ""), "item": r["sabor"],
+            "cantidad": r["cantidad"], "unidad": "bolsa",
+            "motivo": r.get("motivo"), "quien": r.get("usuario"),
+        } for r in raw_pt],
+        "materia_prima": [{
+            "fecha": r["fecha"], "hora": r.get("hora", ""), "item": r["insumo"],
+            "cantidad": r["cantidad"], "unidad": r.get("unidad", ""),
+            "motivo": r.get("motivo"), "quien": None,
+        } for r in raw_mp],
     }
 
 def calcular_caja_real_hoy(recibido_fab=False, recibido_carro=False):
@@ -2648,24 +2661,6 @@ elif st.session_state.vista == "produccion":
         st.markdown(f'<div class="success-toast">{ICO_CHECK} ¡Producción registrada!</div>', unsafe_allow_html=True)
         st.session_state.ok_prod = False
 
-    # ── Merma/desperdicio de producto terminado (bolsas dañadas o perdidas) ──
-    with st.expander("⚠️ Registrar merma o desperdicio"):
-        st.caption("Bolsas ya producidas que se dañaron o se perdieron — descuenta del inventario, no de la caja.")
-        col_mp1, col_mp2 = st.columns(2)
-        sabor_merma = col_mp1.selectbox("Sabor", SABORES_LISTA, key="sabor_merma_pt")
-        cantidad_merma = col_mp2.number_input("Bolsas", min_value=1, step=1, key="cantidad_merma_pt")
-        motivo_merma = st.text_input("Motivo", key="motivo_merma_pt", placeholder="Ej: se rompió la funda, se mojaron, etc.")
-        if st.button("💾 Registrar merma", key="btn_merma_pt"):
-            restar_stock(sabor_merma, cantidad_merma)
-            sb_post("mermas", {
-                "fecha": fecha_hoy(), "hora": ahora(), "tipo": "producto_terminado",
-                "item": sabor_merma, "cantidad": float(cantidad_merma), "unidad": "bolsa",
-                "motivo": motivo_merma.strip() or None, "empleado": empleado,
-            })
-            st.markdown(f'<div class="success-toast">{ICO_CHECK} Merma registrada.</div>', unsafe_allow_html=True)
-            time.sleep(0.3)
-            st.rerun()
-
     # Producción de un día — selector de fecha + tabla totalmente editable
     st.markdown('<div class="section-label">Consultar producción</div>', unsafe_allow_html=True)
     fecha_consulta = st.date_input(
@@ -2832,6 +2827,22 @@ elif st.session_state.vista == "produccion":
 # lógica de negocio, solo las agrega). Pedido 2026-08-13.
 # ══════════════════════════════════════════════════════════════════════════════
 elif st.session_state.vista == "panel" and st.session_state.es_admin:
+    # Tarjetas con borde propio para las gráficas — solo para esta vista (mismo
+    # truco que el tema verde de Contador: el <style> se inyecta únicamente cuando
+    # se está renderizando Panel). El fondo con el logo se deja igual que en el
+    # resto de la app — al usuario le gusta tal cual está.
+    st.markdown("""
+    <style>
+    [data-testid="stVerticalBlockBorderWrapper"]{
+        background:#FFFFFF !important;border-radius:16px !important;
+        border:1px solid rgba(21,101,192,0.08) !important;
+        box-shadow:0 3px 16px rgba(21,101,192,0.10) !important;
+        padding:6px 6px 2px !important;
+    }
+    .metric-box{box-shadow:0 3px 14px rgba(21,101,192,0.14) !important;}
+    </style>
+    """, unsafe_allow_html=True)
+
     st.markdown(f'<div class="section-label">{ICO_CARD} Resumen del negocio — hoy {fecha_hoy()}</div>', unsafe_allow_html=True)
 
     @st.cache_data(ttl=60)
@@ -2878,11 +2889,13 @@ elif st.session_state.vista == "panel" and st.session_state.es_admin:
     _mermas_p = obtener_mermas_periodo(_primer_dia_mes_p, fecha_hoy())
     _n_mermas_p = len(_mermas_p["producto_terminado"]) + len(_mermas_p["materia_prima"])
 
+    _neto_hoy_p = _ingresos_hoy_p - _egresos_hoy_p
+    _clase_neto_p = "metric-green" if _neto_hoy_p >= 0 else "metric-red"
     st.markdown(f"""
     <div class="metric-row">
         <div class="metric-box metric-green"><div class="val">{fmt(_ingresos_hoy_p)}</div><div class="lbl">Ingresos hoy</div></div>
         <div class="metric-box metric-red"><div class="val">{fmt(_egresos_hoy_p)}</div><div class="lbl">Egresos hoy</div></div>
-        <div class="metric-box metric-blue"><div class="val">{total_prod}</div><div class="lbl">Producidas hoy</div></div>
+        <div class="metric-box {_clase_neto_p}"><div class="val">{fmt(_neto_hoy_p)}</div><div class="lbl">Neto hoy</div></div>
     </div>
     """, unsafe_allow_html=True)
     st.markdown(f"""
@@ -2905,22 +2918,24 @@ elif st.session_state.vista == "panel" and st.session_state.es_admin:
     st.markdown('<div class="section-label">📈 Caja — últimos 30 días</div>', unsafe_allow_html=True)
     _hace_30_p = (datetime.now(COL_TZ).date() - timedelta(days=29)).isoformat()
     _df_flujo_p = calcular_flujo_caja_diario(_hace_30_p, fecha_hoy())
-    st.line_chart(_df_flujo_p, color=["#2e7d32", "#c62828"])
+    with st.container(border=True):
+        st.line_chart(_df_flujo_p, color=["#1B9E5A", "#D32F2F"], height=280)
 
     st.markdown('<div class="section-label">🏭 Producción — últimos 30 días</div>', unsafe_allow_html=True)
     raw_prod_p = sb_get("produccion", f"select=fecha,sabor,cantidad&fecha=gte.{_hace_30_p}&fecha=lte.{fecha_hoy()}") or []
     if raw_prod_p:
         df_prod_p = pd.DataFrame(raw_prod_p)
-        col_pg1, col_pg2 = st.columns(2)
-        with col_pg1:
-            st.caption("Total por día")
-            serie_dia_p = df_prod_p.groupby("fecha")["cantidad"].sum()
-            serie_dia_p.index = pd.to_datetime(serie_dia_p.index)
-            st.bar_chart(serie_dia_p)
-        with col_pg2:
-            st.caption("Total por sabor")
-            serie_sabor_p = df_prod_p.groupby("sabor")["cantidad"].sum().sort_values(ascending=False)
-            st.bar_chart(serie_sabor_p)
+        with st.container(border=True):
+            col_pg1, col_pg2 = st.columns(2)
+            with col_pg1:
+                st.caption("Total por día")
+                serie_dia_p = df_prod_p.groupby("fecha")["cantidad"].sum()
+                serie_dia_p.index = pd.to_datetime(serie_dia_p.index)
+                st.bar_chart(serie_dia_p, color="#1565C0", height=280)
+            with col_pg2:
+                st.caption("Total por sabor")
+                serie_sabor_p = df_prod_p.groupby("sabor")["cantidad"].sum().sort_values(ascending=False)
+                st.bar_chart(serie_sabor_p, color="#1565C0", height=280)
     else:
         st.info("No hay producción registrada en los últimos 30 días.")
 
@@ -3804,9 +3819,9 @@ elif st.session_state.vista == "materia_prima":
                     "categoria": _cat_merma_map[insumo_merma], "cantidad": float(cant_merma),
                     "unidad": unidad_merma, "motivo": f"Merma/Desperdicio — {motivo_merma_mp.strip()}" if motivo_merma_mp.strip() else "Merma/Desperdicio",
                 })
-                sb_post("mermas", {
-                    "fecha": fecha_hoy(), "hora": ahora(), "tipo": "materia_prima",
-                    "item": insumo_merma, "cantidad": float(cant_merma), "unidad": unidad_merma,
+                sb_post("mermas_mp", {
+                    "fecha": fecha_hoy(), "hora": ahora(),
+                    "insumo": insumo_merma, "cantidad": float(cant_merma), "unidad": unidad_merma,
                     "motivo": motivo_merma_mp.strip() or None,
                 })
                 st.markdown(f'<div class="success-toast">{ICO_CHECK} Merma registrada.</div>', unsafe_allow_html=True)
@@ -4280,13 +4295,15 @@ elif st.session_state.vista == "materia_prima":
             f_ini_hm = col_hm1.date_input("Desde", value=datetime.now(COL_TZ).date().replace(day=1), key="f_ini_hist_merma", format="DD/MM/YYYY")
             f_fin_hm = col_hm2.date_input("Hasta", value=datetime.now(COL_TZ).date(), key="f_fin_hist_merma", format="DD/MM/YYYY")
             _mermas_hm = obtener_mermas_periodo(str(f_ini_hm), str(f_fin_hm))
-            _todas_mermas_hm = _mermas_hm["producto_terminado"] + _mermas_hm["materia_prima"]
+            _todas_mermas_hm = (
+                [dict(r, tipo="Producto terminado") for r in _mermas_hm["producto_terminado"]]
+                + [dict(r, tipo="Materia prima") for r in _mermas_hm["materia_prima"]]
+            )
             if _todas_mermas_hm:
                 df_mermas_hm = pd.DataFrame([{
-                    "Fecha": r["fecha"], "Hora": r.get("hora", ""),
-                    "Tipo": "Producto terminado" if r["tipo"] == "producto_terminado" else "Materia prima",
+                    "Fecha": r["fecha"], "Hora": r.get("hora", ""), "Tipo": r["tipo"],
                     "Item": r["item"], "Cantidad": f'{float(r["cantidad"]):.3f} {r.get("unidad","")}',
-                    "Motivo": r.get("motivo") or "—", "Empleado": r.get("empleado") or "—",
+                    "Motivo": r.get("motivo") or "—", "Quién": r.get("quien") or "—",
                 } for r in sorted(_todas_mermas_hm, key=lambda r: (r["fecha"], r.get("hora","")), reverse=True)])
                 tabla_view(df_mermas_hm)
             else:
