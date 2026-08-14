@@ -613,6 +613,109 @@ def calcular_egresos_mp_periodo(f_ini, f_fin, solo_efectivo=False):
 
     return {"total": sum(d["monto"] for d in detalle), "detalle": detalle}
 
+# ══════════════════════════════════════════════════════════════════════════════
+# STOCK Y CONSUMO DE INSUMOS — motor compartido por las alertas de stock bajo
+# y la previsión de compra (Materia Prima → Historial). Bug/feature pedido 2026-08-13.
+# ══════════════════════════════════════════════════════════════════════════════
+DIAS_CONSUMO_PROMEDIO   = 14  # ventana para calcular el ritmo de consumo diario reciente
+DIAS_COBERTURA_MINIMA   = 5   # alerta cuando el stock alcance para menos de estos días
+DIAS_COBERTURA_OBJETIVO = 15  # previsión de compra: sugiere reponer hasta cubrir estos días
+DIAS_CREDITO_VENCIDO    = 15  # créditos (proveedores y clientes) sin abono en más de estos días
+
+@st.cache_data(ttl=60)
+def calcular_stock_y_consumo_insumos():
+    """Stock actual (todo el histórico de materia_prima/salidas_mp) y ritmo de consumo
+    diario reciente (últimos DIAS_CONSUMO_PROMEDIO días) de cada insumo — materia prima,
+    saborizantes y empaque juntos, sin distinguir categoría.
+
+    cobertura_dias = para cuántos días alcanza el stock actual al ritmo de consumo
+    reciente. None cuando no hubo consumo en la ventana (no se puede estimar; evita
+    falsos positivos en insumos que casi no se usan).
+    """
+    raw_ent = sb_get("materia_prima", "select=insumo,cantidad,unidad") or []
+    raw_sal = sb_get("salidas_mp", "select=insumo,cantidad,fecha,unidad") or []
+
+    stock, unidad_map = {}, {}
+    for r in raw_ent:
+        stock[r["insumo"]] = stock.get(r["insumo"], 0) + float(r["cantidad"])
+        unidad_map[r["insumo"]] = r.get("unidad", "")
+
+    fecha_corte = (datetime.now(COL_TZ).date() - timedelta(days=DIAS_CONSUMO_PROMEDIO)).isoformat()
+    consumo_reciente = {}
+    for r in raw_sal:
+        insumo = r["insumo"]
+        stock[insumo] = stock.get(insumo, 0) - float(r["cantidad"])
+        unidad_map.setdefault(insumo, r.get("unidad", ""))
+        if r["fecha"] >= fecha_corte:
+            consumo_reciente[insumo] = consumo_reciente.get(insumo, 0) + float(r["cantidad"])
+
+    resultado = {}
+    for insumo, stk in stock.items():
+        stk = max(0.0, stk)
+        consumo_diario = consumo_reciente.get(insumo, 0) / DIAS_CONSUMO_PROMEDIO
+        cobertura = (stk / consumo_diario) if consumo_diario > 0 else None
+        resultado[insumo] = {
+            "stock": stk, "unidad": unidad_map.get(insumo, ""),
+            "consumo_diario": consumo_diario, "cobertura_dias": cobertura,
+        }
+    return resultado
+
+@st.cache_data(ttl=120)
+def calcular_flujo_caja_diario(f_ini, f_fin):
+    """Ingresos y egresos por día en [f_ini, f_fin], para la gráfica de tendencia del
+    Panel. Mismo criterio de "fecha real del pago" que calcular_cobros_periodo y
+    calcular_egresos_mp_periodo (ver esas funciones), pero agrupado por día en vez
+    de devolver un solo total del rango."""
+    f_ini_d = f_ini if isinstance(f_ini, date) else date.fromisoformat(str(f_ini))
+    f_fin_d = f_fin if isinstance(f_fin, date) else date.fromisoformat(str(f_fin))
+    ingresos_dia, egresos_dia = {}, {}
+
+    raw_ventas = sb_get("ventas", f"select=factura_id,fecha,abono&fecha=gte.{f_ini}&fecha=lte.{f_fin}&order=id.asc") or []
+    raw_pg_v = sb_get("pagos_credito", "select=fecha,monto,tipo,factura_id") or []
+    cobrado_despues = {}
+    for r in raw_pg_v:
+        if r.get("tipo") == "venta" and r.get("factura_id"):
+            cobrado_despues[r["factura_id"]] = cobrado_despues.get(r["factura_id"], 0) + float(r["monto"])
+    vistos_fact = set()
+    for r in raw_ventas:
+        fid = r.get("factura_id", "")
+        if not fid or fid in vistos_fact:
+            continue
+        vistos_fact.add(fid)
+        abono_inicial = max(0.0, float(r.get("abono", 0) or 0) - cobrado_despues.get(fid, 0))
+        if abono_inicial > 0:
+            ingresos_dia[r["fecha"]] = ingresos_dia.get(r["fecha"], 0) + abono_inicial
+    for r in raw_pg_v:
+        if f_ini_d <= date.fromisoformat(r["fecha"]) <= f_fin_d:
+            ingresos_dia[r["fecha"]] = ingresos_dia.get(r["fecha"], 0) + float(r["monto"])
+
+    raw_ing = sb_get("caja_ingresos", f"select=fecha,valor&fecha=gte.{f_ini}&fecha=lte.{f_fin}") or []
+    for r in raw_ing:
+        ingresos_dia[r["fecha"]] = ingresos_dia.get(r["fecha"], 0) + float(r["valor"])
+
+    for r in calcular_egresos_mp_periodo(f_ini, f_fin)["detalle"]:
+        egresos_dia[r["fecha"]] = egresos_dia.get(r["fecha"], 0) + r["monto"]
+
+    raw_eg = sb_get("caja_egresos", f"select=fecha,valor&fecha=gte.{f_ini}&fecha=lte.{f_fin}") or []
+    for r in raw_eg:
+        egresos_dia[r["fecha"]] = egresos_dia.get(r["fecha"], 0) + float(r["valor"])
+
+    dias = [(f_ini_d + timedelta(days=i)).isoformat() for i in range((f_fin_d - f_ini_d).days + 1)]
+    return pd.DataFrame({
+        "Fecha": pd.to_datetime(dias),
+        "Ingresos": [ingresos_dia.get(d, 0.0) for d in dias],
+        "Egresos": [egresos_dia.get(d, 0.0) for d in dias],
+    }).set_index("Fecha")
+
+def obtener_mermas_periodo(f_ini, f_fin):
+    """Mermas/desperdicio registradas entre f_ini y f_fin (tabla 'mermas', ver
+    add_mermas.sql), separadas por tipo."""
+    raw = sb_get("mermas", f"select=*&fecha=gte.{f_ini}&fecha=lte.{f_fin}&order=fecha.desc") or []
+    return {
+        "producto_terminado": [r for r in raw if r["tipo"] == "producto_terminado"],
+        "materia_prima": [r for r in raw if r["tipo"] == "materia_prima"],
+    }
+
 def calcular_caja_real_hoy(recibido_fab=False, recibido_carro=False):
     """Cuánta plata física hay HOY en caja. Vive en ➕ Ingreso/Egreso (tab_caja2)
     junto con los radios "¿ya recibiste...?" — antes era una pestaña aparte
@@ -689,7 +792,7 @@ def mostrar_creditos_pendientes(canal):
 
     # Agrupar por factura para no repetir (cada fila es un producto de la factura,
     # por eso el total hay que sumarlo entre todas las filas de la misma factura_id)
-    raw = sb_get("ventas", f"select=factura_id,cliente,vendedor,total,abono,saldo&fecha=gte.2024-01-01&canal=eq.{requests.utils.quote(canal)}&saldo=gt.0")
+    raw = sb_get("ventas", f"select=factura_id,fecha,cliente,vendedor,total,abono,saldo&fecha=gte.2024-01-01&canal=eq.{requests.utils.quote(canal)}&saldo=gt.0")
     facturas = {}
     for r in (raw or []):
         fid = r["factura_id"]
@@ -697,19 +800,20 @@ def mostrar_creditos_pendientes(canal):
             continue
         if f"V-{fid}" not in facturas:
             facturas[f"V-{fid}"] = {
-                "cliente": r["cliente"], "vendedor": r["vendedor"],
+                "cliente": r["cliente"], "vendedor": r["vendedor"], "fecha": r["fecha"],
                 "saldo": float(r["saldo"]), "total": 0.0, "abono": float(r["abono"]),
                 "tipo": "venta", "ref": fid, "etiqueta": f"FV-{fid}",
             }
         facturas[f"V-{fid}"]["total"] += float(r["total"])
+        facturas[f"V-{fid}"]["fecha"] = min(facturas[f"V-{fid}"]["fecha"], r["fecha"])
 
     # Créditos antiguos cargados manualmente (tabla 'creditos', sin desglose de productos)
-    raw_m = sb_get("creditos", f"select=id,cliente,vendedor,total,pagado&canal=eq.{requests.utils.quote(canal)}&estado=eq.pendiente")
+    raw_m = sb_get("creditos", f"select=id,fecha,cliente,vendedor,total,pagado&canal=eq.{requests.utils.quote(canal)}&estado=eq.pendiente")
     for r in (raw_m or []):
         total_m = float(r["total"])
         pagado_m = float(r["pagado"] or 0)
         facturas[f"M-{r['id']}"] = {
-            "cliente": r["cliente"], "vendedor": r["vendedor"],
+            "cliente": r["cliente"], "vendedor": r["vendedor"], "fecha": r["fecha"],
             "saldo": max(0.0, total_m - pagado_m), "total": total_m, "abono": pagado_m,
             "tipo": "manual", "ref": r["id"], "etiqueta": "Crédito antiguo",
         }
@@ -717,7 +821,22 @@ def mostrar_creditos_pendientes(canal):
     facturas = {k: d for k, d in facturas.items() if d["saldo"] > 0}
     if not facturas:
         return
+
+    hoy_dt = datetime.now(COL_TZ).date()
+    for d in facturas.values():
+        d["dias"] = (hoy_dt - date.fromisoformat(d["fecha"])).days
+        d["vencido"] = d["dias"] >= DIAS_CREDITO_VENCIDO
+    facturas = dict(sorted(facturas.items(), key=lambda kv: kv[1]["dias"], reverse=True))
+
+    n_vencidos = sum(1 for d in facturas.values() if d["vencido"])
     st.markdown(f'<div class="section-label">{ICO_CARD} Créditos pendientes de cobro</div>', unsafe_allow_html=True)
+    if n_vencidos:
+        total_vencido = sum(d["saldo"] for d in facturas.values() if d["vencido"])
+        st.markdown(
+            f'<div class="alert-low">{ICO_WARN} <b>{n_vencidos} crédito(s) vencido(s)</b> '
+            f'(más de {DIAS_CREDITO_VENCIDO} días sin abono) por <b>{fmt(total_vencido)}</b></div>',
+            unsafe_allow_html=True
+        )
     busqueda = st.text_input("🔍 Buscar por cliente", key=f"buscar_credito_{canal}", placeholder="Ej: Don Carlos")
     if busqueda.strip():
         facturas = {k: d for k, d in facturas.items() if _coincide_nombre(busqueda, d["cliente"])}
@@ -726,9 +845,11 @@ def mostrar_creditos_pendientes(canal):
     contenedor_creditos = st.container(height=820) if len(facturas) > 5 else st.container()
     for key, datos in facturas.items():
         saldo = datos["saldo"]
+        clase_box = "alert-low" if datos["vencido"] else "warn-box"
+        etiqueta_venc = f' · {ICO_DOT_RED} <b>Vencido</b> ({datos["dias"]}d)' if datos["vencido"] else f' · {datos["dias"]}d'
         contenedor_creditos.markdown(
-            f'<div class="warn-box">'
-            f'<b>{datos["cliente"]}</b> · {datos["etiqueta"]}<br>'
+            f'<div class="{clase_box}">'
+            f'<b>{datos["cliente"]}</b> · {datos["etiqueta"]}{etiqueta_venc}<br>'
             f'Total: {fmt(datos["total"])} · Abonado: {fmt(datos["abono"])} · '
             f'<b>Debe: {fmt(saldo)}</b>'
             f'</div>',
@@ -2286,7 +2407,7 @@ st.markdown(f"""
 TITULOS_VISTA = {
     "produccion": "Producción", "carro": "Carro", "fabrica": "Fábrica",
     "materia_prima": "Materia Prima", "caja": "Caja", "resumen": "Resumen",
-    "nomina": "Nómina", "contador": "Contador", "recibo": "Recibo",
+    "nomina": "Nómina", "contador": "Contador", "recibo": "Recibo", "panel": "Panel",
 }
 _titulo_vista_actual = TITULOS_VISTA.get(st.session_state.vista)
 if _titulo_vista_actual:
@@ -2356,6 +2477,25 @@ if raw_inv_global:
         extra_bj = f" y {len(bajos_global)-6} más" if len(bajos_global) > 6 else ""
         st.markdown(
             f'<div class="warn-box">{ICO_WARN} <b>Stock bajo:</b> {nombres_bj}{extra_bj}</div>',
+            unsafe_allow_html=True
+        )
+
+# Insumos (materia prima/saborizantes/empaque) a los que el stock actual les alcanza
+# para menos de DIAS_COBERTURA_MINIMA días al ritmo de consumo reciente — solo admin,
+# es un tema de compras, no algo que un empleado necesite ver en cada pantalla.
+if st.session_state.es_admin:
+    _stock_insumos_global = calcular_stock_y_consumo_insumos()
+    _insumos_bajos_global = sorted(
+        [(k, v) for k, v in _stock_insumos_global.items()
+         if v["cobertura_dias"] is not None and v["cobertura_dias"] < DIAS_COBERTURA_MINIMA],
+        key=lambda kv: kv[1]["cobertura_dias"]
+    )
+    if _insumos_bajos_global:
+        nombres_ib = ", ".join(f"{k} ({v['cobertura_dias']:.0f}d)" for k, v in _insumos_bajos_global[:6])
+        extra_ib = f" y {len(_insumos_bajos_global)-6} más" if len(_insumos_bajos_global) > 6 else ""
+        st.markdown(
+            f'<div class="warn-box">{ICO_WARN} <b>Insumos por agotarse:</b> {nombres_ib}{extra_ib} '
+            f'— ver Materia Prima → Historial → Previsión de compra.</div>',
             unsafe_allow_html=True
         )
 
@@ -2457,6 +2597,7 @@ if st.session_state.vista == "menu":
         ("materia_prima", "Materia Prima",    "Insumos y proveedores"),
     ]
     if st.session_state.es_admin:
+        opciones.append(("panel", "Panel", "Resumen general del negocio"))
         opciones.append(("caja", "Caja", "Ingresos y egresos"))
         opciones.append(("resumen", "Resumen", "Ventas, facturas y exportar"))
         opciones.append(("nomina", "Nómina", "Pagos quincenales y bonos"))
@@ -2506,6 +2647,24 @@ elif st.session_state.vista == "produccion":
     if st.session_state.ok_prod:
         st.markdown(f'<div class="success-toast">{ICO_CHECK} ¡Producción registrada!</div>', unsafe_allow_html=True)
         st.session_state.ok_prod = False
+
+    # ── Merma/desperdicio de producto terminado (bolsas dañadas o perdidas) ──
+    with st.expander("⚠️ Registrar merma o desperdicio"):
+        st.caption("Bolsas ya producidas que se dañaron o se perdieron — descuenta del inventario, no de la caja.")
+        col_mp1, col_mp2 = st.columns(2)
+        sabor_merma = col_mp1.selectbox("Sabor", SABORES_LISTA, key="sabor_merma_pt")
+        cantidad_merma = col_mp2.number_input("Bolsas", min_value=1, step=1, key="cantidad_merma_pt")
+        motivo_merma = st.text_input("Motivo", key="motivo_merma_pt", placeholder="Ej: se rompió la funda, se mojaron, etc.")
+        if st.button("💾 Registrar merma", key="btn_merma_pt"):
+            restar_stock(sabor_merma, cantidad_merma)
+            sb_post("mermas", {
+                "fecha": fecha_hoy(), "hora": ahora(), "tipo": "producto_terminado",
+                "item": sabor_merma, "cantidad": float(cantidad_merma), "unidad": "bolsa",
+                "motivo": motivo_merma.strip() or None, "empleado": empleado,
+            })
+            st.markdown(f'<div class="success-toast">{ICO_CHECK} Merma registrada.</div>', unsafe_allow_html=True)
+            time.sleep(0.3)
+            st.rerun()
 
     # Producción de un día — selector de fecha + tabla totalmente editable
     st.markdown('<div class="section-label">Consultar producción</div>', unsafe_allow_html=True)
@@ -2665,6 +2824,105 @@ elif st.session_state.vista == "produccion":
     if st.session_state.ok_dan:
         st.markdown(f'<div class="success-toast">{ICO_CHECK} Registrado — se descontó del stock.</div>', unsafe_allow_html=True)
         st.session_state.ok_dan = False
+
+# ══════════════════════════════════════════════════════════════════════════════
+# VISTA: PANEL (solo admin) — resumen general del negocio en una sola pantalla:
+# caja de hoy, producción de hoy, créditos vencidos, insumos por agotarse, mermas
+# del mes y gráficas de tendencia. Reusa las funciones ya existentes (no duplica
+# lógica de negocio, solo las agrega). Pedido 2026-08-13.
+# ══════════════════════════════════════════════════════════════════════════════
+elif st.session_state.vista == "panel" and st.session_state.es_admin:
+    st.markdown(f'<div class="section-label">{ICO_CARD} Resumen del negocio — hoy {fecha_hoy()}</div>', unsafe_allow_html=True)
+
+    @st.cache_data(ttl=60)
+    def contar_creditos_vencidos():
+        """Cuenta rápida de créditos vencidos (más de DIAS_CREDITO_VENCIDO días sin
+        abono), clientes (Fábrica+Carro) y proveedores, para las tarjetas del Panel."""
+        hoy_d = datetime.now(COL_TZ).date()
+
+        raw_v = sb_get("ventas", "select=factura_id,fecha,saldo&saldo=gt.0") or []
+        facturas_cli = {}
+        for r in raw_v:
+            fid = r.get("factura_id")
+            if not fid:
+                continue
+            if fid not in facturas_cli:
+                facturas_cli[fid] = {"fecha": r["fecha"], "saldo": float(r["saldo"])}
+            else:
+                facturas_cli[fid]["fecha"] = min(facturas_cli[fid]["fecha"], r["fecha"])
+        raw_cm = sb_get("creditos", "select=id,fecha,total,pagado&estado=eq.pendiente") or []
+        for r in raw_cm:
+            saldo_m = max(0.0, float(r["total"]) - float(r.get("pagado", 0) or 0))
+            if saldo_m > 0:
+                facturas_cli[f"M{r['id']}"] = {"fecha": r["fecha"], "saldo": saldo_m}
+        n_cli, total_cli = 0, 0.0
+        for d in facturas_cli.values():
+            if (hoy_d - date.fromisoformat(d["fecha"])).days >= DIAS_CREDITO_VENCIDO:
+                n_cli += 1; total_cli += d["saldo"]
+
+        raw_mp = sb_get("materia_prima", "select=fecha,saldo&estado=eq.pendiente") or []
+        n_prov, total_prov = 0, 0.0
+        for r in raw_mp:
+            if (hoy_d - date.fromisoformat(r["fecha"])).days >= DIAS_CREDITO_VENCIDO:
+                n_prov += 1; total_prov += float(r["saldo"])
+
+        return {"n_cliente": n_cli, "total_cliente": total_cli, "n_proveedor": n_prov, "total_proveedor": total_prov}
+
+    _flujo_hoy = calcular_flujo_caja_diario(fecha_hoy(), fecha_hoy())
+    _ingresos_hoy_p = float(_flujo_hoy["Ingresos"].iloc[0]) if len(_flujo_hoy) else 0.0
+    _egresos_hoy_p = float(_flujo_hoy["Egresos"].iloc[0]) if len(_flujo_hoy) else 0.0
+    _venc_p = contar_creditos_vencidos()
+    _stock_insumos_p = calcular_stock_y_consumo_insumos()
+    _n_alerta_p = sum(1 for v in _stock_insumos_p.values() if v["cobertura_dias"] is not None and v["cobertura_dias"] < DIAS_COBERTURA_MINIMA)
+    _primer_dia_mes_p = datetime.now(COL_TZ).date().replace(day=1).isoformat()
+    _mermas_p = obtener_mermas_periodo(_primer_dia_mes_p, fecha_hoy())
+    _n_mermas_p = len(_mermas_p["producto_terminado"]) + len(_mermas_p["materia_prima"])
+
+    st.markdown(f"""
+    <div class="metric-row">
+        <div class="metric-box metric-green"><div class="val">{fmt(_ingresos_hoy_p)}</div><div class="lbl">Ingresos hoy</div></div>
+        <div class="metric-box metric-red"><div class="val">{fmt(_egresos_hoy_p)}</div><div class="lbl">Egresos hoy</div></div>
+        <div class="metric-box metric-blue"><div class="val">{total_prod}</div><div class="lbl">Producidas hoy</div></div>
+    </div>
+    """, unsafe_allow_html=True)
+    st.markdown(f"""
+    <div class="metric-row">
+        <div class="metric-box metric-yellow"><div class="val">{_venc_p['n_cliente'] + _venc_p['n_proveedor']}</div><div class="lbl">Créditos vencidos</div></div>
+        <div class="metric-box metric-yellow"><div class="val">{_n_alerta_p}</div><div class="lbl">Insumos por agotarse</div></div>
+        <div class="metric-box metric-yellow"><div class="val">{_n_mermas_p}</div><div class="lbl">Mermas este mes</div></div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    if _venc_p["n_cliente"] or _venc_p["n_proveedor"]:
+        st.markdown(
+            f'<div class="alert-low">{ICO_WARN} <b>Créditos vencidos</b> (+{DIAS_CREDITO_VENCIDO} días sin abono): '
+            f'clientes {_venc_p["n_cliente"]} ({fmt(_venc_p["total_cliente"])}) · '
+            f'proveedores {_venc_p["n_proveedor"]} ({fmt(_venc_p["total_proveedor"])}) '
+            f'— ver Resumen → Créditos pendientes y Materia Prima → Créditos.</div>',
+            unsafe_allow_html=True
+        )
+
+    st.markdown('<div class="section-label">📈 Caja — últimos 30 días</div>', unsafe_allow_html=True)
+    _hace_30_p = (datetime.now(COL_TZ).date() - timedelta(days=29)).isoformat()
+    _df_flujo_p = calcular_flujo_caja_diario(_hace_30_p, fecha_hoy())
+    st.line_chart(_df_flujo_p, color=["#2e7d32", "#c62828"])
+
+    st.markdown('<div class="section-label">🏭 Producción — últimos 30 días</div>', unsafe_allow_html=True)
+    raw_prod_p = sb_get("produccion", f"select=fecha,sabor,cantidad&fecha=gte.{_hace_30_p}&fecha=lte.{fecha_hoy()}") or []
+    if raw_prod_p:
+        df_prod_p = pd.DataFrame(raw_prod_p)
+        col_pg1, col_pg2 = st.columns(2)
+        with col_pg1:
+            st.caption("Total por día")
+            serie_dia_p = df_prod_p.groupby("fecha")["cantidad"].sum()
+            serie_dia_p.index = pd.to_datetime(serie_dia_p.index)
+            st.bar_chart(serie_dia_p)
+        with col_pg2:
+            st.caption("Total por sabor")
+            serie_sabor_p = df_prod_p.groupby("sabor")["cantidad"].sum().sort_values(ascending=False)
+            st.bar_chart(serie_sabor_p)
+    else:
+        st.info("No hay producción registrada en los últimos 30 días.")
 
 # ══════════════════════════════════════════════════════════════════════════════
 # VISTA: CARRO (Edison & Javier)
@@ -3525,6 +3783,36 @@ elif st.session_state.vista == "materia_prima":
             st.session_state.ok_mp = False
 
     with tab_mp2:
+        # ── Merma/desperdicio de un insumo (dañado, vencido, mal manejado) ──
+        # Descuenta del stock igual que cualquier salida (queda en salidas_mp con su
+        # propio motivo) y además queda auditado en 'mermas' para reportarlo aparte.
+        with st.expander("⚠️ Registrar merma o desperdicio de un insumo"):
+            _insumos_merma_unidad = {n: u for n, _, u, _ in INSUMOS_INFO}
+            _insumos_merma_unidad.update({n: u for n, _, u, _ in SABORIZANTES_INFO})
+            _insumos_merma_unidad.update({n: u for n, _, u, _ in EMPAQUES_INFO})
+            _cat_merma_map = {n: "mp" for n, _, _, _ in INSUMOS_INFO}
+            _cat_merma_map.update({n: "sab" for n, _, _, _ in SABORIZANTES_INFO})
+            _cat_merma_map.update({n: "emp" for n, _, _, _ in EMPAQUES_INFO})
+
+            insumo_merma = st.selectbox("Insumo", sorted(_insumos_merma_unidad.keys()), key="insumo_merma")
+            unidad_merma = _insumos_merma_unidad[insumo_merma]
+            cant_merma = st.number_input(f"Cantidad ({unidad_merma})", min_value=0.001, step=0.001, format="%.3f", key="cant_merma")
+            motivo_merma_mp = st.text_input("Motivo", key="motivo_merma_mp", placeholder="Ej: se dañó, venció, se mojó")
+            if st.button("💾 Registrar merma", key="btn_merma_mp"):
+                sb_post("salidas_mp", {
+                    "fecha": fecha_hoy(), "hora": ahora(), "insumo": insumo_merma,
+                    "categoria": _cat_merma_map[insumo_merma], "cantidad": float(cant_merma),
+                    "unidad": unidad_merma, "motivo": f"Merma/Desperdicio — {motivo_merma_mp.strip()}" if motivo_merma_mp.strip() else "Merma/Desperdicio",
+                })
+                sb_post("mermas", {
+                    "fecha": fecha_hoy(), "hora": ahora(), "tipo": "materia_prima",
+                    "item": insumo_merma, "cantidad": float(cant_merma), "unidad": unidad_merma,
+                    "motivo": motivo_merma_mp.strip() or None,
+                })
+                st.markdown(f'<div class="success-toast">{ICO_CHECK} Merma registrada.</div>', unsafe_allow_html=True)
+                time.sleep(0.3)
+                st.rerun()
+
         st.markdown('<div class="section-label">Registrar salida (uso en producción)</div>', unsafe_allow_html=True)
         cat_sal = st.radio("Categoría", ["🌽 Materia Prima", "🧪 Saborizantes", "📦 Empaque"], key="cat_sal")
         if "Materia Prima" in cat_sal:
@@ -3812,19 +4100,34 @@ elif st.session_state.vista == "materia_prima":
 
             prov_sel_cred = st.session_state.get(state_key)
 
+            hoy_dt_mp = datetime.now(COL_TZ).date()
+            for r in lista:
+                r["dias"] = (hoy_dt_mp - date.fromisoformat(r["fecha"])).days
+                r["vencido"] = r["dias"] >= DIAS_CREDITO_VENCIDO
+
             if not prov_sel_cred:
                 por_proveedor = {}
                 for r in lista:
                     k = r["proveedor"]
                     if k not in por_proveedor:
-                        por_proveedor[k] = {"saldo": 0.0, "n": 0}
+                        por_proveedor[k] = {"saldo": 0.0, "n": 0, "vencido": False}
                     por_proveedor[k]["saldo"] += float(r["saldo"])
                     por_proveedor[k]["n"] += 1
+                    por_proveedor[k]["vencido"] = por_proveedor[k]["vencido"] or r["vencido"]
                 total = sum(float(r["saldo"]) for r in lista)
+                n_venc_mp = sum(1 for r in lista if r["vencido"])
                 st.markdown(f'<div class="warn-box">{ICO_CARD} Total pendiente: <b>{fmt(total)}</b></div>', unsafe_allow_html=True)
+                if n_venc_mp:
+                    total_venc_mp = sum(float(r["saldo"]) for r in lista if r["vencido"])
+                    st.markdown(
+                        f'<div class="alert-low">{ICO_WARN} <b>{n_venc_mp} línea(s) vencida(s)</b> '
+                        f'(más de {DIAS_CREDITO_VENCIDO} días sin abono) por <b>{fmt(total_venc_mp)}</b></div>',
+                        unsafe_allow_html=True
+                    )
                 for k in sorted(por_proveedor.keys()):
                     v = por_proveedor[k]
-                    if st.button(f"👤 {k} — {fmt(v['saldo'])} ({v['n']})", key=f"btn_cred_prov_{state_key}_{k}", use_container_width=True):
+                    etiqueta_prov = f"👤 {k} — {fmt(v['saldo'])} ({v['n']})" + (" 🔴" if v["vencido"] else "")
+                    if st.button(etiqueta_prov, key=f"btn_cred_prov_{state_key}_{k}", use_container_width=True):
                         st.session_state[state_key] = k; st.rerun()
                 return
 
@@ -3857,6 +4160,9 @@ elif st.session_state.vista == "materia_prima":
                 num_f = (lineas[0].get("numero_factura") or "").strip()
                 fecha_f = lineas[0]["fecha"] if len(set(r["fecha"] for r in lineas)) == 1 else f'{min(r["fecha"] for r in lineas)} a {max(r["fecha"] for r in lineas)}'
                 titulo_f = f"Factura N° {num_f} · {fecha_f}" if num_f else f"Factura {fecha_f}"
+                if any(r["vencido"] for r in lineas):
+                    dias_f = max(r["dias"] for r in lineas)
+                    titulo_f += f' · <span style="color:#c62828">🔴 Vencido ({dias_f}d)</span>'
 
                 filas_html = ""
                 for r in lineas:
@@ -3941,6 +4247,51 @@ elif st.session_state.vista == "materia_prima":
                     tabla_view(df_hist_cred_mp)
 
     with tab_mp4:
+        # ── Previsión de compra — insumos cuyo stock no alcanza a cubrir
+        # DIAS_COBERTURA_OBJETIVO días al ritmo de consumo reciente. Reusa el mismo
+        # motor que la alerta global de stock bajo (ver calcular_stock_y_consumo_insumos).
+        st.markdown(f'<div class="section-label">{ICO_CARD} Previsión de compra</div>', unsafe_allow_html=True)
+        _stock_insumos_prev = calcular_stock_y_consumo_insumos()
+        _a_reponer = []
+        for k, v in _stock_insumos_prev.items():
+            if v["cobertura_dias"] is None or v["cobertura_dias"] >= DIAS_COBERTURA_OBJETIVO:
+                continue
+            sugerido = max(0.0, v["consumo_diario"] * DIAS_COBERTURA_OBJETIVO - v["stock"])
+            if sugerido <= 0:
+                continue
+            _a_reponer.append({"insumo": k, **v, "sugerido": sugerido})
+        _a_reponer.sort(key=lambda d: d["cobertura_dias"])
+        if _a_reponer:
+            st.caption(f"Insumos a los que el stock les alcanza para menos de {DIAS_COBERTURA_OBJETIVO} días, "
+                       f"según el consumo de los últimos {DIAS_CONSUMO_PROMEDIO} días. Cantidad sugerida = lo que falta para volver a cubrir {DIAS_COBERTURA_OBJETIVO} días.")
+            df_reponer = pd.DataFrame([{
+                "Insumo": d["insumo"],
+                "Stock actual": f'{d["stock"]:.3f}' if d["unidad"] == "kg" else round(d["stock"]),
+                "Consumo diario": f'{d["consumo_diario"]:.3f}' if d["unidad"] == "kg" else round(d["consumo_diario"], 1),
+                "Alcanza para": f'{d["cobertura_dias"]:.1f} días',
+                "Sugerido a comprar": f'{d["sugerido"]:.3f} {d["unidad"]}' if d["unidad"] == "kg" else f'{round(d["sugerido"])} {d["unidad"]}',
+            } for d in _a_reponer])
+            tabla_view(df_reponer)
+        else:
+            st.info("Ningún insumo necesita reposición urgente por ahora.")
+
+        with st.expander("🗑️ Historial de mermas y desperdicio"):
+            col_hm1, col_hm2 = st.columns(2)
+            f_ini_hm = col_hm1.date_input("Desde", value=datetime.now(COL_TZ).date().replace(day=1), key="f_ini_hist_merma", format="DD/MM/YYYY")
+            f_fin_hm = col_hm2.date_input("Hasta", value=datetime.now(COL_TZ).date(), key="f_fin_hist_merma", format="DD/MM/YYYY")
+            _mermas_hm = obtener_mermas_periodo(str(f_ini_hm), str(f_fin_hm))
+            _todas_mermas_hm = _mermas_hm["producto_terminado"] + _mermas_hm["materia_prima"]
+            if _todas_mermas_hm:
+                df_mermas_hm = pd.DataFrame([{
+                    "Fecha": r["fecha"], "Hora": r.get("hora", ""),
+                    "Tipo": "Producto terminado" if r["tipo"] == "producto_terminado" else "Materia prima",
+                    "Item": r["item"], "Cantidad": f'{float(r["cantidad"]):.3f} {r.get("unidad","")}',
+                    "Motivo": r.get("motivo") or "—", "Empleado": r.get("empleado") or "—",
+                } for r in sorted(_todas_mermas_hm, key=lambda r: (r["fecha"], r.get("hora","")), reverse=True)])
+                tabla_view(df_mermas_hm)
+            else:
+                st.caption("No hay mermas registradas en ese rango.")
+
         st.markdown('<div class="section-label">Resumen del período</div>', unsafe_allow_html=True)
         col_f1, col_f2 = st.columns(2)
         f_ini_mp = col_f1.date_input("Desde", value=datetime.now(COL_TZ).date().replace(day=1), key="f_ini_mp", format="DD/MM/YYYY")
