@@ -512,10 +512,18 @@ def calcular_cobros_periodo(f_ini, f_fin, solo_efectivo=False):
     # una en la fecha de la venta y otra en la fecha real del cobro. Se necesita el
     # histórico completo de pagos_credito (sin filtrar por fecha) porque el pago
     # pudo haber ocurrido antes o después del rango que se está consultando.
+    #
+    # OJO: esta resta NO debe filtrar por solo_efectivo. "ventas.abono" es un solo
+    # número que se va acumulando con cada "Cobrar" (sin importar el medio de cada
+    # cobro), pero "ventas.medio_pago" solo describe el abono ORIGINAL del momento
+    # de la venta. Si aquí se descartaban los cobros posteriores en Nequi, esa plata
+    # se quedaba "pegada" dentro de abono_bruto y heredaba el medio_pago original
+    # (Efectivo) — así una factura con mitad efectivo/mitad Nequi terminaba contando
+    # el 100% como efectivo en Arqueo. El cobro en Nequi ya se cuenta aparte, con su
+    # propio medio_pago, en cobro_creditos_por_canal más abajo (bug reportado
+    # 2026-08-14).
     cobrado_despues = {}
     for r in raw_pg:
-        if solo_efectivo and not _es_efectivo(r):
-            continue
         if r.get("tipo") == "venta" and r.get("factura_id"):
             fid = r["factura_id"]
             cobrado_despues[fid] = cobrado_despues.get(fid, 0) + float(r["monto"])
