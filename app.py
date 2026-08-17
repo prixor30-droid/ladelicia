@@ -5394,11 +5394,21 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
         raw_mes = cobros_mes["raw_ventas"]
         cobro_creditos_mes = cobros_mes["cobro_creditos_total"]
 
+        # Devoluciones del mes, por sabor — se restan de "Bolsas vendidas" y de
+        # "Tendencia por sabor" para que muestren lo que de verdad se quedó vendido,
+        # no lo que se vendió bruto (si no, un sabor con muchas devoluciones se ve
+        # como más vendido de lo que realmente fue).
+        raw_dev_mes = sb_get("devoluciones", f"select=sabor,cantidad&fecha=gte.{primer_dia}&fecha=lte.{ultimo_dia}") or []
+        dev_mes_map = {}
+        for r in raw_dev_mes:
+            dev_mes_map[r["sabor"]] = dev_mes_map.get(r["sabor"], 0) + r["cantidad"]
+        tot_dev_mes = sum(dev_mes_map.values())
+
         if not raw_mes and cobro_creditos_mes == 0:
             st.info("Aún no hay ventas ese mes.")
         else:
             df_mes = pd.DataFrame(raw_mes) if raw_mes else pd.DataFrame()
-            bolsas_mes  = int(df_mes["cantidad"].sum()) if not df_mes.empty else 0
+            bolsas_mes  = (int(df_mes["cantidad"].sum()) if not df_mes.empty else 0) - tot_dev_mes
             dias_mes    = df_mes["fecha"].nunique() if not df_mes.empty else 0
             prod_mes    = sum(r["cantidad"] for r in raw_prod_mes) if raw_prod_mes else 0
 
@@ -5493,7 +5503,13 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
 
             if not df_mes.empty:
                 st.markdown('<div class="section-label">Sabor más vendido</div>', unsafe_allow_html=True)
-                top_sabores = df_mes.groupby("sabor").agg(cantidad=("cantidad", "sum"), total=("total", "sum")).reset_index().sort_values("cantidad", ascending=False)
+                top_sabores = df_mes.groupby("sabor").agg(cantidad=("cantidad", "sum"), total=("total", "sum")).reset_index()
+                # Neto de devoluciones por sabor — así "Bolsas" refleja lo que de
+                # verdad se quedó vendido, no lo bruto (ver nota de dev_mes_map arriba).
+                top_sabores["cantidad"] = top_sabores.apply(
+                    lambda r: r["cantidad"] - dev_mes_map.get(r["sabor"], 0), axis=1
+                )
+                top_sabores = top_sabores.sort_values("cantidad", ascending=False)
                 if not top_sabores.empty:
                     top1 = top_sabores.iloc[0]
                     st.markdown(f'<div class="info-box">{ICO_TROPHY} <b>{top1["sabor"]}</b> con {int(top1["cantidad"])} bolsas vendidas</div>', unsafe_allow_html=True)
@@ -5503,6 +5519,7 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
                 grafica_linea_ventas(por_dia_mes["fecha"].tolist(), por_dia_mes["total"].tolist())
 
                 st.markdown('<div class="section-label">Tendencia por sabor</div>', unsafe_allow_html=True)
+                st.caption("\"Bolsas\" ya está neto de devoluciones del mes — es lo que realmente se quedó vendido.")
                 top_sabores.columns = ["Sabor","Bolsas","Total vendido"]
                 top_sabores["Total vendido"] = top_sabores["Total vendido"].apply(fmt)
                 tabla_view(top_sabores)
