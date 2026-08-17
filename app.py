@@ -6724,8 +6724,17 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
         for r in raw_dan_inv:
             mermas_map_inv[r["sabor"]] = mermas_map_inv.get(r["sabor"], 0) + float(r["cantidad"])
 
+        # "Saldo" (Inicial+Producción−Salidas+Ajuste−Merma) es la fórmula contable del
+        # mes, pero no dice DÓNDE está ese stock — para eso se muestran aparte, en vivo,
+        # cuánto hay ahora mismo en la fábrica vs. cuánto en el carro (misma lógica que
+        # usa el resto de la app: get_inventario_completo / _stock_carro_actual), así no
+        # se confunde "Saldo" con "Inventario actual" (que solo es fábrica).
+        saldo_fabrica_map_inv = get_inventario_completo()
+        saldo_carro_map_inv = _stock_carro_actual()
+
         filas_inv = []
         tot_inicial_inv = tot_prod_inv = tot_salidas_inv = tot_ajuste_inv = tot_merma_inv = tot_saldo_inv = tot_costo_inv = 0.0
+        tot_saldo_fabrica_inv = tot_saldo_carro_inv = 0.0
         for sabor_r in SABORES_LISTA:
             inicial_r = inicial_map_inv.get(sabor_r, 0)
             prod_r = prod_map_inv.get(sabor_r, 0)
@@ -6733,6 +6742,8 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
             ajuste_r = ajustes_map_inv.get(sabor_r, 0)
             merma_r = mermas_map_inv.get(sabor_r, 0)
             saldo_r = inicial_r + prod_r - salidas_r + ajuste_r - merma_r
+            saldo_fabrica_r = saldo_fabrica_map_inv.get(sabor_r, 0)
+            saldo_carro_r = saldo_carro_map_inv.get(sabor_r, 0)
             venta_cant_r = venta_cantidad_map_inv.get(sabor_r, 0)
             venta_tot_r = venta_total_map_inv.get(sabor_r, 0)
             precio_pond_r = (venta_tot_r / venta_cant_r) if venta_cant_r > 0 else PRODUCTOS.get(sabor_r, 0)
@@ -6744,12 +6755,15 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
                 "Producción": prod_r,
                 "Salidas": salidas_r,
                 "Saldo": saldo_r,
+                "Saldo Fábrica": saldo_fabrica_r,
+                "Saldo Carro": saldo_carro_r,
                 "Precio de venta": fmt(round(precio_pond_r)),
                 "Valor en inventario": fmt(round(costo_inv_r)),
             }
             filas_inv.append(fila_r)
             tot_inicial_inv += inicial_r; tot_prod_inv += prod_r; tot_salidas_inv += salidas_r
             tot_ajuste_inv += ajuste_r; tot_merma_inv += merma_r; tot_saldo_inv += saldo_r; tot_costo_inv += costo_inv_r
+            tot_saldo_fabrica_inv += saldo_fabrica_r; tot_saldo_carro_inv += saldo_carro_r
 
         tot_venta_cant_inv = sum(venta_cantidad_map_inv.values())
         tot_venta_tot_inv = sum(venta_total_map_inv.values())
@@ -6760,6 +6774,8 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
             "Producción": tot_prod_inv,
             "Salidas": tot_salidas_inv,
             "Saldo": tot_saldo_inv,
+            "Saldo Fábrica": tot_saldo_fabrica_inv,
+            "Saldo Carro": tot_saldo_carro_inv,
             "Precio de venta": fmt(round(precio_pond_total_inv)),
             "Valor en inventario": fmt(round(tot_costo_inv)),
         }
