@@ -6706,9 +6706,9 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
             prod_map_inv[r["sabor"]] = prod_map_inv.get(r["sabor"], 0) + float(r["cantidad"])
 
         # "venta_cantidad/total_map_inv" son la cantidad y plata REAL de las ventas tal
-        # cual quedaron registradas (sin descontar devoluciones) — se usan aparte de
-        # "salidas_map_inv" para que "Precio de venta" sea un promedio limpio (venta ÷
-        # cantidad vendida), no mezclado con el neteo de devoluciones que sí necesita Saldo.
+        # cual quedaron registradas — se usan aparte de "salidas_map_inv" para que
+        # "Precio de venta" sea un promedio limpio (venta ÷ cantidad vendida), sin
+        # mezclarse con Regalo (que sí suma a Salidas pero no aporta plata real).
         salidas_map_inv = {}
         venta_cantidad_map_inv = {}
         venta_total_map_inv = {}
@@ -6724,10 +6724,14 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
                 # promedio ponderado). Solo restan de Salidas para que el Saldo cuadre con
                 # el stock real durante el mes, no solo al cerrarlo.
                 salidas_map_inv[r["sabor"]] = salidas_map_inv.get(r["sabor"], 0) + float(r["cantidad"])
-        # Las devoluciones vuelven al inventario sin pasar por Producción — se restan
-        # de Salidas para que el Saldo calculado sí las refleje.
-        for r in raw_dev_inv:
-            salidas_map_inv[r["sabor"]] = salidas_map_inv.get(r["sabor"], 0) - float(r["cantidad"])
+        # OJO: "devoluciones" en este negocio SIEMPRE es stock que se cargó al carro y
+        # nunca se vendió (no hay caso de "cliente compró y luego devolvió" — eso se
+        # maneja aparte, editando la factura). Como cargar al carro nunca pasa por
+        # "ventas" (no es una venta), esas cantidades nunca se sumaron a Salidas — así
+        # que NO hay que restarlas tampoco: sería restar una venta que nunca existió,
+        # inflando el Saldo de más. La devolución ya reversa el cargue en el stock
+        # central por su cuenta (agregar_stock); el Saldo no necesita ningún ajuste aparte.
+        # (raw_dev_inv se deja disponible por si en el futuro se necesita mostrar aparte.)
 
         # Ajustes manuales de stock (correcciones, no son ni producción ni venta) —
         # se muestran aparte, en su propia columna, sin mezclarse con Producción/Salidas.
