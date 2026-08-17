@@ -91,12 +91,34 @@ def sb_get(tabla, params=""):
     url = f"{SUPABASE_URL}/rest/v1/{tabla}"
     if params:
         url += f"?{params}"
+    # Supabase solo devuelve un máximo de filas por consulta (por defecto suele ser
+    # 1000) y no avisa si se quedó corto — en meses con mucho movimiento (ventas,
+    # producción, etc.) eso hace que reportes se queden con datos incompletos sin
+    # ningún error visible. Si el caller no pidió explícitamente un "limit=" (porque
+    # de verdad solo quiere las últimas N filas), paginamos hasta traer todo.
+    paginar = "limit=" not in params
     try:
-        r = requests.get(url, headers=HEADERS, timeout=10)
-        if r.ok:
-            return r.json()
-        _sb_error("leer datos", tabla, f"{r.status_code} — {r.text[:200]}")
-        return []
+        if not paginar:
+            r = requests.get(url, headers=HEADERS, timeout=10)
+            if r.ok:
+                return r.json()
+            _sb_error("leer datos", tabla, f"{r.status_code} — {r.text[:200]}")
+            return []
+        resultados = []
+        tam_pagina = 1000
+        desde = 0
+        while True:
+            headers_pag = {**HEADERS, "Range-Unit": "items", "Range": f"{desde}-{desde + tam_pagina - 1}"}
+            r = requests.get(url, headers=headers_pag, timeout=10)
+            if not r.ok:
+                _sb_error("leer datos", tabla, f"{r.status_code} — {r.text[:200]}")
+                return resultados
+            lote = r.json()
+            resultados.extend(lote)
+            if len(lote) < tam_pagina:
+                break
+            desde += tam_pagina
+        return resultados
     except requests.RequestException as e:
         _sb_error("leer datos", tabla, str(e))
         return []
