@@ -6905,12 +6905,19 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
 
         with st.expander("🔒 Cerrar inventario del mes"):
             st.caption(
-                "Guarda el stock ACTUAL (en vivo, de la tabla Inventario) de cada sabor como el "
-                "\"Inventario inicial\" del mes siguiente. Hazlo cuando ya termines de registrar todo "
-                "el mes actual — así el próximo reporte arranca automático, sin que tengas que escribir nada."
+                "Guarda el stock ACTUAL (en vivo — fábrica + lo que esté cargado en el carro sin "
+                "vender) de cada sabor como el \"Inventario inicial\" del mes siguiente. Hazlo cuando "
+                "ya termines de registrar todo el mes actual — así el próximo reporte arranca "
+                "automático, sin que tengas que escribir nada."
             )
-            raw_stock_cierre = sb_get("inventario", "select=sabor,stock") or []
-            stock_cierre_map = {r["sabor"]: r["stock"] for r in raw_stock_cierre}
+            # OJO: se usa Saldo Fábrica + Saldo Carro (ya calculados arriba, en vivo) — NO solo la
+            # tabla "inventario" — porque el Inicial que espera el Saldo del reporte es el stock
+            # COMBINADO (fábrica+carro). Guardar solo fábrica dejaba el carro fuera del Inicial cada
+            # mes, generando un pequeño desfase recurrente mes tras mes en sabores con harto carro.
+            stock_cierre_map = {
+                s: saldo_fabrica_map_inv.get(s, 0) + saldo_carro_map_inv.get(s, 0)
+                for s in SABORES_LISTA
+            }
             ya_existe_cierre = sb_get(
                 "cierres_inventario", f"select=sabor&mes=eq.{primer_dia_inv_sig}&limit=1"
             )
@@ -6921,7 +6928,7 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
                     unsafe_allow_html=True
                 )
             df_preview_cierre = pd.DataFrame([
-                {"Sabor": s, "Stock actual": stock_cierre_map.get(s, 0)} for s in SABORES_LISTA
+                {"Sabor": s, "Stock actual (fábrica+carro)": stock_cierre_map.get(s, 0)} for s in SABORES_LISTA
             ])
             tabla_view(df_preview_cierre)
             if st.button(
