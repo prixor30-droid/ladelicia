@@ -664,7 +664,7 @@ DIAS_COBERTURA_MINIMA   = 5   # alerta cuando el stock alcance para menos de est
 DIAS_COBERTURA_OBJETIVO = 15  # previsión de compra: sugiere reponer hasta cubrir estos días
 DIAS_CREDITO_VENCIDO    = 15  # créditos (proveedores y clientes) sin abono en más de estos días
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=300)
 def calcular_stock_y_consumo_insumos():
     """Stock actual (todo el histórico de materia_prima/salidas_mp) y ritmo de consumo
     diario reciente (últimos DIAS_CONSUMO_PROMEDIO días) de cada insumo — materia prima,
@@ -5719,10 +5719,17 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
         st.markdown('<div class="section-label">Ventas unificadas</div>', unsafe_allow_html=True)
         st.caption("Cuántas unidades de cada sabor se vendieron a cada precio, y el total por sabor — solo facturas ya pagadas por completo, contadas en la fecha en que se terminaron de pagar (para que coincida con Ingresos).")
 
-        raw_todas_vp = sb_get("ventas", "select=factura_id,fecha,sabor,cantidad,total,canal,saldo") or []
-        raw_todas_vp = [r for r in raw_todas_vp if r.get("canal") in CANALES_VENTA_REAL and float(r.get("cantidad") or 0) > 0]
+        @st.cache_data(ttl=60)
+        def _traer_historico_ventas_unificadas():
+            # Cacheado 60s — sin esto, cada vez que se abre/interactúa con esta pestaña
+            # se traía TODO el histórico de 'ventas' y 'pagos_credito' de nuevo (rendimiento
+            # reportado como "app lenta" 2026-08-18).
+            raw_v = sb_get("ventas", "select=factura_id,fecha,sabor,cantidad,total,canal,saldo") or []
+            raw_v = [r for r in raw_v if r.get("canal") in CANALES_VENTA_REAL and float(r.get("cantidad") or 0) > 0]
+            raw_pg = sb_get("pagos_credito", "select=factura_id,fecha&tipo=eq.venta") or []
+            return raw_v, raw_pg
 
-        raw_pg_vp = sb_get("pagos_credito", "select=factura_id,fecha&tipo=eq.venta") or []
+        raw_todas_vp, raw_pg_vp = _traer_historico_ventas_unificadas()
         fecha_pago_map_vp = {}
         for r in raw_pg_vp:
             fid = r.get("factura_id")
