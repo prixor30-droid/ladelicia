@@ -5702,11 +5702,62 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
         # factura a un precio fijo). Usa CANALES_VENTA_REAL para no contar los
         # "Regalo"/"Regalo Fábrica" (total=0, no son ventas reales) — mismo criterio
         # que ya se usa en Inventario Inicial Producto Terminado.
+        #
+        # OJO (2026-08-18, ajustado a pedido de la contadora: que el total de este
+        # reporte coincida con "Ingresos"): esto es lo COBRADO, no lo facturado, y se
+        # reconoce en la fecha en que la factura quedó pagada POR COMPLETO — igual
+        # que "fecha real del pago" en calcular_cobros_periodo. Si se pagó de una,
+        # esa fecha es la de la venta; si quedó fiada y se terminó de pagar después,
+        # es la fecha de ESE pago (en 'pagos_credito'), no la de la venta — así una
+        # factura de julio pagada en agosto entra al reporte de agosto, igual que
+        # entra a los Ingresos de agosto. Esto asume la regla del negocio de que una
+        # factura a crédito no se abona por partes: o queda fiada completa, o se paga
+        # completa — con eso "fecha de pago completo" es un solo momento, sin
+        # ambigüedad. Por eso se trae TODO el histórico de 'ventas'/'pagos_credito'
+        # (sin filtrar por fecha): el pago pudo haber pasado en cualquier momento
+        # después de la venta, antes o dentro del rango elegido.
         st.markdown('<div class="section-label">Ventas unificadas</div>', unsafe_allow_html=True)
-        st.caption("Cuántas unidades de cada sabor se vendieron a cada precio, y el total por sabor — así lo pidió la contadora.")
+        st.caption("Cuántas unidades de cada sabor se vendieron a cada precio, y el total por sabor — solo facturas ya pagadas por completo, contadas en la fecha en que se terminaron de pagar (para que coincida con Ingresos).")
 
-        raw_vp = sb_get("ventas", f"select=sabor,cantidad,total,canal&fecha=gte.{f_exp_ini}&fecha=lte.{f_exp_fin}") or []
-        raw_vp = [r for r in raw_vp if r.get("canal") in CANALES_VENTA_REAL and float(r.get("cantidad") or 0) > 0]
+        raw_todas_vp = sb_get("ventas", "select=factura_id,fecha,sabor,cantidad,total,canal,saldo") or []
+        raw_todas_vp = [r for r in raw_todas_vp if r.get("canal") in CANALES_VENTA_REAL and float(r.get("cantidad") or 0) > 0]
+
+        raw_pg_vp = sb_get("pagos_credito", "select=factura_id,fecha&tipo=eq.venta") or []
+        fecha_pago_map_vp = {}
+        for r in raw_pg_vp:
+            fid = r.get("factura_id")
+            if fid:
+                fecha_pago_map_vp[fid] = max(fecha_pago_map_vp.get(fid, ""), r["fecha"])
+
+        fecha_venta_map_vp = {}
+        for r in raw_todas_vp:
+            fecha_venta_map_vp.setdefault(r["factura_id"], r["fecha"])
+
+        f_ini_str_vp, f_fin_str_vp = str(f_exp_ini), str(f_exp_fin)
+
+        def _fecha_reconocimiento_vp(fid):
+            return fecha_pago_map_vp.get(fid, fecha_venta_map_vp.get(fid, ""))
+
+        raw_vp = [
+            r for r in raw_todas_vp
+            if float(r.get("saldo") or 0) == 0
+            and f_ini_str_vp <= _fecha_reconocimiento_vp(r["factura_id"]) <= f_fin_str_vp
+        ]
+
+        # Aviso de lo que sigue a crédito de facturas VENDIDAS en este rango — el
+        # reporte de arriba ya no se organiza por fecha de venta, así que esto es
+        # aparte, solo informativo: qué falta por cobrar de lo que se vendió en estas
+        # fechas (aunque termine apareciendo en el reporte de otro mes al pagarse).
+        facturas_credito_vp = {}
+        for r in raw_todas_vp:
+            if f_ini_str_vp <= r["fecha"] <= f_fin_str_vp and float(r.get("saldo") or 0) > 0:
+                facturas_credito_vp[r["factura_id"]] = float(r["saldo"])
+        if facturas_credito_vp:
+            st.caption(
+                f"ℹ️ De las ventas hechas en este rango, {len(facturas_credito_vp)} factura(s) siguen "
+                f"con saldo pendiente a crédito por {fmt(sum(facturas_credito_vp.values()))} — van a "
+                f"aparecer en el reporte del mes en que se terminen de pagar, no en este."
+            )
 
         if not raw_vp:
             st.caption("No hay ventas en ese rango.")
