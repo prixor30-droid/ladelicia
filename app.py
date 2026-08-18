@@ -5681,6 +5681,49 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
                 pdf_bytes = generar_pdf("Reporte de Ventas", df_v, f"ventas_{f_exp_ini}_{f_exp_fin}")
                 st.download_button("⬇️ Descargar ventas PDF", pdf_bytes, f"ventas_{f_exp_ini}_{f_exp_fin}.pdf", "application/pdf", key="dl_pdf_v")
 
+        # Ventas por sabor y precio (pedido por la contadora 2026-08-18): cuántas
+        # unidades de cada sabor se vendieron a cada precio distinto (el precio de
+        # venta puede variar entre facturas — descuentos, negociación, etc.) y el
+        # total por sabor. Se calcula el precio de cada línea como total/cantidad
+        # (no hay columna "precio" en 'ventas', cada fila ya es un sabor de una
+        # factura a un precio fijo). Usa CANALES_VENTA_REAL para no contar los
+        # "Regalo"/"Regalo Fábrica" (total=0, no son ventas reales) — mismo criterio
+        # que ya se usa en Inventario Inicial Producto Terminado.
+        st.markdown('<div class="section-label">Ventas por sabor y precio (para contabilidad)</div>', unsafe_allow_html=True)
+        st.caption("Cuántas unidades de cada sabor se vendieron a cada precio, y el total por sabor — así lo pidió la contadora.")
+
+        raw_vp = sb_get("ventas", f"select=sabor,cantidad,total,canal&fecha=gte.{f_exp_ini}&fecha=lte.{f_exp_fin}") or []
+        raw_vp = [r for r in raw_vp if r.get("canal") in CANALES_VENTA_REAL and float(r.get("cantidad") or 0) > 0]
+
+        if not raw_vp:
+            st.caption("No hay ventas en ese rango.")
+        else:
+            df_vp = pd.DataFrame(raw_vp)
+            df_vp["precio"] = (df_vp["total"] / df_vp["cantidad"]).round().astype(int)
+            agr_vp = (df_vp.groupby(["sabor", "precio"], as_index=False)
+                      .agg(cantidad=("cantidad", "sum"), total=("total", "sum"))
+                      .sort_values(["sabor", "precio"]))
+
+            filas_vp = []
+            for sabor_vp, grupo_vp in agr_vp.groupby("sabor", sort=True):
+                for _, r in grupo_vp.iterrows():
+                    filas_vp.append({"Sabor": sabor_vp, "Precio": int(r["precio"]), "Cantidad": int(r["cantidad"]), "Subtotal": r["total"]})
+                filas_vp.append({"Sabor": f"Total {sabor_vp}", "Precio": "", "Cantidad": int(grupo_vp["cantidad"].sum()), "Subtotal": grupo_vp["total"].sum()})
+            filas_vp.append({"Sabor": "TOTAL GENERAL", "Precio": "", "Cantidad": int(agr_vp["cantidad"].sum()), "Subtotal": agr_vp["total"].sum()})
+            df_rep_vp = pd.DataFrame(filas_vp)
+
+            df_show_vp = df_rep_vp.copy()
+            df_show_vp["Subtotal"] = df_show_vp["Subtotal"].apply(fmt)
+            tabla_view(df_show_vp)
+
+            col_vp1, col_vp2 = st.columns(2)
+            if col_vp1.button("📥 CSV", key="btn_exp_vp"):
+                csv_vp = df_rep_vp.to_csv(index=False, sep=";").encode("utf-8-sig")
+                st.download_button("⬇️ Descargar CSV", csv_vp, f"ventas_por_precio_{f_exp_ini}_{f_exp_fin}.csv", "text/csv", key="dl_vp")
+            if col_vp2.button("📄 PDF", key="btn_pdf_vp"):
+                pdf_bytes_vp = generar_pdf("Ventas por sabor y precio", df_show_vp, f"ventas_por_precio_{f_exp_ini}_{f_exp_fin}")
+                st.download_button("⬇️ Descargar PDF", pdf_bytes_vp, f"ventas_por_precio_{f_exp_ini}_{f_exp_fin}.pdf", "application/pdf", key="dl_pdf_vp")
+
         # Producción
         st.markdown('<div class="section-label">Producción</div>', unsafe_allow_html=True)
         col_p1, col_p2 = st.columns(2)
