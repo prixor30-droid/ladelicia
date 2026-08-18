@@ -503,11 +503,13 @@ def calcular_cobros_periodo(f_ini, f_fin, solo_efectivo=False):
     primero, y las demás quedaron desactualizadas hasta que se reportó el bug —
     por eso ahora viven en un solo lugar.
 
-    solo_efectivo=True descarta los pagos marcados como "Nequi" (medio_pago),
-    dejando solo lo que entró en efectivo físico — lo usan Arqueo y Caja real,
-    que necesitan comparar contra plata física, no contra el total del negocio.
-    Los demás llamadores (Resumen, Caja→Resumen) dejan el default False porque
-    ahí sí importa el total del negocio, sea efectivo o Nequi.
+    solo_efectivo=True deja solo lo que entró en efectivo físico — lo usan Arqueo y
+    Caja real, que necesitan comparar contra plata física, no contra el total del
+    negocio. Los demás llamadores (Resumen, Caja→Resumen) dejan el default False
+    porque ahí sí importa el total del negocio, sea efectivo o Nequi. Soporta pago
+    dividido (mitad efectivo, mitad Nequi en la misma factura/cobro) vía las
+    columnas 'abono_efectivo'/'abono_nequi' (en ventas) y 'monto_efectivo'/
+    'monto_nequi' (en pagos_credito) — ver _monto_efectivo().
 
     Devuelve:
       raw_ventas: filas crudas de 'ventas' en el rango (una por producto vendido)
@@ -519,15 +521,24 @@ def calcular_cobros_periodo(f_ini, f_fin, solo_efectivo=False):
     f_ini_d = f_ini if isinstance(f_ini, date) else date.fromisoformat(str(f_ini))
     f_fin_d = f_fin if isinstance(f_fin, date) else date.fromisoformat(str(f_fin))
 
-    def _es_efectivo(r):
-        return (r.get("medio_pago") or "Efectivo") == "Efectivo"
+    def _monto_efectivo(r, campo):
+        """Cuánto de r[campo] fue en efectivo — soporta pago dividido (columnas
+        '{campo}_efectivo'/'{campo}_nequi'). Si esas columnas vienen vacías (fila de
+        antes del pago dividido, o un pago simple sin dividir), cae al comportamiento
+        de siempre: todo el monto según 'medio_pago'."""
+        ef = r.get(f"{campo}_efectivo")
+        nq = r.get(f"{campo}_nequi")
+        if ef is not None or nq is not None:
+            return float(ef or 0)
+        monto = float(r.get(campo, 0) or 0)
+        return monto if (r.get("medio_pago") or "Efectivo") == "Efectivo" else 0.0
 
     # order= explícito: "facturas" toma solo la PRIMERA fila por factura_id (abajo) como
     # representativa del canal/abono original — sin orden, Postgres podría devolver una
     # fila "Cambio" antes que la venta original si esta se reescribió (MVCC), haciendo
     # que la factura se cuente con el canal equivocado o desaparezca de los totales.
     raw_ventas = sb_get("ventas", f"select=*&fecha=gte.{f_ini}&fecha=lte.{f_fin}&order=id.asc") or []
-    raw_pg = sb_get("pagos_credito", "select=fecha,monto,tipo,factura_id,canal,medio_pago") or []
+    raw_pg = sb_get("pagos_credito", "select=fecha,monto,tipo,factura_id,canal,medio_pago,monto_efectivo,monto_nequi") or []
 
     # Cuánto de cada factura se cobró DESPUÉS de la venta (vía "Cobrar" en créditos
     # pendientes) — se resta del abono actual para no contar ese dinero dos veces:
@@ -555,8 +566,8 @@ def calcular_cobros_periodo(f_ini, f_fin, solo_efectivo=False):
         fid = r.get("factura_id", "")
         if fid and fid not in facturas:
             abono_bruto = float(r.get("abono", 0) or 0)
-            if solo_efectivo and not _es_efectivo(r):
-                abono_bruto = 0.0
+            if solo_efectivo:
+                abono_bruto = _monto_efectivo(r, "abono")
             abono_inicial = max(0.0, abono_bruto - cobrado_despues.get(fid, 0))
             facturas[fid] = {
                 "canal": r.get("canal", ""),
@@ -566,11 +577,12 @@ def calcular_cobros_periodo(f_ini, f_fin, solo_efectivo=False):
 
     cobro_creditos_por_canal = {}
     for r in raw_pg:
-        if solo_efectivo and not _es_efectivo(r):
+        monto_r = _monto_efectivo(r, "monto") if solo_efectivo else float(r["monto"])
+        if monto_r <= 0:
             continue
         if f_ini_d <= date.fromisoformat(r["fecha"]) <= f_fin_d:
             c = r.get("canal", "")
-            cobro_creditos_por_canal[c] = cobro_creditos_por_canal.get(c, 0.0) + float(r["monto"])
+            cobro_creditos_por_canal[c] = cobro_creditos_por_canal.get(c, 0.0) + monto_r
 
     return {
         "raw_ventas": raw_ventas,
@@ -916,9 +928,25 @@ def mostrar_creditos_pendientes(canal):
             "Abono ($)", min_value=0, max_value=int(saldo),
             value=int(saldo), step=1000, key=f"abono_pend_{key}"
         )
-        medio_cobro = contenedor_creditos.radio(
-            "Medio de pago", ["💵 Efectivo", "📱 Nequi"], horizontal=True, key=f"medio_cobro_{key}"
+        dividir_cobro = contenedor_creditos.checkbox(
+            "💳 Dividir entre efectivo y Nequi", key=f"dividir_cobro_{key}"
         )
+        if dividir_cobro:
+            col_cef, col_cnq = contenedor_creditos.columns(2)
+            cobro_efectivo = col_cef.number_input(
+                "💵 Efectivo ($)", min_value=0, max_value=int(nuevo_abono),
+                value=int(nuevo_abono), step=1000, key=f"cobro_efectivo_{key}"
+            )
+            cobro_nequi = int(nuevo_abono) - cobro_efectivo
+            col_cnq.markdown(f'<div class="info-box">📱 Nequi: <b>{fmt(cobro_nequi)}</b></div>', unsafe_allow_html=True)
+            medio_cobro_val = "Mixto"
+        else:
+            medio_cobro = contenedor_creditos.radio(
+                "Medio de pago", ["💵 Efectivo", "📱 Nequi"], horizontal=True, key=f"medio_cobro_{key}"
+            )
+            medio_cobro_val = "Efectivo" if "Efectivo" in medio_cobro else "Nequi"
+            cobro_efectivo = float(nuevo_abono) if medio_cobro_val == "Efectivo" else 0
+            cobro_nequi = float(nuevo_abono) if medio_cobro_val == "Nequi" else 0
         confirmando_cobro = st.session_state.get("confirmar_cobro") == key
         if not confirmando_cobro:
             if col_b.button("✅ Cobrar", key=f"btn_cobrar_{key}") and nuevo_abono > 0:
@@ -939,12 +967,14 @@ def mostrar_creditos_pendientes(canal):
                     ok_cobro = _registrar_pago_credito_cas(datos["ref"], nuevo_abono)
                     id_factura, id_credito = None, datos["ref"]
                 if ok_cobro:
-                    medio_cobro_val = "Efectivo" if "Efectivo" in medio_cobro else "Nequi"
+                    # medio_cobro_val / cobro_efectivo / cobro_nequi ya quedaron calculados
+                    # arriba (soportan pago dividido — ver checkbox "Dividir entre efectivo y Nequi").
                     sb_post("pagos_credito", {
                         "fecha": fecha_hoy(), "hora": ahora(), "tipo": datos["tipo"],
                         "factura_id": id_factura, "credito_id": id_credito,
                         "cliente": datos["cliente"], "canal": canal, "vendedor": datos["vendedor"],
                         "monto": float(nuevo_abono), "medio_pago": medio_cobro_val,
+                        "monto_efectivo": cobro_efectivo, "monto_nequi": cobro_nequi,
                     })
                 st.session_state["confirmar_cobro"] = None
                 time.sleep(0.3)
@@ -1158,7 +1188,20 @@ def render_venta_canal(cfg, mostrar_creditos=True):
             st.session_state["venta_abono"] = int(total_venta)
             st.session_state["venta_abono_total_ref"] = total_venta
         abono = st.number_input("Abono del cliente ($)", min_value=0, value=int(total_venta), step=1000, key="venta_abono")
-        medio_venta = st.radio("Medio de pago", ["💵 Efectivo", "📱 Nequi"], horizontal=True, key="venta_medio_pago")
+        dividir_pago_venta = st.checkbox("💳 Dividir entre efectivo y Nequi", key="venta_dividir_pago")
+        if dividir_pago_venta:
+            col_ef_v, col_nq_v = st.columns(2)
+            abono_efectivo = col_ef_v.number_input(
+                "💵 Efectivo ($)", min_value=0, max_value=int(abono), value=int(abono), step=1000, key="venta_abono_efectivo"
+            )
+            abono_nequi = int(abono) - abono_efectivo
+            col_nq_v.markdown(f'<div class="info-box">📱 Nequi: <b>{fmt(abono_nequi)}</b></div>', unsafe_allow_html=True)
+            medio_venta_val = "Mixto"
+        else:
+            medio_venta = st.radio("Medio de pago", ["💵 Efectivo", "📱 Nequi"], horizontal=True, key="venta_medio_pago")
+            medio_venta_val = "Efectivo" if "Efectivo" in medio_venta else "Nequi"
+            abono_efectivo = int(abono) if medio_venta_val == "Efectivo" else 0
+            abono_nequi = int(abono) if medio_venta_val == "Nequi" else 0
         if abono > 0:
             if abono >= total_venta:
                 st.markdown(f'<div class="info-box">{ICO_DOLLAR} Total: <b>{fmt(total_venta)}</b> · Devolver: <b>{fmt(abono - total_venta)}</b></div>', unsafe_allow_html=True)
@@ -1185,7 +1228,8 @@ def render_venta_canal(cfg, mostrar_creditos=True):
                     fid = str(uuid.uuid4())[:8].upper()
                     total_confirmado = 0
                     abono_val = int(st.session_state.get("venta_abono", 0))
-                    medio_venta_val = "Efectivo" if "Efectivo" in medio_venta else "Nequi"
+                    # medio_venta_val / abono_efectivo / abono_nequi ya quedaron calculados
+                    # arriba (soportan pago dividido — ver checkbox "Dividir entre efectivo y Nequi").
                     for s, c in carrito.items():
                         precio_final = st.session_state[key_precios].get(s, PRODUCTOS[s])
                         subtotal = precio_final * c
@@ -1196,11 +1240,15 @@ def render_venta_canal(cfg, mostrar_creditos=True):
                             "total": subtotal, "cliente": cliente.strip(),
                             "factura_id": fid, "abono": abono_val, "saldo": 0,
                             "medio_pago": medio_venta_val,
+                            "abono_efectivo": abono_efectivo, "abono_nequi": abono_nequi,
                         })
                         if mutar_stock:
                             restar_stock(s, c)
                     saldo_final = max(0, total_confirmado - abono_val)
-                    sb_patch("ventas", f"factura_id=eq.{fid}", {"abono": abono_val, "saldo": saldo_final, "medio_pago": medio_venta_val})
+                    sb_patch("ventas", f"factura_id=eq.{fid}", {
+                        "abono": abono_val, "saldo": saldo_final, "medio_pago": medio_venta_val,
+                        "abono_efectivo": abono_efectivo, "abono_nequi": abono_nequi,
+                    })
                     st.session_state[key_factura] = {
                         "id": fid, "cliente": cliente.strip(), "vendedor": vendedor,
                         "items": dict(carrito), "precios": dict(st.session_state[key_precios]),
