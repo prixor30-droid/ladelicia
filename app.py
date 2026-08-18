@@ -3524,33 +3524,40 @@ elif st.session_state.vista == "recibo":
                         st.markdown(f'<div class="info-box">{ICO_CHECK} Cambio sin diferencia de valor</div>', unsafe_allow_html=True)
 
                     if st.button("🔁 Registrar cambio", key="edit_btn_cambio"):
-                        sb_post("ventas", {
+                        # Las dos filas (out/in) deben quedar las dos o ninguna — si una
+                        # falla (ej. corte de red pasajero) y se sigue igual moviendo stock
+                        # y registrando auditoría, la factura queda a medias sin que nadie
+                        # se dé cuenta (bug real detectado 2026-08-18, factura 95549AF6:
+                        # la fila "out" no se guardó y quedaron $9.000 de venta fantasma).
+                        ok_out = sb_post("ventas", {
                             "fecha": fecha_hoy(), "hora": ahora(), "canal": f"Cambio {cfg_edit['canal']}",
                             "vendedor": vendedor_recibo, "sabor": sabor_out,
                             "cantidad": -cant_out, "total": -valor_out,
                             "cliente": cliente_recibo, "factura_id": fid_recibo,
                             "abono": 0, "saldo": 0
                         })
-                        if cfg_edit["mutar_stock"]:
-                            agregar_stock(sabor_out, cant_out)
-                        sb_post("ventas", {
+                        ok_in = ok_out and sb_post("ventas", {
                             "fecha": fecha_hoy(), "hora": ahora(), "canal": f"Cambio {cfg_edit['canal']}",
                             "vendedor": vendedor_recibo, "sabor": sabor_in,
                             "cantidad": cant_in, "total": valor_in,
                             "cliente": cliente_recibo, "factura_id": fid_recibo,
                             "abono": 0, "saldo": 0
                         })
-                        if cfg_edit["mutar_stock"]:
-                            restar_stock(sabor_in, cant_in)
-                        _ajustar_saldo(diferencia)
-                        _registrar_auditoria_factura(
-                            fid_recibo, "Cambio de producto",
-                            f"Devuelve {cant_out} {sabor_out} · Lleva {cant_in} {sabor_in}",
-                            usuario_edicion
-                        )
-                        _recargar_recibo()
-                        time.sleep(0.3)
-                        st.rerun()
+                        if not (ok_out and ok_in):
+                            st.error("No se pudo registrar el cambio completo — revisa esta factura antes de reintentar, puede haber quedado a medias.")
+                        else:
+                            if cfg_edit["mutar_stock"]:
+                                agregar_stock(sabor_out, cant_out)
+                                restar_stock(sabor_in, cant_in)
+                            _ajustar_saldo(diferencia)
+                            _registrar_auditoria_factura(
+                                fid_recibo, "Cambio de producto",
+                                f"Devuelve {cant_out} {sabor_out} · Lleva {cant_in} {sabor_in}",
+                                usuario_edicion
+                            )
+                            _recargar_recibo()
+                            time.sleep(0.3)
+                            st.rerun()
 
                 with tab_ed_agregar:
                     disp_add = cfg_edit["disponible_map_fn"]()
@@ -3565,24 +3572,27 @@ elif st.session_state.vista == "recibo":
                         st.markdown(f'<div class="info-box">{ICO_PACKAGE} Disponible: <b>{max_add}</b> · {ICO_DOLLAR} A cobrar: <b>{fmt(precio_add)}</b></div>', unsafe_allow_html=True)
 
                         if st.button("➕ Agregar a la factura", key="edit_btn_add"):
-                            sb_post("ventas", {
+                            ok_add = sb_post("ventas", {
                                 "fecha": fecha_hoy(), "hora": ahora(), "canal": f"Cambio {cfg_edit['canal']}",
                                 "vendedor": vendedor_recibo, "sabor": sabor_add,
                                 "cantidad": cant_add, "total": precio_add,
                                 "cliente": cliente_recibo, "factura_id": fid_recibo,
                                 "abono": 0, "saldo": 0
                             })
-                            if cfg_edit["mutar_stock"]:
-                                restar_stock(sabor_add, cant_add)
-                            _ajustar_saldo(precio_add)
-                            _registrar_auditoria_factura(
-                                fid_recibo, "Agregar producto",
-                                f"+{cant_add} {sabor_add} ({fmt(precio_add)})",
-                                usuario_edicion
-                            )
-                            _recargar_recibo()
-                            time.sleep(0.3)
-                            st.rerun()
+                            if not ok_add:
+                                st.error("No se pudo agregar el producto a la factura — inténtalo de nuevo.")
+                            else:
+                                if cfg_edit["mutar_stock"]:
+                                    restar_stock(sabor_add, cant_add)
+                                _ajustar_saldo(precio_add)
+                                _registrar_auditoria_factura(
+                                    fid_recibo, "Agregar producto",
+                                    f"+{cant_add} {sabor_add} ({fmt(precio_add)})",
+                                    usuario_edicion
+                                )
+                                _recargar_recibo()
+                                time.sleep(0.3)
+                                st.rerun()
 
                 with tab_ed_quitar:
                     sabor_quitar = st.selectbox("Producto a quitar", list(items_recibo.keys()), key="edit_quitar_sabor")
@@ -3592,24 +3602,27 @@ elif st.session_state.vista == "recibo":
                     st.markdown(f'<div class="info-box">{ICO_DOLLAR} Se descuenta <b>{fmt(valor_quitar)}</b> de la factura</div>', unsafe_allow_html=True)
 
                     if st.button("➖ Quitar de la factura", key="edit_btn_quitar"):
-                        sb_post("ventas", {
+                        ok_quitar = sb_post("ventas", {
                             "fecha": fecha_hoy(), "hora": ahora(), "canal": f"Cambio {cfg_edit['canal']}",
                             "vendedor": vendedor_recibo, "sabor": sabor_quitar,
                             "cantidad": -cant_quitar, "total": -valor_quitar,
                             "cliente": cliente_recibo, "factura_id": fid_recibo,
                             "abono": 0, "saldo": 0
                         })
-                        if cfg_edit["mutar_stock"]:
-                            agregar_stock(sabor_quitar, cant_quitar)
-                        _ajustar_saldo(-valor_quitar)
-                        _registrar_auditoria_factura(
-                            fid_recibo, "Quitar producto",
-                            f"-{cant_quitar} {sabor_quitar} ({fmt(valor_quitar)})",
-                            usuario_edicion
-                        )
-                        _recargar_recibo()
-                        time.sleep(0.3)
-                        st.rerun()
+                        if not ok_quitar:
+                            st.error("No se pudo quitar el producto de la factura — inténtalo de nuevo.")
+                        else:
+                            if cfg_edit["mutar_stock"]:
+                                agregar_stock(sabor_quitar, cant_quitar)
+                            _ajustar_saldo(-valor_quitar)
+                            _registrar_auditoria_factura(
+                                fid_recibo, "Quitar producto",
+                                f"-{cant_quitar} {sabor_quitar} ({fmt(valor_quitar)})",
+                                usuario_edicion
+                            )
+                            _recargar_recibo()
+                            time.sleep(0.3)
+                            st.rerun()
 
         # Eliminar factura — visible para todos
         if st.session_state.get("confirmar_eliminar_fac") == fid_recibo:
@@ -5689,7 +5702,7 @@ elif st.session_state.vista == "resumen" and st.session_state.es_admin:
         # factura a un precio fijo). Usa CANALES_VENTA_REAL para no contar los
         # "Regalo"/"Regalo Fábrica" (total=0, no son ventas reales) — mismo criterio
         # que ya se usa en Inventario Inicial Producto Terminado.
-        st.markdown('<div class="section-label">Ventas por sabor y precio (para contabilidad)</div>', unsafe_allow_html=True)
+        st.markdown('<div class="section-label">Ventas unificadas</div>', unsafe_allow_html=True)
         st.caption("Cuántas unidades de cada sabor se vendieron a cada precio, y el total por sabor — así lo pidió la contadora.")
 
         raw_vp = sb_get("ventas", f"select=sabor,cantidad,total,canal&fecha=gte.{f_exp_ini}&fecha=lte.{f_exp_fin}") or []
