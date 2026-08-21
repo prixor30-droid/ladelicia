@@ -1230,11 +1230,15 @@ def render_venta_canal(cfg, mostrar_creditos=True):
                     abono_val = int(st.session_state.get("venta_abono", 0))
                     # medio_venta_val / abono_efectivo / abono_nequi ya quedaron calculados
                     # arriba (soportan pago dividido — ver checkbox "Dividir entre efectivo y Nequi").
+                    # Si el guardado de un item falla a medio carrito (corte de red pasajero),
+                    # se detiene aquí en vez de seguir restando stock de items que no quedaron
+                    # guardados — mismo bug de guardado parcial que ya causó descuadres de
+                    # stock antes (ver memoria fabrica_bug_guardado_parcial).
+                    items_ok_venta, fallo_venta = [], None
                     for s, c in carrito.items():
                         precio_final = st.session_state[key_precios].get(s, PRODUCTOS[s])
                         subtotal = precio_final * c
-                        total_confirmado += subtotal
-                        sb_post("ventas", {
+                        ok_item_venta = sb_post("ventas", {
                             "fecha": fecha_hoy(), "hora": ahora(), "canal": canal,
                             "vendedor": vendedor, "sabor": s, "cantidad": c,
                             "total": subtotal, "cliente": cliente.strip(),
@@ -1242,20 +1246,34 @@ def render_venta_canal(cfg, mostrar_creditos=True):
                             "medio_pago": medio_venta_val,
                             "abono_efectivo": abono_efectivo, "abono_nequi": abono_nequi,
                         })
+                        if not ok_item_venta:
+                            fallo_venta = s
+                            break
+                        total_confirmado += subtotal
+                        items_ok_venta.append(s)
                         if mutar_stock:
                             restar_stock(s, c)
-                    saldo_final = max(0, total_confirmado - abono_val)
-                    sb_patch("ventas", f"factura_id=eq.{fid}", {
-                        "abono": abono_val, "saldo": saldo_final, "medio_pago": medio_venta_val,
-                        "abono_efectivo": abono_efectivo, "abono_nequi": abono_nequi,
-                    })
-                    st.session_state[key_factura] = {
-                        "id": fid, "cliente": cliente.strip(), "vendedor": vendedor,
-                        "items": dict(carrito), "precios": dict(st.session_state[key_precios]),
-                        "total": total_confirmado, "billete": abono_val, "saldo": saldo_final,
-                    }
-                    st.session_state[key_carrito] = {}
-                    st.session_state[key_precios] = {}
+                    if fallo_venta:
+                        st.error(
+                            f"⚠️ No se pudo guardar {fallo_venta} — la factura #{fid} quedó a medias "
+                            f"(sí se guardó: {', '.join(items_ok_venta) if items_ok_venta else 'nada'}). "
+                            f"Ve a Recibo, revisa la factura #{fid} y complétala a mano — no repitas toda la venta."
+                        )
+                    else:
+                        saldo_final = max(0, total_confirmado - abono_val)
+                        ok_patch_venta = sb_patch("ventas", f"factura_id=eq.{fid}", {
+                            "abono": abono_val, "saldo": saldo_final, "medio_pago": medio_venta_val,
+                            "abono_efectivo": abono_efectivo, "abono_nequi": abono_nequi,
+                        })
+                        if not ok_patch_venta:
+                            st.error(f"⚠️ La factura #{fid} se guardó, pero no se pudo registrar el abono/saldo — revísala en Recibo y corrígelo a mano.")
+                        st.session_state[key_factura] = {
+                            "id": fid, "cliente": cliente.strip(), "vendedor": vendedor,
+                            "items": dict(carrito), "precios": dict(st.session_state[key_precios]),
+                            "total": total_confirmado, "billete": abono_val, "saldo": saldo_final,
+                        }
+                        st.session_state[key_carrito] = {}
+                        st.session_state[key_precios] = {}
                     time.sleep(0.3)
                     st.rerun()
 
@@ -1300,29 +1318,34 @@ def render_venta_canal(cfg, mostrar_creditos=True):
                 st.markdown(f'<div class="info-box">{ICO_CHECK} Cambio sin diferencia de valor</div>', unsafe_allow_html=True)
 
             if st.button("🔁 Registrar cambio", key="venta_btn_cambio"):
-                sb_post("ventas", {
+                # Mismo blindaje que en "Editar factura": las dos filas (out/in) deben
+                # quedar las dos o ninguna — si una falla, no seguir moviendo stock/saldo
+                # como si el cambio completo hubiera funcionado.
+                ok_out_v = sb_post("ventas", {
                     "fecha": fecha_hoy(), "hora": ahora(), "canal": f"Cambio {canal}",
                     "vendedor": fac["vendedor"], "sabor": sabor_out,
                     "cantidad": -cant_out, "total": -valor_out,
                     "cliente": fac["cliente"], "factura_id": fac["id"],
                     "abono": 0, "saldo": 0
                 })
-                if mutar_stock:
-                    agregar_stock(sabor_out, cant_out)
-                sb_post("ventas", {
+                ok_in_v = ok_out_v and sb_post("ventas", {
                     "fecha": fecha_hoy(), "hora": ahora(), "canal": f"Cambio {canal}",
                     "vendedor": fac["vendedor"], "sabor": sabor_in,
                     "cantidad": cant_in, "total": valor_in,
                     "cliente": fac["cliente"], "factura_id": fac["id"],
                     "abono": 0, "saldo": 0
                 })
-                if mutar_stock:
-                    restar_stock(sabor_in, cant_in)
-                if diferencia != 0:
-                    _ajustar_saldo_ventas_cas(f"factura_id=eq.{fac['id']}&canal=eq.{canal}", delta_saldo=diferencia)
-                time.sleep(0.3)
-                _recargar_factura(key_factura, fac)
-                st.rerun()
+                if not (ok_out_v and ok_in_v):
+                    st.error("⚠️ No se pudo registrar el cambio completo — revisa esta factura antes de reintentar, puede haber quedado a medias.")
+                else:
+                    if mutar_stock:
+                        agregar_stock(sabor_out, cant_out)
+                        restar_stock(sabor_in, cant_in)
+                    if diferencia != 0:
+                        _ajustar_saldo_ventas_cas(f"factura_id=eq.{fac['id']}&canal=eq.{canal}", delta_saldo=diferencia)
+                    time.sleep(0.3)
+                    _recargar_factura(key_factura, fac)
+                    st.rerun()
 
         with tab_agregar:
             disp_add = cfg["disponible_map_fn"]()
@@ -1337,19 +1360,22 @@ def render_venta_canal(cfg, mostrar_creditos=True):
                 st.markdown(f'<div class="info-box">{ICO_PACKAGE} Disponible: <b>{max_add}</b> · {ICO_DOLLAR} A cobrar: <b>{fmt(precio_add)}</b></div>', unsafe_allow_html=True)
 
                 if st.button("➕ Agregar a la factura", key="venta_btn_add_fac"):
-                    sb_post("ventas", {
+                    ok_add_v = sb_post("ventas", {
                         "fecha": fecha_hoy(), "hora": ahora(), "canal": f"Cambio {canal}",
                         "vendedor": fac["vendedor"], "sabor": sabor_add,
                         "cantidad": cant_add, "total": precio_add,
                         "cliente": fac["cliente"], "factura_id": fac["id"],
                         "abono": 0, "saldo": 0
                     })
-                    if mutar_stock:
-                        restar_stock(sabor_add, cant_add)
-                    _ajustar_saldo_ventas_cas(f"factura_id=eq.{fac['id']}&canal=eq.{canal}", delta_saldo=precio_add)
-                    time.sleep(0.3)
-                    _recargar_factura(key_factura, fac)
-                    st.rerun()
+                    if not ok_add_v:
+                        st.error("⚠️ No se pudo agregar el producto a la factura — no se movió el stock. Intenta de nuevo.")
+                    else:
+                        if mutar_stock:
+                            restar_stock(sabor_add, cant_add)
+                        _ajustar_saldo_ventas_cas(f"factura_id=eq.{fac['id']}&canal=eq.{canal}", delta_saldo=precio_add)
+                        time.sleep(0.3)
+                        _recargar_factura(key_factura, fac)
+                        st.rerun()
 
         if st.button("🧾 Nueva venta", key="venta_btn_nueva"):
             st.session_state[key_factura] = None
@@ -2419,6 +2445,7 @@ defaults = {
     "factura_guardada": None,
     "factura_carro_guardada": None,
     "ok_prod": False,
+    "error_prod": False,
     "ok_cargue": False,
     "ok_dev": False,
     "ok_mp":  False,
@@ -2705,6 +2732,83 @@ if st.session_state.vista == "menu":
 # VISTA: PRODUCCIÓN
 # ══════════════════════════════════════════════════════════════════════════════
 elif st.session_state.vista == "produccion":
+    # ── Auditoría de inventario — alerta de desfase (pedido 2026-08-21) ──
+    # Compara, para el mes en curso, el stock de FÁBRICA que "debería" haber
+    # (mismo tipo de fórmula que usaba Contador → Inventario Inicial Producto
+    # Terminado en su columna "Diferencia", quitada el 2026-07-23 — se sacó de AHÍ
+    # porque el "Saldo" contable de ese reporte cuenta ventas del Carro y no resta
+    # Cargues, así que no representa 'inventario.stock' de Fábrica específicamente;
+    # esta cuenta sí lo hace) contra lo que hay guardado ahora mismo. Se muestra
+    # aquí, visible para cualquiera (no solo admin), para detectar un desfase el
+    # mismo día en vez de notarlo semanas después comparando contra Contador (caso
+    # real: BBQ, ver memoria fabrica_bug_guardado_parcial).
+    @st.cache_data(ttl=600)
+    def _auditoria_stock_fabrica():
+        hoy_aud = datetime.now(COL_TZ).date()
+        primer_dia_aud = hoy_aud.replace(day=1)
+        ultimo_dia_aud = str(hoy_aud)
+
+        raw_inicial_aud = sb_get("cierres_inventario", f"select=sabor,cantidad&mes=eq.{primer_dia_aud}") or []
+        if not raw_inicial_aud:
+            # Sin "Cerrar inventario del mes" hecho este mes, no hay ancla confiable
+            # de dónde arrancó el stock — mejor no comparar nada que comparar contra
+            # un supuesto "0" inicial que probablemente esté mal.
+            return None
+
+        raw_prod_aud = sb_get("produccion", f"select=sabor,cantidad&fecha=gte.{primer_dia_aud}&fecha=lte.{ultimo_dia_aud}") or []
+        raw_vent_aud = sb_get("ventas", f"select=sabor,cantidad,canal&fecha=gte.{primer_dia_aud}&fecha=lte.{ultimo_dia_aud}") or []
+        raw_cg_aud = sb_get("cargues", f"select=sabor,cantidad&fecha=gte.{primer_dia_aud}&fecha=lte.{ultimo_dia_aud}") or []
+        raw_dev_aud = sb_get("devoluciones", f"select=sabor,cantidad&fecha=gte.{primer_dia_aud}&fecha=lte.{ultimo_dia_aud}") or []
+        raw_mer_aud = sb_get("mermas_stock", f"select=sabor,cantidad&fecha=gte.{primer_dia_aud}&fecha=lte.{ultimo_dia_aud}") or []
+        raw_ajs_aud = sb_get("ajustes_stock_manual", f"select=sabor,delta&fecha=gte.{primer_dia_aud}&fecha=lte.{ultimo_dia_aud}") or []
+
+        esperado = {s: 0.0 for s in SABORES_LISTA}
+        for r in raw_inicial_aud:
+            esperado[r["sabor"]] = float(r["cantidad"])
+        for r in raw_prod_aud:
+            esperado[r["sabor"]] = esperado.get(r["sabor"], 0) + float(r["cantidad"])
+        for r in raw_vent_aud:
+            # Solo lo que sale del inventario de FÁBRICA — el Carro tiene su propio
+            # stock aparte (calculado con cargues, no vive en 'inventario').
+            if r.get("canal") in ("Fábrica", "Cambio", "Cambio Fábrica", "Regalo Fábrica"):
+                esperado[r["sabor"]] = esperado.get(r["sabor"], 0) - float(r["cantidad"])
+        for r in raw_cg_aud:
+            esperado[r["sabor"]] = esperado.get(r["sabor"], 0) - float(r["cantidad"])
+        for r in raw_dev_aud:
+            esperado[r["sabor"]] = esperado.get(r["sabor"], 0) + float(r["cantidad"])
+        for r in raw_mer_aud:
+            esperado[r["sabor"]] = esperado.get(r["sabor"], 0) - float(r["cantidad"])
+        for r in raw_ajs_aud:
+            esperado[r["sabor"]] = esperado.get(r["sabor"], 0) + float(r["delta"])
+
+        real = get_inventario_completo()
+        filas = []
+        for sabor, stock_esperado in esperado.items():
+            stock_real = float(real.get(sabor, 0))
+            dif = round(stock_real - stock_esperado)
+            if dif != 0:
+                filas.append({"sabor": sabor, "esperado": round(stock_esperado), "real": int(stock_real), "diferencia": dif})
+        return filas
+
+    desfases_prod = _auditoria_stock_fabrica()
+    if desfases_prod is None:
+        st.caption("ℹ️ La auditoría de inventario se activa cuando se cierra el inventario del mes en Contador (Reportes → Inventario Inicial Producto Terminado → Cerrar inventario del mes).")
+    elif desfases_prod:
+        filas_desfase_html = "".join(
+            f'<div class="factura-row"><span>{d["sabor"]}</span>'
+            f'<span>Esperado {d["esperado"]} · Real {d["real"]} · '
+            f'<b>{"+" if d["diferencia"] > 0 else ""}{d["diferencia"]}</b></span></div>'
+            for d in desfases_prod
+        )
+        st.markdown(
+            f'<div class="warn-box">{ICO_WARN} <b>Posible desfase de inventario este mes</b> '
+            f'(esperado = inicial + producción − ventas de Fábrica − cargues + devoluciones − mermas + ajustes):'
+            f'<div class="factura-box" style="margin-top:6px">{filas_desfase_html}</div>'
+            f'Si el número no se explica solo, avisa antes de que pasen días — un conteo físico del sabor '
+            f'ayuda a saber cuál de los dos números es el correcto.</div>',
+            unsafe_allow_html=True
+        )
+
     st.markdown('<div class="section-label">Registrar producción</div>', unsafe_allow_html=True)
 
     empleado   = st.selectbox("¿Quién registra?", EMPLEADOS, key="emp")
@@ -2715,14 +2819,24 @@ elif st.session_state.vista == "produccion":
     st.markdown(f'<div class="info-box">{ICO_PACKAGE} Stock actual de <b>{sabor_p}</b>: {stock_act} → quedará en <b>{stock_act + cantidad_p}</b></div>', unsafe_allow_html=True)
 
     def _registrar_produccion(empleado, sabor, cantidad):
-        sb_post("produccion", {
+        # Si esto falla (ej. corte de red pasajero) y se sigue igual sumando
+        # stock/insumos como si el registro existiera, queda un movimiento de
+        # stock sin respaldo en la tabla 'produccion' (bug real detectado
+        # 2026-08-21 con BBQ). Por eso primero se confirma que el registro se
+        # guardó antes de tocar stock/insumos.
+        ok = sb_post("produccion", {
             "fecha": fecha_hoy(), "hora": ahora(),
             "empleado": empleado, "sabor": sabor, "cantidad": cantidad
         })
+        if not ok:
+            st.session_state.ok_prod = False
+            st.session_state.error_prod = True
+            return
         agregar_stock(sabor, cantidad)
         _ajustar_funda_endocenar(sabor, cantidad, motivo=f"Producción — {sabor}")
         _ajustar_empaque_unitario(sabor, cantidad, motivo=f"Producción — {sabor}")
         st.session_state.ok_prod = True
+        st.session_state.error_prod = False
         st.session_state.confirmar_prod = "❌ No confirmado"
 
     opcion_confirmar_prod = st.radio(
@@ -2738,6 +2852,9 @@ elif st.session_state.vista == "produccion":
     if st.session_state.ok_prod:
         st.markdown(f'<div class="success-toast">{ICO_CHECK} ¡Producción registrada!</div>', unsafe_allow_html=True)
         st.session_state.ok_prod = False
+    if st.session_state.error_prod:
+        st.error("⚠️ No se pudo guardar la producción — no se movió el stock. Intenta de nuevo.")
+        st.session_state.error_prod = False
 
     # Producción de un día — selector de fecha + tabla totalmente editable
     st.markdown('<div class="section-label">Consultar producción</div>', unsafe_allow_html=True)
@@ -2776,6 +2893,7 @@ elif st.session_state.vista == "produccion":
         quien_edita_prod = st.selectbox("¿Quién hace este cambio?", EMPLEADOS, key="quien_edita_prod")
         col_g, col_e = st.columns(2)
         if col_g.button("💾 Guardar cambios", key="btn_save_prod"):
+            fallos_guardado_prod = []
             for i, row in edited.iterrows():
                 orig = df_prod.iloc[i]
                 cambios = {}
@@ -2799,14 +2917,31 @@ elif st.session_state.vista == "produccion":
                 if emp_new != emp_orig:
                     cambios["empleado"] = emp_new
                 if sabor_new != sabor_orig:
+                    cambios["sabor"] = sabor_new
+                    cambios["cantidad"] = cant_new
+                elif cant_new != cant_orig:
+                    cambios["cantidad"] = cant_new
+
+                if not cambios:
+                    continue
+
+                # Primero se guarda el cambio en 'produccion' y se confirma que
+                # funcionó ANTES de mover stock/insumos — si esto fallaba (ej.
+                # corte de red pasajero) el stock se movía igual mientras la fila
+                # se quedaba con el valor viejo, sin avisar (bug real detectado
+                # 2026-08-21 con un registro de BBQ que no quedó guardado).
+                ok = sb_patch("produccion", f"id=eq.{orig['id']}", cambios)
+                if not ok:
+                    fallos_guardado_prod.append(f"{sabor_orig} ({orig['hora']})")
+                    continue
+
+                if sabor_new != sabor_orig:
                     restar_stock(sabor_orig, cant_orig)
                     agregar_stock(sabor_new, cant_new)
                     _ajustar_funda_endocenar(sabor_orig, -cant_orig, motivo="Edición de producción (cambio de sabor)")
                     _ajustar_funda_endocenar(sabor_new, cant_new, motivo="Edición de producción (cambio de sabor)")
                     _ajustar_empaque_unitario(sabor_orig, -cant_orig, motivo="Edición de producción (cambio de sabor)")
                     _ajustar_empaque_unitario(sabor_new, cant_new, motivo="Edición de producción (cambio de sabor)")
-                    cambios["sabor"] = sabor_new
-                    cambios["cantidad"] = cant_new
                 elif cant_new != cant_orig:
                     diff = cant_new - cant_orig
                     if diff > 0:
@@ -2815,15 +2950,14 @@ elif st.session_state.vista == "produccion":
                         restar_stock(sabor_orig, abs(diff))
                     _ajustar_funda_endocenar(sabor_orig, diff, motivo="Edición de producción (cantidad)")
                     _ajustar_empaque_unitario(sabor_orig, diff, motivo="Edición de producción (cantidad)")
-                    cambios["cantidad"] = cant_new
 
-                if cambios:
-                    sb_patch("produccion", f"id=eq.{orig['id']}", cambios)
-                    detalle_cambios = ", ".join(f"{k}: {orig[k] if k != 'cantidad' else cant_orig} → {v}" for k, v in cambios.items())
-                    _registrar_auditoria_stock(
-                        "produccion", orig["id"], "Editar",
-                        f"{sabor_orig} — {detalle_cambios}", quien_edita_prod
-                    )
+                detalle_cambios = ", ".join(f"{k}: {orig[k] if k != 'cantidad' else cant_orig} → {v}" for k, v in cambios.items())
+                _registrar_auditoria_stock(
+                    "produccion", orig["id"], "Editar",
+                    f"{sabor_orig} — {detalle_cambios}", quien_edita_prod
+                )
+            if fallos_guardado_prod:
+                st.error("⚠️ No se pudo guardar el cambio de: " + ", ".join(fallos_guardado_prod) + ". No se movió el stock de esos registros — vuelve a intentarlo.")
             time.sleep(1)
             st.rerun()
 
@@ -2832,15 +2966,21 @@ elif st.session_state.vista == "produccion":
         sel_del = st.selectbox("Eliminar registro", ["— Selecciona —"] + list(ids_prod.keys()), key="sel_del_prod")
         if sel_del != "— Selecciona —" and col_e.button("🗑️ Eliminar", key="btn_del_prod"):
             reg_del = ids_prod[sel_del]
-            sb_delete("produccion", f"id=eq.{reg_del['id']}")
-            restar_stock(reg_del["sabor"], reg_del["cantidad"])
-            _ajustar_funda_endocenar(reg_del["sabor"], -reg_del["cantidad"], motivo="Eliminación de producción")
-            _ajustar_empaque_unitario(reg_del["sabor"], -reg_del["cantidad"], motivo="Eliminación de producción")
-            _registrar_auditoria_stock(
-                "produccion", reg_del["id"], "Eliminar",
-                f"{reg_del['sabor']} — {reg_del['cantidad']} bolsas ({reg_del['fecha']} {reg_del['hora']})",
-                quien_edita_prod
-            )
+            # Igual que arriba: primero se confirma que el borrado se hizo antes
+            # de restar stock/insumos, para no descontar algo que en la tabla
+            # nunca se llegó a eliminar de verdad.
+            ok_del = sb_delete("produccion", f"id=eq.{reg_del['id']}")
+            if not ok_del:
+                st.error("⚠️ No se pudo eliminar el registro — no se movió el stock. Intenta de nuevo.")
+            else:
+                restar_stock(reg_del["sabor"], reg_del["cantidad"])
+                _ajustar_funda_endocenar(reg_del["sabor"], -reg_del["cantidad"], motivo="Eliminación de producción")
+                _ajustar_empaque_unitario(reg_del["sabor"], -reg_del["cantidad"], motivo="Eliminación de producción")
+                _registrar_auditoria_stock(
+                    "produccion", reg_del["id"], "Eliminar",
+                    f"{reg_del['sabor']} — {reg_del['cantidad']} bolsas ({reg_del['fecha']} {reg_del['hora']})",
+                    quien_edita_prod
+                )
             time.sleep(0.3)
             st.rerun()
     else:
@@ -3047,9 +3187,17 @@ elif st.session_state.vista == "carro":
             if not registrados_cg:
                 st.warning("Ingresa al menos una cantidad para registrar.")
             else:
+                fallos_cg = []
                 for sabor, cantidad in registrados_cg:
-                    sb_post("cargues", {"fecha": fecha_hoy(), "hora": ahora(), "sabor": sabor, "cantidad": cantidad})
-                    restar_stock(sabor, cantidad)
+                    # Si uno falla, no seguir restando stock del resto sin dejar rastro —
+                    # ver fabrica_bug_guardado_parcial.
+                    ok_cg = sb_post("cargues", {"fecha": fecha_hoy(), "hora": ahora(), "sabor": sabor, "cantidad": cantidad})
+                    if ok_cg:
+                        restar_stock(sabor, cantidad)
+                    else:
+                        fallos_cg.append(sabor)
+                if fallos_cg:
+                    st.error(f"⚠️ No se pudo registrar el cargue de: {', '.join(fallos_cg)}. No se movió el stock de esos — vuelve a intentarlo.")
                 st.session_state.ok_cargue = True
                 time.sleep(0.3)
                 st.rerun()
@@ -3094,13 +3242,16 @@ elif st.session_state.vista == "carro":
             sel_del_cg = st.selectbox("Eliminar registro", ["— Selecciona —"] + list(ids_cg.keys()), key="sel_del_cg")
             if sel_del_cg != "— Selecciona —" and st.button("🗑️ Eliminar", key="btn_del_cg"):
                 reg_del_cg = ids_cg[sel_del_cg]
-                sb_delete("cargues", f"id=eq.{reg_del_cg['id']}")
-                agregar_stock(reg_del_cg["sabor"], reg_del_cg["cantidad"])
-                _registrar_auditoria_stock(
-                    "cargues", reg_del_cg["id"], "Eliminar",
-                    f"{reg_del_cg['sabor']} — {reg_del_cg['cantidad']} bolsas ({reg_del_cg['fecha']} {reg_del_cg['hora']})",
-                    quien_edita_cg
-                )
+                ok_del_cg = sb_delete("cargues", f"id=eq.{reg_del_cg['id']}")
+                if not ok_del_cg:
+                    st.error("⚠️ No se pudo eliminar el cargue — no se movió el stock. Intenta de nuevo.")
+                else:
+                    agregar_stock(reg_del_cg["sabor"], reg_del_cg["cantidad"])
+                    _registrar_auditoria_stock(
+                        "cargues", reg_del_cg["id"], "Eliminar",
+                        f"{reg_del_cg['sabor']} — {reg_del_cg['cantidad']} bolsas ({reg_del_cg['fecha']} {reg_del_cg['hora']})",
+                        quien_edita_cg
+                    )
                 time.sleep(0.3)
                 st.rerun()
         else:
@@ -3294,7 +3445,7 @@ elif st.session_state.vista == "fabrica":
             st.markdown(f'<div class="info-box">{ICO_GIFT} Regalando <b>{cant_reg_f}</b> bolsas de <b>{sabor_reg_f}</b> · Quedan: <b>{disp_reg_f - cant_reg_f}</b></div>', unsafe_allow_html=True)
 
             if st.button("🎁 Registrar regalo", key="btn_reg_fab"):
-                sb_post("ventas", {
+                ok_reg_f = sb_post("ventas", {
                     "fecha": fecha_hoy(), "hora": ahora(), "canal": "Regalo Fábrica",
                     "vendedor": vendedor_reg_f, "sabor": sabor_reg_f,
                     "cantidad": cant_reg_f, "total": 0,
@@ -3302,8 +3453,11 @@ elif st.session_state.vista == "fabrica":
                     "factura_id": str(uuid.uuid4())[:8].upper(),
                     "abono": 0, "saldo": 0
                 })
-                restar_stock(sabor_reg_f, cant_reg_f)
-                st.session_state.ok_reg_fab = True
+                if not ok_reg_f:
+                    st.error("⚠️ No se pudo registrar el regalo — no se movió el stock. Intenta de nuevo.")
+                else:
+                    restar_stock(sabor_reg_f, cant_reg_f)
+                    st.session_state.ok_reg_fab = True
                 time.sleep(0.3)
                 st.rerun()
 
@@ -3333,9 +3487,12 @@ elif st.session_state.vista == "fabrica":
             sel_reg_f_del = st.selectbox("Eliminar un regalo", ["— Selecciona —"] + list(ids_reg_f_del.keys()), key="sel_reg_f_del")
             if sel_reg_f_del != "— Selecciona —" and st.button("🗑️ Eliminar regalo", key="btn_del_reg_f"):
                 reg_f_del = ids_reg_f_del[sel_reg_f_del]
-                sb_delete("ventas", f"id=eq.{reg_f_del['id']}")
-                agregar_stock(reg_f_del["sabor"], reg_f_del["cantidad"])
-                st.markdown(f'<div class="success-toast">{ICO_CHECK} Regalo eliminado. Stock devuelto.</div>', unsafe_allow_html=True)
+                ok_del_reg_f = sb_delete("ventas", f"id=eq.{reg_f_del['id']}")
+                if not ok_del_reg_f:
+                    st.markdown(f'<div class="alert-low">{ICO_WARN} No se pudo eliminar el regalo — no se movió el stock. Intenta de nuevo.</div>', unsafe_allow_html=True)
+                else:
+                    agregar_stock(reg_f_del["sabor"], reg_f_del["cantidad"])
+                    st.markdown(f'<div class="success-toast">{ICO_CHECK} Regalo eliminado. Stock devuelto.</div>', unsafe_allow_html=True)
                 time.sleep(0.3); st.rerun()
 
     with sub_f4:
@@ -3631,29 +3788,35 @@ elif st.session_state.vista == "recibo":
             if col_si.button("✅ Sí, eliminar", key="btn_confirmar_elim"):
                 # Obtener todos los registros de la factura
                 regs = sb_get("ventas", f"select=sabor,cantidad,canal,abono&factura_id=eq.{fid_recibo}")
-                if regs:
-                    for r in regs:
-                        cant = int(r.get("cantidad", 0))
-                        sabor = r.get("sabor", "")
-                        canal_r = r.get("canal", "")
-                        if cant > 0 and sabor:
-                            # Fábrica: devolver al inventario general — incluye tanto las líneas
-                            # originales (canal "Fábrica") como las agregadas/cambiadas después
-                            # desde el recibo (canal "Cambio"), que también mutaron stock si la
-                            # factura es de Fábrica.
-                            # Carro: NO tocar inventario general (el stock ya estaba descontado en el cargue)
-                            if cfg_edit["mutar_stock"] and canal_r in ("Fábrica", "Cambio", "Cambio Fábrica"):
-                                agregar_stock(sabor, cant)
-                    # Eliminar todos los registros de la factura
-                    sb_delete("ventas", f"factura_id=eq.{fid_recibo}")
-                _registrar_auditoria_factura(
-                    fid_recibo, "Eliminar factura",
-                    f"{cliente_recibo} · {fmt(sum(totales_recibo.values()))}",
-                    usuario_edicion
-                )
-                st.session_state.confirmar_eliminar_fac = None
-                st.session_state.recibo_canal_df = []
-                st.session_state.vista = st.session_state.get("vista_anterior", "resumen")
+                # Primero se borra y se confirma que funcionó, y SOLO entonces se devuelve
+                # el stock — antes era al revés (devolvía stock y luego borraba sin
+                # comprobar), lo que dejaba doble conteo si el borrado fallaba: la factura
+                # seguía existiendo Y el stock ya se había devuelto como si no existiera.
+                ok_borrar_fac = sb_delete("ventas", f"factura_id=eq.{fid_recibo}") if regs else True
+                if not ok_borrar_fac:
+                    st.error("⚠️ No se pudo eliminar la factura — no se movió el stock. Intenta de nuevo.")
+                else:
+                    if regs:
+                        for r in regs:
+                            cant = int(r.get("cantidad", 0))
+                            sabor = r.get("sabor", "")
+                            canal_r = r.get("canal", "")
+                            if cant > 0 and sabor:
+                                # Fábrica: devolver al inventario general — incluye tanto las líneas
+                                # originales (canal "Fábrica") como las agregadas/cambiadas después
+                                # desde el recibo (canal "Cambio"), que también mutaron stock si la
+                                # factura es de Fábrica.
+                                # Carro: NO tocar inventario general (el stock ya estaba descontado en el cargue)
+                                if cfg_edit["mutar_stock"] and canal_r in ("Fábrica", "Cambio", "Cambio Fábrica"):
+                                    agregar_stock(sabor, cant)
+                    _registrar_auditoria_factura(
+                        fid_recibo, "Eliminar factura",
+                        f"{cliente_recibo} · {fmt(sum(totales_recibo.values()))}",
+                        usuario_edicion
+                    )
+                    st.session_state.confirmar_eliminar_fac = None
+                    st.session_state.recibo_canal_df = []
+                    st.session_state.vista = st.session_state.get("vista_anterior", "resumen")
                 time.sleep(0.3)
                 st.rerun()
             if col_no.button("✗ Cancelar", key="btn_cancelar_elim"):
@@ -4295,6 +4458,7 @@ elif st.session_state.vista == "materia_prima":
                 if col_b.button("✅ Pagar", key=f"btn_pagar_mp_{state_key}_{prov_sel_cred}_{clave}"):
                     medio_pago_mp_val = "Efectivo" if "Efectivo" in medio_pago_mp else "Nequi"
                     restante = nv
+                    fallos_pago_mp = []
                     for r in lineas:
                         if restante <= 0:
                             break
@@ -4303,11 +4467,18 @@ elif st.session_state.vista == "materia_prima":
                             continue
                         pago_r = min(restante, saldo_r)
                         nuevo_saldo = saldo_r - pago_r
-                        sb_patch("materia_prima", f"id=eq.{r['id']}", {
+                        # Primero se confirma que el saldo de la deuda quedó actualizado —
+                        # si esto falla y se seguía igual registrando el pago en
+                        # 'pagos_credito_mp', quedaba un pago "hecho" en Caja sin que la
+                        # deuda del proveedor bajara de verdad (ver fabrica_bug_guardado_parcial).
+                        ok_saldo_mp = sb_patch("materia_prima", f"id=eq.{r['id']}", {
                             "abono": float(r["abono"]) + pago_r, "saldo": nuevo_saldo,
                             "estado": "pagado" if nuevo_saldo == 0 else "pendiente",
                             "medio_pago_abono": medio_pago_mp_val,
                         })
+                        if not ok_saldo_mp:
+                            fallos_pago_mp.append(r["insumo"])
+                            continue
                         # Con fecha de HOY (no la de la entrada original) — así Caja lo ve
                         # como egreso del día en que realmente se pagó. Ver calcular_egresos_mp_periodo.
                         sb_post("pagos_credito_mp", {
@@ -4316,6 +4487,8 @@ elif st.session_state.vista == "materia_prima":
                             "monto": float(pago_r), "medio_pago": medio_pago_mp_val,
                         })
                         restante -= pago_r
+                    if fallos_pago_mp:
+                        st.error(f"⚠️ No se pudo registrar el pago de: {', '.join(fallos_pago_mp)}. Esa parte no se descontó — vuelve a intentarlo.")
                     time.sleep(0.3); st.rerun()
 
         st.markdown('<div class="section-label">Créditos — Todos los proveedores</div>', unsafe_allow_html=True)
@@ -5167,28 +5340,39 @@ elif st.session_state.vista == "caja" and st.session_state.es_admin:
                     st.markdown(f'<div class="info-box">{ICO_CHECK} El valor de la factura coincide exacto con el anticipo.</div>', unsafe_allow_html=True)
 
                 if st.button("✅ Legalizar anticipo", key="btn_legalizar_ant"):
+                    # Cada paso se confirma antes de seguir con el siguiente — si alguno
+                    # falla, se detiene ahí en vez de terminar con Caja ajustada pero el
+                    # anticipo todavía marcado "pendiente" (que llevaría a legalizarlo dos
+                    # veces por error). Ver fabrica_bug_guardado_parcial.
+                    ok_ant = True
                     if ant_sel.get("caja_egreso_id"):
-                        sb_patch("caja_egresos", f"id=eq.{ant_sel['caja_egreso_id']}", {"valor": float(valor_fact_ant)})
-                    if diferencia_ant > 0:
-                        sb_post("caja_ingresos", {
+                        ok_ant = sb_patch("caja_egresos", f"id=eq.{ant_sel['caja_egreso_id']}", {"valor": float(valor_fact_ant)})
+                    if ok_ant and diferencia_ant > 0:
+                        ok_ant = sb_post("caja_ingresos", {
                             "fecha": fecha_hoy(), "hora": ahora(),
                             "concepto": f"Devolución anticipo — {ant_sel['responsable']}",
                             "valor": diferencia_ant, "categoria": "Devolución de anticipo",
                         })
-                    elif diferencia_ant < 0:
-                        sb_post("caja_egresos", {
+                    elif ok_ant and diferencia_ant < 0:
+                        ok_ant = sb_post("caja_egresos", {
                             "fecha": fecha_hoy(), "hora": ahora(),
                             "concepto": f"{ant_sel['concepto']} — complemento anticipo",
                             "valor": abs(diferencia_ant), "categoria": ant_sel["categoria"],
                             "tipo": ant_sel["tipo"], "empleado": None,
                         })
-                    sb_patch("anticipos", f"id=eq.{ant_sel['id']}", {
-                        "estado": "legalizado", "valor_factura": float(valor_fact_ant),
-                        "diferencia": diferencia_ant, "soporte": soporte_ant.strip() or None,
-                        "fecha_legalizacion": fecha_hoy(), "hora_legalizacion": ahora(),
-                        "usuario_legalizacion": st.session_state.admin_actual,
-                    })
-                    st.markdown(f'<div class="success-toast">{ICO_CHECK} Anticipo legalizado.</div>', unsafe_allow_html=True)
+                    if not ok_ant:
+                        st.error("⚠️ No se pudo ajustar Caja — el anticipo sigue pendiente, no se legalizó. Intenta de nuevo.")
+                    else:
+                        ok_ant_final = sb_patch("anticipos", f"id=eq.{ant_sel['id']}", {
+                            "estado": "legalizado", "valor_factura": float(valor_fact_ant),
+                            "diferencia": diferencia_ant, "soporte": soporte_ant.strip() or None,
+                            "fecha_legalizacion": fecha_hoy(), "hora_legalizacion": ahora(),
+                            "usuario_legalizacion": st.session_state.admin_actual,
+                        })
+                        if not ok_ant_final:
+                            st.error("⚠️ Caja ya quedó ajustada, pero el anticipo NO se marcó como legalizado — NO lo vuelvas a legalizar (se duplicaría el ajuste en Caja). Avísame para corregirlo a mano.")
+                        else:
+                            st.markdown(f'<div class="success-toast">{ICO_CHECK} Anticipo legalizado.</div>', unsafe_allow_html=True)
                     time.sleep(0.3)
                     st.rerun()
 
@@ -6584,15 +6768,22 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
                         st.markdown(f'<div class="alert-low">{ICO_WARN} Ingresa un valor.</div>', unsafe_allow_html=True)
                     else:
                         deuda_sel_ab = next(d for d in raw_deudas if d["acreedor"] == acreedor_ab)
-                        sb_post("deudas_terceros_movimientos", {
+                        # Si el movimiento de la deuda queda guardado pero el egreso de Caja
+                        # falla (o al revés), Caja deja de coincidir con lo que en verdad
+                        # salió — el mismo tipo de descuadre que causó el bug original de
+                        # Arqueo. Se confirma cada paso antes de seguir.
+                        ok_ab = sb_post("deudas_terceros_movimientos", {
                             "deuda_id": deuda_sel_ab["id"], "fecha": fecha_hoy(), "hora": ahora(),
                             "tipo": "abono", "valor": float(valor_ab), "usuario": st.session_state.admin_actual
                         })
-                        sb_post("caja_egresos", {
+                        ok_ab = ok_ab and sb_post("caja_egresos", {
                             "fecha": fecha_hoy(), "hora": ahora(), "concepto": f"Abono deuda — {acreedor_ab}",
                             "valor": float(valor_ab), "categoria": "Deuda a terceros", "tipo": "gasto", "empleado": None
                         })
-                        st.markdown(f'<div class="success-toast">{ICO_CHECK} Abono registrado y descontado de caja.</div>', unsafe_allow_html=True)
+                        if not ok_ab:
+                            st.error("⚠️ No se pudo registrar el abono completo — revisa la deuda y Caja antes de reintentar, puede haber quedado a medias.")
+                        else:
+                            st.markdown(f'<div class="success-toast">{ICO_CHECK} Abono registrado y descontado de caja.</div>', unsafe_allow_html=True)
                         time.sleep(0.3)
                         st.rerun()
             with col_re_d:
@@ -6609,21 +6800,24 @@ elif st.session_state.vista == "contador" and st.session_state.es_admin:
                         st.markdown(f'<div class="alert-low">{ICO_WARN} Ingresa un valor.</div>', unsafe_allow_html=True)
                     else:
                         deuda_sel_re = next(d for d in raw_deudas if d["acreedor"] == acreedor_re)
-                        sb_post("deudas_terceros_movimientos", {
+                        ok_re = sb_post("deudas_terceros_movimientos", {
                             "deuda_id": deuda_sel_re["id"], "fecha": fecha_hoy(), "hora": ahora(),
                             "tipo": "recibido", "valor": float(valor_re), "usuario": st.session_state.admin_actual
                         })
-                        if entra_caja_re:
-                            sb_post("caja_ingresos", {
+                        if ok_re and entra_caja_re:
+                            ok_re = sb_post("caja_ingresos", {
                                 "fecha": fecha_hoy(), "hora": ahora(),
                                 "concepto": f"Préstamo recibido — {acreedor_re}",
                                 "valor": float(valor_re), "categoria": "Préstamo / crédito recibido"
                             })
-                        st.markdown(
-                            f'<div class="success-toast">{ICO_CHECK} Desembolso registrado'
-                            f'{" y sumado a caja." if entra_caja_re else "."}</div>',
-                            unsafe_allow_html=True
-                        )
+                        if not ok_re:
+                            st.error("⚠️ No se pudo registrar el desembolso completo — revisa la deuda y Caja antes de reintentar.")
+                        else:
+                            st.markdown(
+                                f'<div class="success-toast">{ICO_CHECK} Desembolso registrado'
+                                f'{" y sumado a caja." if entra_caja_re else "."}</div>',
+                                unsafe_allow_html=True
+                            )
                         time.sleep(0.3)
                         st.rerun()
 
