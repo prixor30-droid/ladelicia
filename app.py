@@ -2867,7 +2867,12 @@ elif st.session_state.vista == "produccion":
     es_hoy = fecha_consulta_str == fecha_hoy()
     titulo_tabla = "Producción de hoy" if es_hoy else f"Producción del {fecha_consulta_str}"
 
-    raw_prod = sb_get("produccion", f"select=id,fecha,hora,empleado,sabor,cantidad&fecha=eq.{fecha_consulta_str}&order=hora.desc")
+    raw_prod = sb_get("produccion", f"select=id,fecha,hora,empleado,sabor,cantidad&fecha=eq.{fecha_consulta_str}") or []
+    # "hora" se guarda como texto ("9:22 AM") — el "order=hora.desc" de la consulta
+    # lo ordena como texto, no como hora real (ej. "10:02 AM" queda antes que "9:22
+    # AM" porque "1" < "9" como caracteres). Se reordena aquí con _parse_hora, que
+    # sí entiende la hora real (mismo helper que ya usa Recibo).
+    raw_prod.sort(key=lambda r: _parse_hora(r["hora"]), reverse=True)
     if raw_prod:
         st.markdown(f'<div class="section-label">{titulo_tabla}</div>', unsafe_allow_html=True)
         st.caption("Toca cualquier celda para editar. Luego presiona Guardar cambios.")
@@ -3228,7 +3233,8 @@ elif st.session_state.vista == "carro":
         es_hoy_cg = fecha_consulta_cg_str == fecha_hoy()
         titulo_cg = "Cargues de hoy" if es_hoy_cg else f"Cargues del {fecha_consulta_cg_str}"
 
-        raw_cg_full = sb_get("cargues", f"select=id,fecha,hora,sabor,cantidad&fecha=eq.{fecha_consulta_cg_str}&order=hora.desc")
+        raw_cg_full = sb_get("cargues", f"select=id,fecha,hora,sabor,cantidad&fecha=eq.{fecha_consulta_cg_str}") or []
+        raw_cg_full.sort(key=lambda r: _parse_hora(r["hora"]), reverse=True)  # ver nota en Producción — "hora" es texto, no se puede ordenar con order=hora.desc
         if raw_cg_full:
             st.markdown(f'<div class="section-label">{titulo_cg}</div>', unsafe_allow_html=True)
             st.caption("Si un cargue quedó mal, bórralo y vuelve a registrarlo bien desde 🚗 Cargue.")
@@ -3335,7 +3341,8 @@ elif st.session_state.vista == "carro":
             st.session_state.ok_reg = False
 
         # Historial de regalos del día
-        raw_reg = sb_get("ventas", f"select=id,hora,sabor,cantidad,cliente&fecha=eq.{fecha_hoy()}&canal=eq.Regalo&order=hora.desc")
+        raw_reg = sb_get("ventas", f"select=id,hora,sabor,cantidad,cliente&fecha=eq.{fecha_hoy()}&canal=eq.Regalo") or []
+        raw_reg.sort(key=lambda r: _parse_hora(r["hora"]), reverse=True)
         if raw_reg:
             st.markdown('<div class="section-label">Regalos de hoy</div>', unsafe_allow_html=True)
             filas_reg = "".join(
@@ -3466,7 +3473,8 @@ elif st.session_state.vista == "fabrica":
             st.session_state.ok_reg_fab = False
 
         # Historial de regalos del día
-        raw_reg_f = sb_get("ventas", f"select=id,hora,sabor,cantidad,cliente,vendedor&fecha=eq.{fecha_hoy()}&canal=eq.{requests.utils.quote('Regalo Fábrica')}&order=hora.desc")
+        raw_reg_f = sb_get("ventas", f"select=id,hora,sabor,cantidad,cliente,vendedor&fecha=eq.{fecha_hoy()}&canal=eq.{requests.utils.quote('Regalo Fábrica')}") or []
+        raw_reg_f.sort(key=lambda r: _parse_hora(r["hora"]), reverse=True)
         if raw_reg_f:
             st.markdown('<div class="section-label">Regalos de hoy</div>', unsafe_allow_html=True)
             filas_reg_f = "".join(
@@ -4924,12 +4932,16 @@ elif st.session_state.vista == "caja" and st.session_state.es_admin:
                         st.error(f"Error: {e}")
 
         with st.expander("📋 Ver últimos movimientos de hoy"):
-            raw_ult_ing = sb_get("caja_ingresos", f"select=concepto,valor,hora&fecha=eq.{fecha_hoy()}&order=hora.desc&limit=8") or []
-            raw_ult_eg = sb_get("caja_egresos", f"select=concepto,valor,hora&fecha=eq.{fecha_hoy()}&order=hora.desc&limit=8") or []
+            # Sin "limit=8" en la consulta — con eso, un "order=hora.desc" mal ordenado
+            # (ver nota en Producción, "hora" es texto) podía dejar afuera movimientos
+            # que sí eran de los últimos 8 reales. Se trae todo el día (pocos
+            # movimientos manuales) y se recorta después de ordenar bien.
+            raw_ult_ing = sb_get("caja_ingresos", f"select=concepto,valor,hora&fecha=eq.{fecha_hoy()}") or []
+            raw_ult_eg = sb_get("caja_egresos", f"select=concepto,valor,hora&fecha=eq.{fecha_hoy()}") or []
             ult_movs = sorted(
                 [{"tipo": "📥", "hora": r.get("hora", ""), "concepto": r["concepto"], "valor": r["valor"]} for r in raw_ult_ing]
                 + [{"tipo": "📤", "hora": r.get("hora", ""), "concepto": r["concepto"], "valor": r["valor"]} for r in raw_ult_eg],
-                key=lambda r: r["hora"], reverse=True
+                key=lambda r: _parse_hora(r["hora"]), reverse=True
             )[:8]
             if ult_movs:
                 for m in ult_movs:
